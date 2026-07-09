@@ -2,85 +2,60 @@
 
 Fecha: 2026-07-09
 
-Agente: Codex
+Agente: Claude (Claude Code)
 
 ## Objetivo de la sesion
 
-Implementar y validar el primer flujo operacional completo de NCI Logistics Control Tower: solicitud cliente -> confirmacion/viaje -> asignacion -> conductor -> incidencia -> evidencia/firma -> aprobacion -> POD PDF -> cierre -> consulta cliente.
+Rediseño visual y de experiencia integral de toda la plataforma (plataforma, tenant, portal cliente, PWA conductor) manteniendo intacto el flujo funcional validado, el aislamiento multitenant y las 10 pruebas E2E.
 
-## Archivos modificados
+## Archivos principales de la sesion
 
-Ver estado Git. Cambios principales de esta sesion: `prisma/schema.prisma`, nuevas migraciones, `src/lib/server/actions.ts`, rutas API de POD/documentos, paginas tenant/portal/driver, `src/lib/server/storage.ts`, `src/lib/server/pod-pdf.ts`, `src/components/signature-pad.tsx`, `tests/e2e/service-workflow.spec.ts`, `docs/**`.
+- `src/app/globals.css` — sistema de tokens semánticos + animaciones + reduced motion.
+- `src/app/layout.tsx` — tipografía Geist local.
+- `src/lib/ui/status.ts` — etiquetas en español + tonos por enum del dominio.
+- `src/components/ui/*` + barrel `src/components/ui.tsx` — sistema de componentes.
+- `src/components/shell/*` — AppShell/ShellChrome (sidebar colapsable + drawer móvil + topbar), DriverShell, ConnectivityIndicator.
+- `src/components/operations/trip-operations-card.tsx` — tarjeta operativa con acciones contextuales.
+- `src/components/signature-pad.tsx` — firma sin trazo demo, hint "Firme aqui".
+- Páginas rediseñadas: `src/app/page.tsx`, `login`, `platform`, `t/[tenantSlug]` (+`settings`, `portal`, `driver`), `not-found.tsx`, `error.tsx`, `loading.tsx` por ruta.
+- `scripts/capture-screenshots.ts`, `scripts/a11y-motion-check.ts`.
+- Docs: `UI_UX_AUDIT.md`, `DESIGN_SYSTEM.md`, `ANIMATION_GUIDELINES.md`, `decisions/ADR-006-design-system-and-motion.md`.
 
-## Funciones implementadas
+## Decisiones tomadas (ADR-006)
 
-- Solicitud cliente completa con datos de contenedor, contacto, prioridad y llave idempotente servidor.
-- Conversion idempotente de solicitud a viaje.
-- Asignacion operacional con `trip_assignments`, validacion de tenant, disponibilidad, autorizaciones de conductor y conflicto por ventana horaria.
-- PWA conductor con avance de estados, incidencia visible al cliente, upload de evidencia a MinIO y firma digital.
-- Aprobacion/rechazo de evidencia; aprobacion genera POD PDF en MinIO y documento customer-visible.
-- API de documentos y POD con `requireCustomerMembership`, scope por tenant/customer y signed URL.
-- E2E completo para flujo operacional y controles negativos de tenant/cliente/conductor.
+- Tokens CSS + Tailwind 4 `@theme inline`; sin librería de theming ni de componentes.
+- Tipografía Geist vía paquete `geist@1.5.1` pinneado (fuentes locales, sin red).
+- Animaciones 100 % CSS (sin Framer Motion) para conservar Server Components y bundle.
+- Estados del dominio nunca crudos: mapa central etiqueta+tono; formularios envían `value=enum`.
+- Centro de control: lista operativa = viajes activos (take 30) + historial separado (corrige fallo E2E baseline por `take: 20`).
+- `rejectProofAction` expuesta en UI (aprobar/rechazar evidencia con motivo).
 
-## Migraciones creadas
+## Problemas encontrados y resueltos
 
-- `prisma/migrations/20260709101000_initial_multitenant_foundation/migration.sql` aplicada.
-- `prisma/migrations/20260709155859_end_to_end_service_workflow/migration.sql` aplicada.
-- `prisma/migrations/20260709160400_service_request_idempotency_key/migration.sql` aplicada.
-
-## Comandos ejecutados
-
-- `docker info`
-- `docker compose version`
-- `pnpm local:up`
-- `docker compose ps`
-- `docker compose logs --tail=200`
-- `pnpm db:migrate`
-- `pnpm storage:init`
-- `pnpm db:seed`
-- `pnpm db:seed`
-- `pnpm exec prisma validate`
-- `pnpm test:e2e`
-- Mailpit SMTP/API verification
-- MinIO S3 upload/list/public-deny verification
-- `pnpm typecheck`
-- `pnpm lint`
-- `pnpm test`
-- `pnpm build`
-- `pnpm verify`
-- `pnpm test:e2e` despues de seed doble
+- Baseline E2E fallaba (preexistente): viaje nuevo fuera del `take: 20` por acumulación de datos → resuelto con lista activa + historial.
+- `buttonStyles` en módulo client no invocable desde RSC → extraído a `button-styles.ts` puro.
+- Ids duplicados de campos al repetir formularios por tarjeta (rompía `getByLabel` y HTML válido) → `useId` en Field/TextArea/SelectField.
+- Nombre del cliente duplicado en portal (strict mode) → queda solo en el chip de usuario del topbar.
+- Grids `fr` aplastados por tablas anchas → `minmax(0, Xfr)` en plantillas personalizadas.
+- Cliente Prisma generado sin `ProofStatus` en `enums.ts` viejo → tipo importado desde la raíz del cliente fresco.
 
 ## Pruebas ejecutadas
 
-- TypeScript: paso.
-- ESLint: paso.
-- Vitest: paso, 5 tests.
-- Playwright: paso, 10 tests.
-- Build: paso dentro de `pnpm verify`.
-
-## Problemas encontrados
-
-- Puerto `localhost:5432` estaba ocupado por otro servicio local; PostgreSQL del proyecto se publico en `localhost:5433`.
-- Seed fallaba porque `tsx prisma/seed.ts` no cargaba `.env.local`; se corrigio cargando dotenv al inicio.
-- Playwright no tenia Chromium instalado; se instalo con `pnpm exec playwright install chromium`.
-- Build pasa con advertencia no bloqueante de Turbopack por trazado de Prisma.
-- `pdfkit` standard fallo en Turbopack por assets AFM bajo `/ROOT`; se cambio a `pdfkit/js/pdfkit.standalone`.
-- El build standalone de PDFKit no soporta `doc.image()` para la firma PNG en este entorno; el POD deja constancia textual de firma capturada mientras la firma queda persistida como data URL en PostgreSQL.
-
-## Decisiones tomadas
-
-- Mantener signed URLs para documentos customer-visible; no exponer objetos MinIO publicos.
-- Mantener POD PDF generado al aprobar evidencia, no generado on-demand en cada descarga.
-- Usar `trip_assignments` como bitacora de asignacion y conservar el estado actual tambien en `trips` para consultas operativas.
+- `pnpm verify` (lint 0 warnings, typecheck, 5 unit, build): paso.
+- `pnpm test:e2e`: 10/10 en 57 s.
+- Script a11y/motion: reduced-motion, teclado, focus, overflow móvil: paso.
+- Screenshots 7 vistas × 4 viewports con 0 errores de consola: `docs/ui-audit/after/`.
 
 ## Pendientes
 
-- Implementar cola IndexedDB robusta para conductor.
-- Reducir advertencia Turbopack/Prisma si se vuelve bloqueante.
-- Mejorar render visual de firma dentro del PDF si se adopta una libreria PDF alternativa compatible con Turbopack.
+- Cola offline IndexedDB robusta del conductor (fase previa, sin cambios).
+- Firma renderizada como imagen dentro del POD PDF (limitación pdfkit standalone, sin cambios).
+- Vistas alternativas del centro de control (tabla/kanban con selector) — no implementadas; la vista actual es tarjetas operativas + tabla de historial.
+- Toasts de confirmación post-acción: las server actions actuales no devuelven estado; hoy el feedback es revalidación + estados visibles. Requeriría refactor de actions (fuera de alcance visual).
+- Depurar residuos del generador Prisma antiguo en `src/generated/prisma` si algún build futuro se confunde.
 
 ## Proximo paso exacto
 
-1. Mantener servicios con `pnpm local:up`.
-2. Ejecutar `pnpm dev`.
-3. Implementar cola offline robusta de conductor o endurecer observabilidad/reportes sobre el flujo operacional ya validado.
+1. `pnpm local:up && pnpm dev` para revisar la nueva UI.
+2. Si se desea demo comercial: seguir `docs/demo-guide.md` con la nueva navegación.
+3. Siguiente fase sugerida: cola offline del conductor o toasts con `useActionState` en actions.

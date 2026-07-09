@@ -40,3 +40,14 @@
 - Se agregaron pruebas negativas para tenant cruzado, cliente cruzado y conductor no asignado.
 - `pnpm test:e2e` paso con 10 pruebas.
 - `pnpm verify` paso completo despues de seed doble.
+
+## 2026-07-09 Rediseño UI/UX integral
+
+- Auditoría visual con screenshots de referencia (docs/UI_UX_AUDIT.md, docs/ui-audit/).
+- Sistema de diseño: tokens semánticos CSS (Tailwind 4 @theme), tipografía Geist local (geist@1.5.1), iconografía Lucide, componentes UI reutilizables y estados del dominio en español.
+- Shells por perfil: sidebar colapsable persistente + drawer móvil + topbar; DriverShell móvil-primero con indicador real de conectividad.
+- Rediseño de home, login, 404/error, panel de plataforma, centro de control, configuración, portal cliente y PWA conductor; loading.tsx con skeletons por ruta.
+- Centro de control: lista operativa de viajes activos con acciones contextuales al estado + historial separado (corrige fallo E2E baseline por take:20 con datos acumulados); rechazo de evidencia con motivo expuesto en UI.
+- Animaciones CSS discretas con prefers-reduced-motion (ADR-006, docs/ANIMATION_GUIDELINES.md); sin librería de animación.
+- Correcciones: ids únicos con useId en campos repetidos por tarjeta, buttonStyles extraído a módulo puro, minmax(0,fr) en grids con tablas, firma sin trazo demo.
+- `pnpm verify` paso completo; `pnpm test:e2e` paso 10/10; verificación a11y/reduced-motion por script; 0 errores de consola en 4 viewports.

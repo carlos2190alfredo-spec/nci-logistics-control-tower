@@ -1,33 +1,27 @@
 # VERIFICATION LATEST
 
-Fecha: 2026-07-09
+Fecha: 2026-07-09 (sesión de rediseño UI/UX)
 
-| Comando | Resultado |
+| Comando / Verificación | Resultado |
 | --- | --- |
-| `docker info` | Paso: Docker Desktop activo |
-| `docker compose version` | Paso: v5.0.2 |
-| `pnpm local:up` | Primer intento fallo por puerto 5432 ocupado; despues paso con PostgreSQL en host 5433 |
 | `docker compose ps` | Paso: PostgreSQL, MinIO y Mailpit saludables |
-| `pnpm db:migrate` | Paso: migracion inicial aplicada |
-| `pnpm exec prisma migrate deploy` | Paso: migraciones de workflow/POD aplicadas |
-| `pnpm storage:init` | Paso: bucket `nci-logistics-local` creado |
-| `pnpm db:seed` | Paso |
-| `pnpm db:seed` segunda vez | Paso; sin duplicados en tenants, trips, vehicles ni drivers |
-| `pnpm exec prisma validate` | Paso |
-| `pnpm exec prisma generate` | Paso |
-| `pnpm test:e2e` | Paso: 10 pruebas, incluyendo workflow completo y aislamiento de POD |
-| `pnpm lint` | Paso |
-| `pnpm typecheck` | Paso |
-| `pnpm test` | Paso: 2 archivos, 5 tests |
-| `pnpm build` | Paso con advertencia no bloqueante de Turbopack/Prisma |
-| `pnpm verify` | Paso: lint, TypeScript, unit tests y build |
-| Mailpit | Paso: correo `Mailpit runtime verification` recibido |
-| MinIO | Paso: objeto demo subido/listado; acceso publico sin firma respondio HTTP 403 |
+| `pnpm verify` (baseline pre-rediseño) | Paso |
+| `pnpm test:e2e` (baseline pre-rediseño) | Fallo preexistente: E2E-FLOW-001 no encontraba el viaje nuevo porque la lista tomaba 20 viajes por `scheduledAt asc` con datos acumulados de corridas previas (6 pasaron, 1 fallo, 3 no corrieron) |
+| `pnpm lint` (post-rediseño) | Paso, 0 warnings |
+| `pnpm typecheck` (post-rediseño) | Paso |
+| `pnpm test` (post-rediseño) | Paso: 2 archivos, 5 tests |
+| `pnpm test:e2e` (post-rediseño) | **Paso: 10/10 pruebas (57 s)**, incluido el flujo completo solicitud→POD→cierre y los controles negativos de aislamiento |
+| `pnpm build` (dentro de verify) | Paso con la advertencia no bloqueante preexistente de Turbopack/Prisma |
+| `pnpm verify` (post-rediseño) | Paso completo: lint + typecheck + unit + build |
+| `scripts/a11y-motion-check.ts` | Paso: reduced-motion anula animaciones (0.01 ms), smooth scroll desactivado, orden de tabulación correcto en login, focus visible (outline 3 px), sin scroll horizontal a 375 px en / y /login |
+| `scripts/capture-screenshots.ts after` | Paso: screenshots de 7 vistas × 4 viewports (375/768/1280/1440) en `docs/ui-audit/after/`, **0 errores de consola y 0 pageerrors** en todas las rutas capturadas |
 
 ## Estado final
 
-Runtime local validado. Servicios Docker saludables, migracion aplicada, seed idempotente validado, E2E y verify pasaron. Queda advertencia no bloqueante de Turbopack por trazado de Prisma.
+Rediseño visual integral aplicado sin regresión funcional: los 10 E2E pasan (login, logout, rutas, aislamiento multitenant, aislamiento por cliente, restricción de conductor y flujo operacional completo con POD). Los fallos intermedios detectados durante la sesión (ids duplicados de campos repetidos por tarjeta y texto de cliente duplicado en portal que rompía strict mode) se corrigieron en los componentes, no en las pruebas.
 
-## Flujo E2E validado
+## Correcciones de producto verificadas
 
-Cliente crea solicitud con contenedor, operaciones confirma y asigna, conductor avanza estados, reporta incidencia visible, sube evidencia y firma, operaciones aprueba evidencia, se genera POD PDF en MinIO, se cierra el viaje, el cliente consulta el cierre y descarga el POD. TransLogistica, otro cliente Panatruck y conductor no asignado no acceden al POD/viaje.
+- La lista "Servicios operativos" del centro de control ahora muestra viajes activos (excluye CLOSED/CANCELLED, take 30) con historial reciente separado: el viaje recién confirmado siempre aparece (causa raíz del fallo E2E baseline).
+- Campos de formulario con `useId`: sin ids duplicados cuando el mismo formulario se repite por tarjeta.
+- `rejectProofAction` (existente sin UI) ahora está expuesta en el panel de evidencia con motivo de rechazo.
