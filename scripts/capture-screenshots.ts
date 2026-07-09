@@ -13,8 +13,12 @@ const baseURL = "http://localhost:3000";
 
 const viewports = [
   { name: "mobile-375", width: 375, height: 812 },
+  { name: "tablet-768", width: 768, height: 1024 },
   { name: "desktop-1280", width: 1280, height: 800 },
+  { name: "desktop-1440", width: 1440, height: 900 },
 ] as const;
+
+const consoleErrors: string[] = [];
 
 const sessions: Array<{
   user: string;
@@ -68,6 +72,14 @@ async function main() {
       viewport: { width: viewport.width, height: viewport.height },
     });
     const page = await context.newPage();
+    page.on("console", (message) => {
+      if (message.type() === "error") {
+        consoleErrors.push(`[${viewport.name}] ${page.url()}: ${message.text()}`);
+      }
+    });
+    page.on("pageerror", (error) => {
+      consoleErrors.push(`[${viewport.name}] ${page.url()}: pageerror ${error.message}`);
+    });
 
     for (const route of ["/", "/login"]) {
       await page.goto(`${baseURL}${route}`);
@@ -97,6 +109,12 @@ async function main() {
 
   await browser.close();
   console.log(`Screenshots guardados en ${baseDir}`);
+  if (consoleErrors.length) {
+    console.error(`Errores de consola detectados (${consoleErrors.length}):`);
+    consoleErrors.forEach((error) => console.error(`  ${error}`));
+    process.exit(1);
+  }
+  console.log("Sin errores de consola en las rutas capturadas.");
 }
 
 main().catch((error) => {

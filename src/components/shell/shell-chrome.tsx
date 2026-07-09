@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { LogOut, Menu, PanelLeftClose, PanelLeftOpen, X } from "lucide-react";
@@ -21,6 +21,34 @@ export type ShellNavGroup = {
 };
 
 const SIDEBAR_STORAGE_KEY = "nci-lct-sidebar-collapsed";
+
+/**
+ * Estado del sidebar como store externo respaldado por localStorage:
+ * persiste entre sesiones sin provocar renders en cascada ni errores de
+ * hidratacion (el snapshot de servidor siempre es "expandido").
+ */
+const sidebarListeners = new Set<() => void>();
+let sidebarCollapsed: boolean | null = null;
+
+function readSidebarCollapsed() {
+  if (sidebarCollapsed === null) {
+    sidebarCollapsed = typeof window !== "undefined" && window.localStorage.getItem(SIDEBAR_STORAGE_KEY) === "1";
+  }
+  return sidebarCollapsed;
+}
+
+function subscribeSidebar(onChange: () => void) {
+  sidebarListeners.add(onChange);
+  return () => {
+    sidebarListeners.delete(onChange);
+  };
+}
+
+function toggleSidebarCollapsed() {
+  sidebarCollapsed = !readSidebarCollapsed();
+  window.localStorage.setItem(SIDEBAR_STORAGE_KEY, sidebarCollapsed ? "1" : "0");
+  sidebarListeners.forEach((listener) => listener());
+}
 
 function isItemActive(pathname: string, item: ShellNavItem) {
   const [href, hash] = item.href.split("#");
@@ -95,19 +123,12 @@ export function ShellChrome({
   children: ReactNode;
 }) {
   const pathname = usePathname();
-  const [collapsed, setCollapsed] = useState(false);
+  const collapsed = useSyncExternalStore(subscribeSidebar, readSidebarCollapsed, () => false);
   const [mobileOpen, setMobileOpen] = useState(false);
   const drawerRef = useRef<HTMLDivElement | null>(null);
 
-  useEffect(() => {
-    setCollapsed(window.localStorage.getItem(SIDEBAR_STORAGE_KEY) === "1");
-  }, []);
-
   const toggleCollapsed = useCallback(() => {
-    setCollapsed((current) => {
-      window.localStorage.setItem(SIDEBAR_STORAGE_KEY, current ? "0" : "1");
-      return !current;
-    });
+    toggleSidebarCollapsed();
   }, []);
 
   useEffect(() => {

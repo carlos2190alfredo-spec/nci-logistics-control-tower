@@ -1,10 +1,16 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { Eraser, PenLine } from "lucide-react";
 
+/**
+ * Captura de firma del receptor. Inicia en blanco (sin trazos demo) y
+ * persiste el PNG en un input oculto en cada trazo.
+ */
 export function SignaturePad({ name = "signatureData" }: { name?: string }) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const [dataUrl, setDataUrl] = useState("");
+  const [hasStrokes, setHasStrokes] = useState(false);
   const drawing = useRef(false);
 
   function persist() {
@@ -13,22 +19,22 @@ export function SignaturePad({ name = "signatureData" }: { name?: string }) {
     setDataUrl(canvas.toDataURL("image/png"));
   }
 
-  useEffect(() => {
+  function clearCanvas() {
     const canvas = canvasRef.current;
-    if (!canvas) return;
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return;
+    const ctx = canvas?.getContext("2d");
+    if (!canvas || !ctx) return;
     ctx.fillStyle = "#ffffff";
     ctx.fillRect(0, 0, canvas.width, canvas.height);
-    ctx.strokeStyle = "#0f2d46";
+    ctx.strokeStyle = "#10233b";
     ctx.lineWidth = 4;
     ctx.lineCap = "round";
-    ctx.beginPath();
-    ctx.moveTo(24, 86);
-    ctx.bezierCurveTo(86, 22, 148, 118, 230, 56);
-    ctx.bezierCurveTo(272, 28, 310, 72, 342, 42);
-    ctx.stroke();
+    setHasStrokes(false);
     persist();
+  }
+
+  useEffect(() => {
+    clearCanvas();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   function point(event: React.PointerEvent<HTMLCanvasElement>) {
@@ -42,51 +48,60 @@ export function SignaturePad({ name = "signatureData" }: { name?: string }) {
 
   return (
     <div className="grid gap-2">
-      <canvas
-        ref={canvasRef}
-        width={360}
-        height={120}
-        className="h-32 w-full touch-none rounded-md border border-slate-300 bg-white"
-        aria-label="Firma del receptor"
-        onPointerDown={(event) => {
-          drawing.current = true;
-          const ctx = event.currentTarget.getContext("2d");
-          if (!ctx) return;
-          const p = point(event);
-          ctx.beginPath();
-          ctx.moveTo(p.x, p.y);
-        }}
-        onPointerMove={(event) => {
-          if (!drawing.current) return;
-          const ctx = event.currentTarget.getContext("2d");
-          if (!ctx) return;
-          const p = point(event);
-          ctx.lineTo(p.x, p.y);
-          ctx.stroke();
-          persist();
-        }}
-        onPointerUp={() => {
-          drawing.current = false;
-          persist();
-        }}
-        onPointerLeave={() => {
-          drawing.current = false;
-          persist();
-        }}
-      />
+      <p className="text-sm font-medium text-foreground">Firma del receptor</p>
+      <div className="relative">
+        <canvas
+          ref={canvasRef}
+          width={360}
+          height={120}
+          className="h-32 w-full touch-none rounded-lg border border-border bg-white shadow-xs"
+          aria-label="Firma del receptor"
+          onPointerDown={(event) => {
+            drawing.current = true;
+            setHasStrokes(true);
+            const ctx = event.currentTarget.getContext("2d");
+            if (!ctx) return;
+            const p = point(event);
+            ctx.beginPath();
+            ctx.moveTo(p.x, p.y);
+          }}
+          onPointerMove={(event) => {
+            if (!drawing.current) return;
+            const ctx = event.currentTarget.getContext("2d");
+            if (!ctx) return;
+            const p = point(event);
+            ctx.lineTo(p.x, p.y);
+            ctx.stroke();
+            persist();
+          }}
+          onPointerUp={() => {
+            drawing.current = false;
+            persist();
+          }}
+          onPointerLeave={() => {
+            drawing.current = false;
+            persist();
+          }}
+        />
+        {!hasStrokes ? (
+          <span
+            aria-hidden
+            className="pointer-events-none absolute inset-0 grid place-items-center text-sm font-medium text-faint-foreground"
+          >
+            <span className="inline-flex items-center gap-1.5">
+              <PenLine className="size-4" />
+              Firme aqui
+            </span>
+          </span>
+        ) : null}
+      </div>
       <input name={name} type="hidden" value={dataUrl} />
       <button
-        className="rounded-md border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700"
+        className="inline-flex min-h-10 items-center justify-center gap-2 rounded-lg border border-border bg-surface px-3 text-sm font-semibold text-foreground shadow-xs transition-colors hover:bg-muted"
         type="button"
-        onClick={() => {
-          const canvas = canvasRef.current;
-          const ctx = canvas?.getContext("2d");
-          if (!canvas || !ctx) return;
-          ctx.fillStyle = "#ffffff";
-          ctx.fillRect(0, 0, canvas.width, canvas.height);
-          setDataUrl(canvas.toDataURL("image/png"));
-        }}
+        onClick={clearCanvas}
       >
+        <Eraser aria-hidden className="size-4" />
         Limpiar firma
       </button>
     </div>

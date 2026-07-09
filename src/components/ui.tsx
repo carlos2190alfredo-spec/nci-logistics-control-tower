@@ -1,5 +1,6 @@
 /** Barrel del sistema de diseño. Detalle en docs/DESIGN_SYSTEM.md. */
-export { SubmitButton, buttonStyles, type ButtonVariant, type ButtonSize } from "@/components/ui/button";
+export { SubmitButton } from "@/components/ui/button";
+export { buttonStyles, type ButtonVariant, type ButtonSize } from "@/components/ui/button-styles";
 export { Card, CardHeader } from "@/components/ui/card";
 export { Badge, StatusBadge } from "@/components/ui/badge";
 export { Field, TextArea, SelectField } from "@/components/ui/field";

@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { FileCheck2, KeyRound, Radar, Route, ShieldCheck } from "lucide-react";
-import { buttonStyles } from "@/components/ui/button";
+import { buttonStyles } from "@/components/ui/button-styles";
 
 const capabilities = [
   {

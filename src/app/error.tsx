@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { RefreshCcw, TriangleAlert } from "lucide-react";
-import { buttonStyles } from "@/components/ui/button";
+import { buttonStyles } from "@/components/ui/button-styles";
 
 export default function GlobalError({ reset }: { error: Error & { digest?: string }; reset: () => void }) {
   return (

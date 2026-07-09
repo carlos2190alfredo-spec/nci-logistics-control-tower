@@ -1,181 +1,411 @@
-import Link from "next/link";
-import { AppShell } from "@/components/app-shell";
+import {
+  Activity,
+  Bell,
+  Eye,
+  EyeOff,
+  FileCheck2,
+  History,
+  Inbox,
+  LayoutDashboard,
+  Mail,
+  MapPin,
+  MessageCircle,
+  Monitor,
+  Route,
+  Settings,
+  Smartphone,
+  TriangleAlert,
+  Truck,
+} from "lucide-react";
+import { AppShell } from "@/components/shell/app-shell";
+import type { ShellNavGroup } from "@/components/shell/shell-chrome";
 import { TripMap } from "@/components/trip-map";
-import { Badge, Card, SubmitButton, TextArea } from "@/components/ui";
-import { approveProofAction, assignTripAction, confirmRequestAsTripAction, reportIncidentAction, transitionTripAction } from "@/lib/server/actions";
+import { TripOperationsCard } from "@/components/operations/trip-operations-card";
+import {
+  Badge,
+  Card,
+  CardHeader,
+  DataTable,
+  EmptyState,
+  MetricCard,
+  PageHeader,
+  StatusBadge,
+  SubmitButton,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeaderCell,
+  TableRow,
+} from "@/components/ui";
+import { confirmRequestAsTripAction } from "@/lib/server/actions";
 import { requireTenantMembership } from "@/lib/server/auth";
 import { getDb } from "@/lib/server/db";
-import { nextStatuses } from "@/lib/domain/state-machine";
-import { formatDate } from "@/lib/utils";
+import {
+  incidentPriorityLabel,
+  incidentPriorityTone,
+  incidentStatusLabel,
+  incidentStatusTone,
+  notificationChannelLabel,
+  requestStatusLabel,
+  requestStatusTone,
+  tenantRoleLabel,
+  tripStatusLabel,
+  tripStatusTone,
+} from "@/lib/ui/status";
+import { formatDate, formatDateShort } from "@/lib/utils";
+
+const channelIcon = {
+  PORTAL: Monitor,
+  EMAIL: Mail,
+  MOCK_WHATSAPP: MessageCircle,
+} as const;
 
 export default async function TenantControlTowerPage({ params }: { params: Promise<{ tenantSlug: string }> }) {
   const { tenantSlug } = await params;
-  const { tenant, membership } = await requireTenantMembership(tenantSlug);
+  const { user, tenant, membership } = await requireTenantMembership(tenantSlug);
   const db = getDb();
-  const [requests, trips, vehicles, equipment, drivers, incidents, notifications] = await Promise.all([
-    db.serviceRequest.findMany({
-      where: { tenantId: tenant.id, status: { in: ["REQUESTED", "UNDER_REVIEW", "CONFIRMED"] } },
-      include: { customerAccount: true, serviceType: true },
-      orderBy: { createdAt: "desc" },
-    }),
-    db.trip.findMany({
-      where: { tenantId: tenant.id },
-      include: {
-        customerAccount: true,
-        driver: true,
-        vehicle: true,
-        equipment: true,
-        proof: true,
-        documents: { orderBy: { createdAt: "desc" } },
-        events: { orderBy: { createdAt: "desc" }, take: 4 },
-      },
-      orderBy: { scheduledAt: "asc" },
-      take: 20,
-    }),
-    db.vehicle.findMany({ where: { tenantId: tenant.id, status: "AVAILABLE" }, orderBy: { code: "asc" } }),
-    db.equipment.findMany({ where: { tenantId: tenant.id, status: "AVAILABLE" }, orderBy: { code: "asc" } }),
-    db.driver.findMany({ where: { tenantId: tenant.id, status: "AVAILABLE" }, orderBy: { code: "asc" } }),
-    db.incident.findMany({ where: { tenantId: tenant.id }, orderBy: { createdAt: "desc" }, take: 8 }),
-    db.notificationDelivery.findMany({ where: { tenantId: tenant.id }, orderBy: { createdAt: "desc" }, take: 8 }),
-  ]);
+  const [requests, activeTrips, closedTrips, vehicles, equipment, drivers, incidents, openIncidentCount, notifications] =
+    await Promise.all([
+      db.serviceRequest.findMany({
+        where: { tenantId: tenant.id, status: { in: ["REQUESTED", "UNDER_REVIEW", "CONFIRMED"] } },
+        include: { customerAccount: true, serviceType: true },
+        orderBy: { createdAt: "desc" },
+      }),
+      db.trip.findMany({
+        where: { tenantId: tenant.id, status: { notIn: ["CLOSED", "CANCELLED"] } },
+        include: {
+          customerAccount: true,
+          driver: true,
+          vehicle: true,
+          equipment: true,
+          proof: true,
+          documents: { orderBy: { createdAt: "desc" } },
+          events: { orderBy: { createdAt: "desc" }, take: 4 },
+        },
+        orderBy: { scheduledAt: "asc" },
+        take: 30,
+      }),
+      db.trip.findMany({
+        where: { tenantId: tenant.id, status: { in: ["CLOSED", "CANCELLED"] } },
+        include: { customerAccount: true },
+        orderBy: { scheduledAt: "desc" },
+        take: 6,
+      }),
+      db.vehicle.findMany({ where: { tenantId: tenant.id, status: "AVAILABLE" }, orderBy: { code: "asc" } }),
+      db.equipment.findMany({ where: { tenantId: tenant.id, status: "AVAILABLE" }, orderBy: { code: "asc" } }),
+      db.driver.findMany({ where: { tenantId: tenant.id, status: "AVAILABLE" }, orderBy: { code: "asc" } }),
+      db.incident.findMany({
+        where: { tenantId: tenant.id },
+        include: { trip: { select: { reference: true } } },
+        orderBy: { createdAt: "desc" },
+        take: 8,
+      }),
+      db.incident.count({
+        where: { tenantId: tenant.id, status: { in: ["OPEN", "ACKNOWLEDGED", "IN_PROGRESS"] } },
+      }),
+      db.notificationDelivery.findMany({ where: { tenantId: tenant.id }, orderBy: { createdAt: "desc" }, take: 8 }),
+    ]);
 
-  const activeTrips = trips.filter((trip) => !["CLOSED", "CANCELLED"].includes(trip.status));
-  const selectedTrip = activeTrips[0] ?? trips[0];
+  const selectedTrip = activeTrips[0] ?? null;
+  const pendingProofs = activeTrips.filter((trip) => trip.proof?.status === "SUBMITTED").length;
+  const basePath = `/t/${tenantSlug}`;
+
+  const navGroups: ShellNavGroup[] = [
+    {
+      title: "Operacion",
+      items: [
+        { label: "Centro de control", href: basePath, icon: <LayoutDashboard />, exact: true },
+        { label: "Solicitudes", href: `${basePath}#solicitudes`, icon: <Inbox /> },
+        { label: "Viajes activos", href: `${basePath}#viajes`, icon: <Route /> },
+        { label: "Incidencias", href: `${basePath}#incidencias`, icon: <TriangleAlert /> },
+        { label: "Actividad", href: `${basePath}#actividad`, icon: <Activity /> },
+        { label: "Historial", href: `${basePath}#historial`, icon: <History /> },
+      ],
+    },
+    {
+      title: "Experiencias",
+      items: [
+        { label: "Portal cliente", href: `${basePath}/portal`, icon: <Monitor /> },
+        ...(["DRIVER", "TENANT_OWNER", "DISPATCHER"].includes(membership.role)
+          ? [{ label: "PWA conductor", href: `${basePath}/driver`, icon: <Smartphone /> }]
+          : []),
+      ],
+    },
+    ...(["TENANT_OWNER", "TENANT_ADMIN"].includes(membership.role)
+      ? [
+          {
+            title: "Administracion",
+            items: [{ label: "Configuracion", href: `${basePath}/settings`, icon: <Settings /> }],
+          },
+        ]
+      : []),
+  ];
 
   return (
     <AppShell
-      title={tenant.name}
-      subtitle={`Centro de Control - rol ${membership.role}`}
-      nav={
-        <>
-          <Link className="rounded-md border border-slate-300 px-3 py-2 text-sm font-semibold" href={`/t/${tenantSlug}/portal`}>Portal cliente</Link>
-          <Link className="rounded-md border border-slate-300 px-3 py-2 text-sm font-semibold" href={`/t/${tenantSlug}/driver`}>PWA conductor</Link>
-          <Link className="rounded-md border border-slate-300 px-3 py-2 text-sm font-semibold" href={`/t/${tenantSlug}/settings`}>Configuracion</Link>
-        </>
-      }
+      brandContext="Centro de control"
+      brandName={tenant.name}
+      navGroups={navGroups}
+      user={{ name: user.name, role: tenantRoleLabel[membership.role] }}
     >
-      <div className="grid gap-4 md:grid-cols-4">
-        <Card><p className="text-sm text-slate-500">Solicitudes nuevas</p><p className="mt-2 text-3xl font-bold">{requests.length}</p></Card>
-        <Card><p className="text-sm text-slate-500">Servicios activos</p><p className="mt-2 text-3xl font-bold">{activeTrips.length}</p></Card>
-        <Card><p className="text-sm text-slate-500">Incidencias</p><p className="mt-2 text-3xl font-bold">{incidents.length}</p></Card>
-        <Card><p className="text-sm text-slate-500">Notificaciones</p><p className="mt-2 text-3xl font-bold">{notifications.length}</p></Card>
-      </div>
+      <div className="anim-page grid gap-6">
+        <PageHeader
+          breadcrumbs={[{ label: tenant.name }, { label: "Centro de control" }]}
+          description={`Operacion en tiempo real: ${activeTrips.length} servicios en curso y ${requests.length} solicitudes por atender.`}
+          meta={<StatusBadge label="Operacion en vivo" pulse tone="success" />}
+          title={tenant.name}
+        />
 
-      <div className="mt-6 grid gap-6 xl:grid-cols-[1.1fr_0.9fr]">
-        <Card>
-          <h2 className="text-lg font-bold">Mapa y seguimiento local</h2>
-          {selectedTrip ? (
-            <div className="mt-4">
-              <TripMap
-                routePoints={selectedTrip.routePoints}
-                simulationStartedAt={selectedTrip.simulationStartedAt}
-                simulationPausedAt={selectedTrip.simulationPausedAt}
-                simulationProgress={selectedTrip.simulationProgress}
-                expectedDuration={selectedTrip.expectedDuration}
-              />
-              <p className="mt-3 text-sm text-slate-600">
-                {selectedTrip.reference} - {selectedTrip.customerVisibleStatus} - ETA {formatDate(selectedTrip.eta)}
-              </p>
-            </div>
-          ) : <p className="mt-4 text-sm text-slate-600">Sin viajes.</p>}
-        </Card>
-
-        <Card>
-          <h2 className="text-lg font-bold">Solicitudes de cliente</h2>
-          <div className="mt-4 grid gap-3">
-            {requests.length ? requests.map((request) => (
-              <div className="rounded-lg border border-slate-200 p-3" data-testid={`request-card-${request.id}`} key={request.id}>
-                <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <p className="font-semibold">{request.reference}</p>
-                    <p className="text-sm text-slate-600">{request.customerAccount.name} - {request.origin} a {request.destination}</p>
-                  </div>
-                  <Badge tone="blue">{request.status}</Badge>
-                </div>
-                <form action={confirmRequestAsTripAction.bind(null, tenantSlug)} className="mt-3">
-                  <input name="requestId" type="hidden" value={request.id} />
-                  <SubmitButton>Confirmar y convertir</SubmitButton>
-                </form>
-              </div>
-            )) : <p className="text-sm text-slate-600">No hay solicitudes pendientes.</p>}
-          </div>
-        </Card>
-      </div>
-
-      <Card className="mt-6">
-        <h2 className="text-lg font-bold">Servicios operativos</h2>
-        <div className="mt-4 grid gap-4">
-          {trips.map((trip) => {
-            const next = nextStatuses(trip.status, membership.role);
-            return (
-              <div className="grid gap-4 rounded-lg border border-slate-200 p-4 lg:grid-cols-[1fr_0.9fr]" data-testid={`trip-card-${trip.id}`} key={trip.id}>
-                <div>
-                  <div className="flex flex-wrap items-center gap-2">
-                    <p className="font-semibold">{trip.reference}</p>
-                    <Badge tone={trip.status === "CLOSED" ? "green" : trip.status === "IN_TRANSIT" ? "orange" : "blue"}>{trip.status}</Badge>
-                    <span className="text-sm text-slate-500">{trip.customerAccount.name}</span>
-                  </div>
-                  <p className="mt-1 text-sm text-slate-600">{trip.origin} {" -> "} {trip.destination}</p>
-                  <p className="text-sm text-slate-600">Conductor: {trip.driver?.name ?? "Sin asignar"} | Vehiculo: {trip.vehicle?.code ?? "Sin unidad"}</p>
-                  <div className="mt-3 grid gap-1 text-xs text-slate-500">
-                    {trip.events.map((event) => <p key={event.id}>{formatDate(event.createdAt)} - {event.toStatus} - {event.note}</p>)}
-                  </div>
-                </div>
-                <div className="grid gap-3">
-                  <form action={assignTripAction.bind(null, tenantSlug)} className="grid gap-2 rounded-md bg-slate-50 p-3">
-                    <input name="tripId" type="hidden" value={trip.id} />
-                    <input name="scheduledAt" type="hidden" value={trip.scheduledAt.toISOString().slice(0, 16)} />
-                    <div className="grid gap-2 sm:grid-cols-3">
-                      <select className="rounded-md border border-slate-300 px-2 py-2" name="vehicleId" defaultValue={trip.vehicleId ?? ""}>
-                        {vehicles.map((vehicle) => <option key={vehicle.id} value={vehicle.id}>{vehicle.code}</option>)}
-                      </select>
-                      <select className="rounded-md border border-slate-300 px-2 py-2" name="equipmentId" defaultValue={trip.equipmentId ?? ""}>
-                        {equipment.map((item) => <option key={item.id} value={item.id}>{item.code}</option>)}
-                      </select>
-                      <select className="rounded-md border border-slate-300 px-2 py-2" name="driverId" defaultValue={trip.driverId ?? ""}>
-                        {drivers.map((driver) => <option key={driver.id} value={driver.id}>{driver.code}</option>)}
-                      </select>
-                    </div>
-                    <input className="rounded-md border border-slate-300 px-2 py-2 text-sm" name="notes" placeholder="Notas de asignacion" />
-                    <SubmitButton>Asignar</SubmitButton>
-                  </form>
-                  <form action={transitionTripAction.bind(null, tenantSlug)} className="flex flex-wrap gap-2">
-                    <input name="tripId" type="hidden" value={trip.id} />
-                    <input name="note" type="hidden" value="Avance registrado desde centro de control." />
-                    <select className="rounded-md border border-slate-300 px-3 py-2" name="nextStatus">
-                      {next.map((status) => <option key={status} value={status}>{status}</option>)}
-                    </select>
-                    <SubmitButton>Avanzar</SubmitButton>
-                  </form>
-                  <form action={reportIncidentAction.bind(null, tenantSlug)} className="grid gap-2">
-                    <input name="tripId" type="hidden" value={trip.id} />
-                    <input name="category" type="hidden" value="Retraso" />
-                    <TextArea label="Incidencia visible al cliente" name="customerMessage" />
-                    <SubmitButton className="bg-orange-600 hover:bg-orange-700">Registrar incidencia</SubmitButton>
-                  </form>
-                  {trip.proof ? (
-                    <div className="rounded-md border border-emerald-200 bg-emerald-50 p-3">
-                      <p className="text-sm font-semibold text-emerald-900">Evidencia: {trip.proof.status}</p>
-                      <p className="text-xs text-emerald-800">Receptor: {trip.proof.receiverName}</p>
-                      <div className="mt-2 grid gap-1">
-                        {trip.documents.filter((document) => document.proofId === trip.proof?.id).map((document) => (
-                          <span className="text-xs text-slate-700" key={document.id}>{document.filename}</span>
-                        ))}
-                      </div>
-                      {trip.proof.status === "SUBMITTED" ? (
-                        <form action={approveProofAction.bind(null, tenantSlug)} className="mt-3">
-                          <input name="tripId" type="hidden" value={trip.id} />
-                          <SubmitButton className="bg-emerald-700 hover:bg-emerald-800">Aprobar evidencia y generar POD</SubmitButton>
-                        </form>
-                      ) : null}
-                    </div>
-                  ) : null}
-                </div>
-              </div>
-            );
-          })}
+        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
+          <MetricCard
+            hint="Por revisar y convertir"
+            href="#solicitudes"
+            icon={<Inbox />}
+            label="Solicitudes nuevas"
+            tone="primary"
+            value={requests.length}
+          />
+          <MetricCard hint="En ejecucion ahora" href="#viajes" icon={<Route />} label="Viajes activos" tone="primary" value={activeTrips.length} />
+          <MetricCard
+            hint={pendingProofs > 0 ? "Requieren revision de operaciones" : "Sin pendientes de revision"}
+            href="#viajes"
+            icon={<FileCheck2 />}
+            label="Evidencias por aprobar"
+            tone={pendingProofs > 0 ? "warning" : "default"}
+            value={pendingProofs}
+          />
+          <MetricCard
+            hint={openIncidentCount > 0 ? "Atencion requerida" : "Operacion sin novedades"}
+            href="#incidencias"
+            icon={<TriangleAlert />}
+            label="Incidencias abiertas"
+            tone={openIncidentCount > 0 ? "danger" : "success"}
+            value={openIncidentCount}
+          />
+          <MetricCard
+            hint={`${drivers.length} conductores · ${equipment.length} equipos`}
+            icon={<Truck />}
+            label="Flota disponible"
+            value={vehicles.length}
+          />
         </div>
-      </Card>
+
+        <div className="grid items-start gap-6 xl:grid-cols-[minmax(0,1fr)_360px]">
+          {/* Columna principal */}
+          <div className="grid min-w-0 gap-6">
+            <Card>
+              <CardHeader
+                description={selectedTrip ? `Siguiendo ${selectedTrip.reference}` : "Sin servicios en curso"}
+                icon={<MapPin />}
+                title="Mapa y seguimiento local"
+              />
+              {selectedTrip ? (
+                <div className="anim-scale-in mt-4">
+                  <TripMap
+                    expectedDuration={selectedTrip.expectedDuration}
+                    routePoints={selectedTrip.routePoints}
+                    simulationPausedAt={selectedTrip.simulationPausedAt}
+                    simulationProgress={selectedTrip.simulationProgress}
+                    simulationStartedAt={selectedTrip.simulationStartedAt}
+                  />
+                  <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1.5 text-sm text-muted-foreground">
+                    <span className="font-mono font-semibold text-foreground">{selectedTrip.reference}</span>
+                    <StatusBadge label={tripStatusLabel[selectedTrip.status]} tone={tripStatusTone[selectedTrip.status]} />
+                    <span className="tabular-nums">ETA {formatDate(selectedTrip.eta)}</span>
+                  </div>
+                </div>
+              ) : (
+                <EmptyState
+                  className="mt-4"
+                  description="Cuando exista un servicio en curso, su avance se mostrara aqui."
+                  icon={<MapPin />}
+                  title="Sin viajes en seguimiento"
+                />
+              )}
+            </Card>
+
+            <section aria-labelledby="viajes-titulo" className="scroll-mt-20" id="viajes">
+              <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+                <h2 className="flex items-center gap-2 text-lg font-bold text-foreground" id="viajes-titulo">
+                  <Route aria-hidden className="size-5 text-muted-foreground" />
+                  Servicios operativos
+                  <Badge tone="progress">{activeTrips.length}</Badge>
+                </h2>
+                <p className="text-xs text-faint-foreground">Ordenados por fecha programada</p>
+              </div>
+              {activeTrips.length ? (
+                <div className="grid gap-4">
+                  {activeTrips.map((trip, index) => (
+                    <TripOperationsCard
+                      drivers={drivers}
+                      equipment={equipment}
+                      index={index}
+                      key={trip.id}
+                      role={membership.role}
+                      tenantSlug={tenantSlug}
+                      trip={trip}
+                      vehicles={vehicles}
+                    />
+                  ))}
+                </div>
+              ) : (
+                <EmptyState
+                  description="Confirme una solicitud de cliente para iniciar un nuevo servicio."
+                  icon={<Route />}
+                  title="No hay viajes activos"
+                />
+              )}
+            </section>
+
+            <Card className="scroll-mt-20" id="historial">
+              <CardHeader
+                description="Ultimos servicios cerrados o cancelados."
+                icon={<History />}
+                title="Historial reciente"
+              />
+              <div className="mt-4">
+                {closedTrips.length ? (
+                  <DataTable caption="Historial de servicios cerrados">
+                    <TableHead>
+                      <tr>
+                        <TableHeaderCell>Referencia</TableHeaderCell>
+                        <TableHeaderCell>Cliente</TableHeaderCell>
+                        <TableHeaderCell>Estado</TableHeaderCell>
+                        <TableHeaderCell>Programado</TableHeaderCell>
+                      </tr>
+                    </TableHead>
+                    <TableBody>
+                      {closedTrips.map((trip) => (
+                        <TableRow key={trip.id}>
+                          <TableCell className="font-mono font-semibold text-foreground">{trip.reference}</TableCell>
+                          <TableCell>{trip.customerAccount.name}</TableCell>
+                          <TableCell>
+                            <StatusBadge label={tripStatusLabel[trip.status]} tone={tripStatusTone[trip.status]} />
+                          </TableCell>
+                          <TableCell numeric>{formatDateShort(trip.scheduledAt)}</TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </DataTable>
+                ) : (
+                  <EmptyState compact icon={<History />} title="Aun no hay servicios cerrados" />
+                )}
+              </div>
+            </Card>
+          </div>
+
+          {/* Panel lateral */}
+          <div className="grid min-w-0 content-start gap-6">
+            <Card className="scroll-mt-20" id="solicitudes">
+              <CardHeader
+                description="Nuevas solicitudes del portal por convertir."
+                icon={<Inbox />}
+                title="Solicitudes de cliente"
+              />
+              <div className="mt-4 grid gap-3">
+                {requests.length ? (
+                  requests.map((request, index) => (
+                    <div
+                      className="anim-item rounded-lg border border-border bg-surface-sunken/50 p-3.5"
+                      data-testid={`request-card-${request.id}`}
+                      key={request.id}
+                      style={{ "--stagger": index } as React.CSSProperties}
+                    >
+                      <div className="flex items-start justify-between gap-2">
+                        <p className="font-mono text-sm font-bold text-foreground">{request.reference}</p>
+                        <StatusBadge label={requestStatusLabel[request.status]} tone={requestStatusTone[request.status]} />
+                      </div>
+                      <p className="mt-1 text-sm font-medium text-foreground">{request.customerAccount.name}</p>
+                      <p className="mt-0.5 text-sm text-muted-foreground">
+                        {request.origin} → {request.destination}
+                      </p>
+                      <div className="mt-1.5 flex flex-wrap items-center gap-2 text-xs text-faint-foreground">
+                        <span className="tabular-nums">{formatDateShort(request.requestedDate)}</span>
+                        {request.priority === "URGENT" ? <Badge tone="danger">Urgente</Badge> : null}
+                        <span>{request.serviceType.name}</span>
+                      </div>
+                      <form action={confirmRequestAsTripAction.bind(null, tenantSlug)} className="mt-3">
+                        <input name="requestId" type="hidden" value={request.id} />
+                        <SubmitButton className="w-full">Confirmar y convertir</SubmitButton>
+                      </form>
+                    </div>
+                  ))
+                ) : (
+                  <EmptyState
+                    compact
+                    description="Las solicitudes creadas por sus clientes apareceran aqui."
+                    icon={<Inbox />}
+                    title="No hay solicitudes pendientes"
+                  />
+                )}
+              </div>
+            </Card>
+
+            <Card className="scroll-mt-20" id="incidencias">
+              <CardHeader description="Reportes internos y visibles al cliente." icon={<TriangleAlert />} title="Incidencias" />
+              <div className="mt-4 grid gap-3">
+                {incidents.length ? (
+                  incidents.map((incident) => (
+                    <div className="rounded-lg border border-border p-3.5" key={incident.id}>
+                      <div className="flex items-start justify-between gap-2">
+                        <p className="text-sm font-semibold text-foreground">{incident.category}</p>
+                        <StatusBadge label={incidentStatusLabel[incident.status]} tone={incidentStatusTone[incident.status]} />
+                      </div>
+                      <p className="mt-1 line-clamp-2 text-sm text-muted-foreground">
+                        {incident.customerMessage ?? incident.internalDescription}
+                      </p>
+                      <div className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-faint-foreground">
+                        <Badge tone={incidentPriorityTone[incident.priority]}>{incidentPriorityLabel[incident.priority]}</Badge>
+                        {incident.trip ? <span className="font-mono">{incident.trip.reference}</span> : null}
+                        <span className="tabular-nums">{formatDateShort(incident.createdAt)}</span>
+                        <span className="inline-flex items-center gap-1">
+                          {incident.visibleToCustomer ? (
+                            <>
+                              <Eye aria-hidden className="size-3" /> Visible al cliente
+                            </>
+                          ) : (
+                            <>
+                              <EyeOff aria-hidden className="size-3" /> Interna
+                            </>
+                          )}
+                        </span>
+                      </div>
+                    </div>
+                  ))
+                ) : (
+                  <EmptyState compact description="La operacion no registra novedades." icon={<TriangleAlert />} title="Sin incidencias" />
+                )}
+              </div>
+            </Card>
+
+            <Card className="scroll-mt-20" id="actividad">
+              <CardHeader description="Notificaciones emitidas por la plataforma." icon={<Bell />} title="Actividad reciente" />
+              <div className="mt-4 grid gap-1">
+                {notifications.length ? (
+                  notifications.map((notification) => {
+                    const ChannelIcon = channelIcon[notification.channel];
+                    return (
+                      <div className="flex items-start gap-2.5 rounded-lg px-2 py-2 transition-colors hover:bg-muted/60" key={notification.id}>
+                        <span aria-hidden className="mt-0.5 grid size-7 shrink-0 place-items-center rounded-lg bg-muted text-muted-foreground">
+                          <ChannelIcon className="size-3.5" />
+                        </span>
+                        <div className="min-w-0">
+                          <p className="truncate text-sm font-medium text-foreground">{notification.subject}</p>
+                          <p className="text-xs text-faint-foreground">
+                            {notificationChannelLabel[notification.channel]} · <span className="tabular-nums">{formatDateShort(notification.createdAt)}</span>
+                          </p>
+                        </div>
+                      </div>
+                    );
+                  })
+                ) : (
+                  <EmptyState compact icon={<Bell />} title="Sin actividad reciente" />
+                )}
+              </div>
+            </Card>
+          </div>
+        </div>
+      </div>
     </AppShell>
   );
 }
