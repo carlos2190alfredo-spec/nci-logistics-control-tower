@@ -1,0 +1,613 @@
+generator client {
+  provider = "prisma-client-js"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum PlatformRole {
+  PLATFORM_SUPER_ADMIN
+  PLATFORM_SUPPORT
+}
+
+enum TenantRole {
+  TENANT_OWNER
+  TENANT_ADMIN
+  OPERATIONS_MANAGER
+  DISPATCHER
+  SAFETY_MANAGER
+  DRIVER
+}
+
+enum CustomerRole {
+  CUSTOMER_ADMIN
+  CUSTOMER_VIEWER
+}
+
+enum TenantStatus {
+  ACTIVE
+  SUSPENDED
+  ARCHIVED
+  CANCELLED
+}
+
+enum TenantPlanCode {
+  STARTER
+  PROFESSIONAL
+  ENTERPRISE
+}
+
+enum SubscriptionStatus {
+  TRIAL
+  ACTIVE
+  SUSPENDED
+  CANCELLED
+}
+
+enum ServiceRequestStatus {
+  DRAFT
+  REQUESTED
+  UNDER_REVIEW
+  INFORMATION_REQUIRED
+  CONFIRMED
+  REJECTED
+  CANCELLED
+  CONVERTED
+}
+
+enum TripStatus {
+  REQUESTED
+  UNDER_REVIEW
+  INFORMATION_REQUIRED
+  CONFIRMED
+  SCHEDULED
+  ASSIGNED
+  DRIVER_CONFIRMED
+  EN_ROUTE_TO_ORIGIN
+  ARRIVED_AT_ORIGIN
+  WAITING_AT_ORIGIN
+  LOADING_OR_PICKUP
+  IN_TRANSIT
+  ARRIVED_AT_DESTINATION
+  DELIVERY_IN_PROGRESS
+  DELIVERED
+  EVIDENCE_PENDING
+  EVIDENCE_SUBMITTED
+  EVIDENCE_APPROVED
+  CLOSED
+  CANCELLED
+}
+
+enum IncidentStatus {
+  OPEN
+  ACKNOWLEDGED
+  IN_PROGRESS
+  RESOLVED
+  CLOSED
+}
+
+enum IncidentPriority {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+enum NotificationChannel {
+  PORTAL
+  EMAIL
+  MOCK_WHATSAPP
+}
+
+enum NotificationStatus {
+  QUEUED
+  SENT
+  DELIVERED
+  READ
+  FAILED
+}
+
+enum DocumentVisibility {
+  INTERNAL
+  CUSTOMER_VISIBLE
+  DRIVER_VISIBLE
+}
+
+model User {
+  id                  String               @id @default(uuid()) @db.Uuid
+  email               String               @unique
+  name                String
+  passwordHash        String               @map("password_hash")
+  active              Boolean              @default(true)
+  platformRole        PlatformRole?        @map("platform_role")
+  lastLoginAt         DateTime?            @map("last_login_at")
+  failedLoginAttempts Int                  @default(0) @map("failed_login_attempts")
+  createdAt           DateTime             @default(now()) @map("created_at")
+  updatedAt           DateTime             @updatedAt @map("updated_at")
+  tenantMemberships   TenantMembership[]
+  customerMemberships CustomerMembership[]
+  sessions            Session[]
+  passwordResetTokens PasswordResetToken[]
+  driverProfiles      Driver[]
+
+  @@map("users")
+}
+
+model Session {
+  id               String    @id @default(uuid()) @db.Uuid
+  userId           String    @map("user_id") @db.Uuid
+  tokenHash        String    @unique @map("token_hash")
+  expiresAt        DateTime  @map("expires_at")
+  revokedAt        DateTime? @map("revoked_at")
+  supportSessionId String?   @map("support_session_id") @db.Uuid
+  createdAt        DateTime  @default(now()) @map("created_at")
+  user             User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("sessions")
+}
+
+model PasswordResetToken {
+  id        String    @id @default(uuid()) @db.Uuid
+  userId    String    @map("user_id") @db.Uuid
+  tokenHash String    @unique @map("token_hash")
+  expiresAt DateTime  @map("expires_at")
+  usedAt    DateTime? @map("used_at")
+  createdAt DateTime  @default(now()) @map("created_at")
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("password_reset_tokens")
+}
+
+model TenantPlan {
+  id                   String         @id @default(uuid()) @db.Uuid
+  code                 TenantPlanCode @unique
+  name                 String
+  maxUsers             Int            @map("max_users")
+  maxDrivers           Int            @map("max_drivers")
+  maxVehicles          Int            @map("max_vehicles")
+  maxCustomers         Int            @map("max_customers")
+  maxDocuments         Int            @map("max_documents")
+  portalEnabled        Boolean        @default(true) @map("portal_enabled")
+  driverAppEnabled     Boolean        @default(true) @map("driver_app_enabled")
+  notificationsEnabled Boolean        @default(true) @map("notifications_enabled")
+  reportsEnabled       Boolean        @default(true) @map("reports_enabled")
+  integrationsEnabled  Boolean        @default(false) @map("integrations_enabled")
+  brandingEnabled      Boolean        @default(true) @map("branding_enabled")
+  tenants              Tenant[]
+
+  @@map("tenant_plans")
+}
+
+model Tenant {
+  id                 String               @id @default(uuid()) @db.Uuid
+  name               String
+  legalName          String               @map("legal_name")
+  slug               String               @unique
+  status             TenantStatus         @default(ACTIVE)
+  subscriptionStatus SubscriptionStatus   @default(TRIAL) @map("subscription_status")
+  planId             String               @map("plan_id") @db.Uuid
+  isDemo             Boolean              @default(false) @map("is_demo")
+  activatedAt        DateTime?            @map("activated_at")
+  trialEndsAt        DateTime?            @map("trial_ends_at")
+  archivedAt         DateTime?            @map("archived_at")
+  createdAt          DateTime             @default(now()) @map("created_at")
+  updatedAt          DateTime             @updatedAt @map("updated_at")
+  plan               TenantPlan           @relation(fields: [planId], references: [id])
+  memberships        TenantMembership[]
+  branding           TenantBranding?
+  settings           TenantSettings?
+  features           TenantFeature[]
+  customers          CustomerAccount[]
+  vehicles           Vehicle[]
+  equipment          Equipment[]
+  drivers            Driver[]
+  serviceTypes       ServiceType[]
+  locations          Location[]
+  serviceRequests    ServiceRequest[]
+  trips              Trip[]
+  incidents          Incident[]
+  documents          Document[]
+  notifications      NotificationDelivery[]
+  auditLogs          AuditLog[]
+  supportSessions    TenantSupportSession[]
+
+  @@map("tenants")
+}
+
+model TenantMembership {
+  id        String     @id @default(uuid()) @db.Uuid
+  tenantId  String     @map("tenant_id") @db.Uuid
+  userId    String     @map("user_id") @db.Uuid
+  role      TenantRole
+  active    Boolean    @default(true)
+  createdAt DateTime   @default(now()) @map("created_at")
+  tenant    Tenant     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, userId, role])
+  @@index([userId])
+  @@map("tenant_memberships")
+}
+
+model TenantBranding {
+  id          String   @id @default(uuid()) @db.Uuid
+  tenantId    String   @unique @map("tenant_id") @db.Uuid
+  wordmark    String   @default("NCI Logistics Control Tower")
+  primary     String   @default("#0f2d46")
+  secondary   String   @default("#2563eb")
+  accent      String   @default("#f97316")
+  footerText  String   @default("Tecnologia desarrollada por NCI Automation") @map("footer_text")
+  supportMail String   @default("soporte@nci.local") @map("support_mail")
+  phone       String?
+  address     String?
+  tenant      Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@map("tenant_branding")
+}
+
+model TenantSettings {
+  id                  String   @id @default(uuid()) @db.Uuid
+  tenantId            String   @unique @map("tenant_id") @db.Uuid
+  timezone            String   @default("America/Panama")
+  locale              String   @default("es-PA")
+  dateFormat          String   @default("dd/MM/yyyy") @map("date_format")
+  notificationPrefs   Json     @default("{}") @map("notification_prefs")
+  tenant              Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@map("tenant_settings")
+}
+
+model TenantFeature {
+  id        String   @id @default(uuid()) @db.Uuid
+  tenantId  String   @map("tenant_id") @db.Uuid
+  key       String
+  enabled   Boolean  @default(false)
+  tenant    Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, key])
+  @@map("tenant_features")
+}
+
+model CustomerAccount {
+  id          String               @id @default(uuid()) @db.Uuid
+  tenantId    String               @map("tenant_id") @db.Uuid
+  code        String
+  name        String
+  active      Boolean              @default(true)
+  createdAt   DateTime             @default(now()) @map("created_at")
+  updatedAt   DateTime             @updatedAt @map("updated_at")
+  tenant      Tenant               @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  memberships CustomerMembership[]
+  contacts    CustomerContact[]
+  requests    ServiceRequest[]
+  trips       Trip[]
+  incidents   Incident[]
+  documents   Document[]
+
+  @@unique([tenantId, code])
+  @@index([tenantId])
+  @@map("customer_accounts")
+}
+
+model CustomerMembership {
+  id                String          @id @default(uuid()) @db.Uuid
+  tenantId          String          @map("tenant_id") @db.Uuid
+  customerAccountId String          @map("customer_account_id") @db.Uuid
+  userId            String          @map("user_id") @db.Uuid
+  role              CustomerRole
+  active            Boolean         @default(true)
+  createdAt         DateTime        @default(now()) @map("created_at")
+  customerAccount   CustomerAccount @relation(fields: [customerAccountId], references: [id], onDelete: Cascade)
+  user              User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([customerAccountId, userId, role])
+  @@index([tenantId, userId])
+  @@map("customer_memberships")
+}
+
+model CustomerContact {
+  id                String          @id @default(uuid()) @db.Uuid
+  tenantId          String          @map("tenant_id") @db.Uuid
+  customerAccountId String          @map("customer_account_id") @db.Uuid
+  name              String
+  email             String
+  phone             String?
+  customerAccount   CustomerAccount @relation(fields: [customerAccountId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, customerAccountId])
+  @@map("customer_contacts")
+}
+
+model Location {
+  id        String  @id @default(uuid()) @db.Uuid
+  tenantId  String  @map("tenant_id") @db.Uuid
+  name      String
+  address   String
+  latitude  Float
+  longitude Float
+  tenant    Tenant  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, name])
+  @@map("locations")
+}
+
+model Vehicle {
+  id        String    @id @default(uuid()) @db.Uuid
+  tenantId  String    @map("tenant_id") @db.Uuid
+  code      String
+  plate     String
+  type      String
+  status    String    @default("AVAILABLE")
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+  tenant    Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  trips     Trip[]
+
+  @@unique([tenantId, code])
+  @@unique([tenantId, plate])
+  @@map("vehicles")
+}
+
+model Equipment {
+  id        String    @id @default(uuid()) @db.Uuid
+  tenantId  String    @map("tenant_id") @db.Uuid
+  code      String
+  type      String
+  status    String    @default("AVAILABLE")
+  tenant    Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  trips     Trip[]
+
+  @@unique([tenantId, code])
+  @@map("equipment")
+}
+
+model Driver {
+  id             String    @id @default(uuid()) @db.Uuid
+  tenantId       String    @map("tenant_id") @db.Uuid
+  userId         String?   @map("user_id") @db.Uuid
+  code           String
+  name           String
+  phone          String?
+  license        String
+  status         String    @default("AVAILABLE")
+  authorizations Json      @default("[]")
+  tenant         Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  user           User?     @relation(fields: [userId], references: [id])
+  trips          Trip[]
+
+  @@unique([tenantId, code])
+  @@index([tenantId, userId])
+  @@map("drivers")
+}
+
+model ServiceType {
+  id            String  @id @default(uuid()) @db.Uuid
+  tenantId      String  @map("tenant_id") @db.Uuid
+  code          String
+  name          String
+  active        Boolean @default(true)
+  optionalFields Json   @default("{}") @map("optional_fields")
+  requiredDocs  Json    @default("[]") @map("required_docs")
+  tenant        Tenant  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  requests      ServiceRequest[]
+  trips         Trip[]
+
+  @@unique([tenantId, code])
+  @@map("service_types")
+}
+
+model ServiceRequest {
+  id                String               @id @default(uuid()) @db.Uuid
+  tenantId          String               @map("tenant_id") @db.Uuid
+  customerAccountId String               @map("customer_account_id") @db.Uuid
+  serviceTypeId     String               @map("service_type_id") @db.Uuid
+  reference         String
+  status            ServiceRequestStatus @default(REQUESTED)
+  origin            String
+  destination       String
+  requestedDate     DateTime             @map("requested_date")
+  priority          String               @default("NORMAL")
+  cargoDetails      Json                 @default("{}") @map("cargo_details")
+  customerNotes     String?              @map("customer_notes")
+  internalNotes     String?              @map("internal_notes")
+  createdById       String?              @map("created_by_id") @db.Uuid
+  createdAt         DateTime             @default(now()) @map("created_at")
+  updatedAt         DateTime             @updatedAt @map("updated_at")
+  tenant            Tenant               @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  customerAccount   CustomerAccount      @relation(fields: [customerAccountId], references: [id])
+  serviceType       ServiceType          @relation(fields: [serviceTypeId], references: [id])
+  trip              Trip?
+
+  @@unique([tenantId, reference])
+  @@index([tenantId, customerAccountId])
+  @@map("service_requests")
+}
+
+model Trip {
+  id                String          @id @default(uuid()) @db.Uuid
+  tenantId          String          @map("tenant_id") @db.Uuid
+  customerAccountId String          @map("customer_account_id") @db.Uuid
+  serviceRequestId  String?         @unique @map("service_request_id") @db.Uuid
+  serviceTypeId     String          @map("service_type_id") @db.Uuid
+  vehicleId         String?         @map("vehicle_id") @db.Uuid
+  equipmentId       String?         @map("equipment_id") @db.Uuid
+  driverId          String?         @map("driver_id") @db.Uuid
+  reference         String
+  status            TripStatus      @default(REQUESTED)
+  origin            String
+  destination       String
+  scheduledAt       DateTime        @map("scheduled_at")
+  eta               DateTime?
+  routePoints       Json            @default("[]") @map("route_points")
+  expectedDuration  Int             @default(3600) @map("expected_duration")
+  simulationStartedAt DateTime?     @map("simulation_started_at")
+  simulationPausedAt  DateTime?     @map("simulation_paused_at")
+  simulationProgress  Float         @default(0) @map("simulation_progress")
+  customerVisibleStatus String      @default("Solicitud recibida") @map("customer_visible_status")
+  proofReady        Boolean         @default(false) @map("proof_ready")
+  createdAt         DateTime        @default(now()) @map("created_at")
+  updatedAt         DateTime        @updatedAt @map("updated_at")
+  tenant            Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  customerAccount   CustomerAccount @relation(fields: [customerAccountId], references: [id])
+  serviceRequest    ServiceRequest? @relation(fields: [serviceRequestId], references: [id])
+  serviceType       ServiceType     @relation(fields: [serviceTypeId], references: [id])
+  vehicle           Vehicle?        @relation(fields: [vehicleId], references: [id])
+  equipment         Equipment?      @relation(fields: [equipmentId], references: [id])
+  driver            Driver?         @relation(fields: [driverId], references: [id])
+  events            TripEvent[]
+  locations         TripLocation[]
+  incidents         Incident[]
+  documents         Document[]
+  proof             ProofOfDelivery?
+
+  @@unique([tenantId, reference])
+  @@index([tenantId, customerAccountId, status])
+  @@index([tenantId, driverId])
+  @@map("trips")
+}
+
+model TripEvent {
+  id         String     @id @default(uuid()) @db.Uuid
+  tenantId   String     @map("tenant_id") @db.Uuid
+  tripId     String     @map("trip_id") @db.Uuid
+  actorId    String?    @map("actor_id") @db.Uuid
+  fromStatus TripStatus? @map("from_status")
+  toStatus   TripStatus  @map("to_status")
+  note       String?
+  visibleToCustomer Boolean @default(false) @map("visible_to_customer")
+  createdAt  DateTime   @default(now()) @map("created_at")
+  trip       Trip       @relation(fields: [tripId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, tripId, createdAt])
+  @@map("trip_events")
+}
+
+model TripLocation {
+  id        String   @id @default(uuid()) @db.Uuid
+  tenantId  String   @map("tenant_id") @db.Uuid
+  tripId    String   @map("trip_id") @db.Uuid
+  latitude  Float
+  longitude Float
+  progress  Float
+  recordedAt DateTime @default(now()) @map("recorded_at")
+  trip      Trip     @relation(fields: [tripId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, tripId, recordedAt])
+  @@map("trip_locations")
+}
+
+model Incident {
+  id                String           @id @default(uuid()) @db.Uuid
+  tenantId          String           @map("tenant_id") @db.Uuid
+  customerAccountId String?          @map("customer_account_id") @db.Uuid
+  tripId            String?          @map("trip_id") @db.Uuid
+  category          String
+  priority          IncidentPriority @default(MEDIUM)
+  status            IncidentStatus   @default(OPEN)
+  internalDescription String         @map("internal_description")
+  customerMessage   String?          @map("customer_message")
+  visibleToCustomer Boolean          @default(false) @map("visible_to_customer")
+  resolution        String?
+  createdAt         DateTime         @default(now()) @map("created_at")
+  updatedAt         DateTime         @updatedAt @map("updated_at")
+  tenant            Tenant           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  customerAccount   CustomerAccount? @relation(fields: [customerAccountId], references: [id])
+  trip              Trip?            @relation(fields: [tripId], references: [id])
+
+  @@index([tenantId, status])
+  @@map("incidents")
+}
+
+model Document {
+  id                String             @id @default(uuid()) @db.Uuid
+  tenantId          String             @map("tenant_id") @db.Uuid
+  customerAccountId String?            @map("customer_account_id") @db.Uuid
+  tripId            String?            @map("trip_id") @db.Uuid
+  proofId           String?            @map("proof_id") @db.Uuid
+  filename          String
+  mimeType          String             @map("mime_type")
+  sizeBytes         Int                @map("size_bytes")
+  bucket            String
+  objectKey         String             @map("object_key")
+  visibility        DocumentVisibility @default(INTERNAL)
+  uploadedById      String?            @map("uploaded_by_id") @db.Uuid
+  createdAt         DateTime           @default(now()) @map("created_at")
+  tenant            Tenant             @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  customerAccount   CustomerAccount?   @relation(fields: [customerAccountId], references: [id])
+  trip              Trip?              @relation(fields: [tripId], references: [id])
+  proof             ProofOfDelivery?   @relation(fields: [proofId], references: [id])
+
+  @@index([tenantId, tripId])
+  @@map("documents")
+}
+
+model ProofOfDelivery {
+  id             String     @id @default(uuid()) @db.Uuid
+  tenantId       String     @map("tenant_id") @db.Uuid
+  tripId         String     @unique @map("trip_id") @db.Uuid
+  receiverName   String     @map("receiver_name")
+  signatureSvg   String     @map("signature_svg")
+  observation    String?
+  deliveredAt    DateTime   @default(now()) @map("delivered_at")
+  approvedAt     DateTime?  @map("approved_at")
+  trip           Trip       @relation(fields: [tripId], references: [id], onDelete: Cascade)
+  documents      Document[]
+
+  @@index([tenantId])
+  @@map("proofs_of_delivery")
+}
+
+model NotificationDelivery {
+  id                String              @id @default(uuid()) @db.Uuid
+  tenantId          String              @map("tenant_id") @db.Uuid
+  customerAccountId String?             @map("customer_account_id") @db.Uuid
+  channel           NotificationChannel
+  status            NotificationStatus  @default(QUEUED)
+  subject           String
+  body              String
+  recipient         String
+  metadata          Json                @default("{}")
+  createdAt         DateTime            @default(now()) @map("created_at")
+  sentAt            DateTime?           @map("sent_at")
+  tenant            Tenant              @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, createdAt])
+  @@map("notification_deliveries")
+}
+
+model TenantSupportSession {
+  id        String    @id @default(uuid()) @db.Uuid
+  tenantId  String    @map("tenant_id") @db.Uuid
+  userId    String    @map("user_id") @db.Uuid
+  reason    String
+  startedAt DateTime  @default(now()) @map("started_at")
+  endedAt   DateTime? @map("ended_at")
+  tenant    Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, startedAt])
+  @@map("tenant_support_sessions")
+}
+
+model AuditLog {
+  id               String   @id @default(uuid()) @db.Uuid
+  tenantId         String?  @map("tenant_id") @db.Uuid
+  actorId          String?  @map("actor_id") @db.Uuid
+  actorRole        String?  @map("actor_role")
+  supportSessionId String?  @map("support_session_id") @db.Uuid
+  action           String
+  entity           String
+  entityId         String?  @map("entity_id")
+  before           Json?
+  after            Json?
+  ip               String?
+  userAgent        String?  @map("user_agent")
+  createdAt        DateTime @default(now()) @map("created_at")
+  tenant           Tenant?  @relation(fields: [tenantId], references: [id])
+
+  @@index([tenantId, createdAt])
+  @@map("audit_logs")
+}

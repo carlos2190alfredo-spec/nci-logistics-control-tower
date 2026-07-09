@@ -1,0 +1,90 @@
+name: nci-logistics-control-tower
+
+services:
+  postgres:
+    image: postgres:17-alpine
+    container_name: nci-lct-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: nci
+      POSTGRES_PASSWORD: nci_local_password
+      POSTGRES_DB: nci_logistics
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U nci -d nci_logistics"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks:
+      - nci-local
+
+  minio:
+    image: minio/minio:RELEASE.2025-09-07T16-13-09Z
+    container_name: nci-lct-minio
+    restart: unless-stopped
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: nci_minio
+      MINIO_ROOT_PASSWORD: nci_minio_password
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - minio_data:/data
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks:
+      - nci-local
+
+  mailpit:
+    image: axllent/mailpit:v1.27.8
+    container_name: nci-lct-mailpit
+    restart: unless-stopped
+    ports:
+      - "1025:1025"
+      - "8025:8025"
+    healthcheck:
+      test: ["CMD", "/mailpit", "readyz"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks:
+      - nci-local
+
+  app:
+    profiles: ["app"]
+    build:
+      context: .
+    container_name: nci-lct-app
+    restart: unless-stopped
+    env_file:
+      - .env.local
+    environment:
+      DATABASE_URL: "postgresql://nci:nci_local_password@postgres:5432/nci_logistics?schema=public"
+      MINIO_ENDPOINT: "http://minio:9000"
+      MAIL_HOST: "mailpit"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+      mailpit:
+        condition: service_healthy
+    ports:
+      - "3000:3000"
+    networks:
+      - nci-local
+
+volumes:
+  postgres_data:
+  minio_data:
+
+networks:
+  nci-local:
+    driver: bridge

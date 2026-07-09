@@ -1,0 +1,16 @@
+{
+  "name": "NCI Logistics Control Tower",
+  "short_name": "LCT",
+  "description": "Control tower logistico multitenant local",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#f6f8fb",
+  "theme_color": "#0f2d46",
+  "icons": [
+    {
+      "src": "/window.svg",
+      "sizes": "192x192",
+      "type": "image/svg+xml"
+    }
+  ]
+}
