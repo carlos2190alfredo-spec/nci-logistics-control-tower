@@ -6,68 +6,76 @@ Agente: Codex
 
 ## Objetivo de la sesion
 
-Inicializar una base multitenant real para NCI Logistics Control Tower con infraestructura local, modelo, auth, UI y datos demo.
+Validar runtime local completo de NCI Logistics Control Tower y corregir errores reales de infraestructura/autenticacion.
 
 ## Archivos modificados
 
-Ver estado Git. Cambios principales: `prisma/schema.prisma`, `prisma/seed.ts`, `src/app/**`, `src/lib/**`, `docker-compose.yml`, `Dockerfile`, `README.md`, `docs/**`, `AGENTS.md`.
+Ver estado Git. Cambios principales de esta sesion: `docker-compose.yml`, `.env.example`, `README.md`, `prisma/seed.ts`, `src/lib/server/actions.ts`, `tests/e2e/runtime-auth-isolation.spec.ts`, `docs/**`.
 
 ## Funciones implementadas
 
-- Auth local por correo/contrasena con Argon2id y cookie httpOnly.
-- Resolucion y autorizacion multitenant centralizada.
-- Panel plataforma.
-- Centro de control tenant.
-- Portal cliente.
-- PWA conductor inicial.
-- Maquina de estados probada.
-- GPS demo deterministico.
-- Incidencias, notificaciones locales y PDF POD basicos.
+- PostgreSQL, MinIO y Mailpit levantados y saludables.
+- Migracion inicial aplicada contra PostgreSQL real.
+- Seed ejecutado dos veces y validado como idempotente.
+- Login cliente redirige correctamente al portal de su tenant.
+- E2E agregado para login/logout, tenant isolation, customer isolation y driver assigned-trips-only.
+- Mailpit validado con correo real.
+- MinIO validado con objeto demo y acceso publico denegado.
 
 ## Migraciones creadas
 
-- `prisma/migrations/20260709101000_initial_multitenant_foundation/migration.sql`
+- `prisma/migrations/20260709101000_initial_multitenant_foundation/migration.sql` aplicada.
 
 ## Comandos ejecutados
 
-- `npx create-next-app...`
-- `pnpm add...`
-- `pnpm exec prisma init`
+- `docker info`
+- `docker compose version`
+- `pnpm local:up`
+- `docker compose ps`
+- `docker compose logs --tail=200`
+- `pnpm db:migrate`
+- `pnpm storage:init`
+- `pnpm db:seed`
+- `pnpm db:seed`
 - `pnpm exec prisma validate`
-- `pnpm exec prisma generate`
+- `pnpm test:e2e`
+- Mailpit SMTP/API verification
+- MinIO S3 upload/list/public-deny verification
 - `pnpm typecheck`
 - `pnpm lint`
 - `pnpm test`
 - `pnpm build`
-- `docker compose up -d postgres minio mailpit`
+- `pnpm verify`
 
 ## Pruebas ejecutadas
 
 - TypeScript: paso.
 - ESLint: paso.
-- Vitest: paso.
+- Vitest: paso, 5 tests.
+- Playwright: paso, 6 tests.
 - Build: paso dentro de `pnpm verify`.
 
 ## Problemas encontrados
 
-- Docker daemon no estaba corriendo; no se pudieron levantar servicios ni aplicar migraciones.
+- Puerto `localhost:5432` estaba ocupado por otro servicio local; PostgreSQL del proyecto se publico en `localhost:5433`.
+- Seed fallaba porque `tsx prisma/seed.ts` no cargaba `.env.local`; se corrigio cargando dotenv al inicio.
+- Playwright no tenia Chromium instalado; se instalo con `pnpm exec playwright install chromium`.
 - Build pasa con advertencia no bloqueante de Turbopack por trazado de Prisma.
-- Prisma 7 exigia constructor/configuracion nueva; se bajo a Prisma 6.19.1 para estabilidad local.
 
 ## Decisiones tomadas
 
-- Monolito modular Next.js.
-- Prisma 6.19.1 con PostgreSQL local.
-- Sesiones opacas propias.
-- Seed demo idempotente con datos ficticios.
+- Mantener puerto interno Postgres `5432`, con host configurable `POSTGRES_HOST_PORT` y default `5433`.
+- Cargar `.env.local` desde seed para ejecucion local directa.
 
 ## Pendientes
 
-Iniciar Docker Desktop y ejecutar `pnpm setup:local`, luego repetir `pnpm verify` y `pnpm test:e2e`.
+- Implementar upload UI completo a MinIO.
+- Implementar cola IndexedDB robusta para conductor.
+- Reducir advertencia Turbopack/Prisma si se vuelve bloqueante.
+- Ampliar E2E al flujo operacional completo de solicitud -> viaje -> evidencia -> POD.
 
 ## Proximo paso exacto
 
-1. Abrir Docker Desktop.
-2. Ejecutar `pnpm setup:local`.
-3. Ejecutar `pnpm verify`.
-4. Abrir `http://localhost:3000`.
+1. Mantener servicios con `pnpm local:up`.
+2. Ejecutar `pnpm dev`.
+3. Probar flujo operacional completo y ampliar E2E para solicitud -> asignacion -> conductor -> POD.

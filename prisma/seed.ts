@@ -1,5 +1,9 @@
+import { config } from "dotenv";
 import { PrismaClient } from "../src/generated/prisma";
 import { hashPassword } from "../src/lib/server/crypto";
+
+config({ path: ".env" });
+config({ path: ".env.local", override: true });
 
 const prisma = new PrismaClient();
 

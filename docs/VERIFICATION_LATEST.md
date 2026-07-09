@@ -4,11 +4,25 @@ Fecha: 2026-07-09
 
 | Comando | Resultado |
 | --- | --- |
+| `docker info` | Paso: Docker Desktop activo |
+| `docker compose version` | Paso: v5.0.2 |
+| `pnpm local:up` | Primer intento fallo por puerto 5432 ocupado; despues paso con PostgreSQL en host 5433 |
+| `docker compose ps` | Paso: PostgreSQL, MinIO y Mailpit saludables |
+| `pnpm db:migrate` | Paso: migracion inicial aplicada |
+| `pnpm storage:init` | Paso: bucket `nci-logistics-local` creado |
+| `pnpm db:seed` | Paso |
+| `pnpm db:seed` segunda vez | Paso; sin duplicados en tenants, trips, vehicles ni drivers |
 | `pnpm exec prisma validate` | Paso |
 | `pnpm exec prisma generate` | Paso |
-| `pnpm verify` | Paso: lint, TypeScript, 2 archivos unitarios, 5 tests y build |
-| `docker compose up -d postgres minio mailpit` | Fallo: Docker daemon no esta corriendo |
+| `pnpm test:e2e` | Paso: 6 pruebas |
+| `pnpm lint` | Paso |
+| `pnpm typecheck` | Paso |
+| `pnpm test` | Paso: 2 archivos, 5 tests |
+| `pnpm build` | Paso con advertencia no bloqueante de Turbopack/Prisma |
+| `pnpm verify` | Paso: lint, TypeScript, unit tests y build |
+| Mailpit | Paso: correo `Mailpit runtime verification` recibido |
+| MinIO | Paso: objeto demo subido/listado; acceso publico sin firma respondio HTTP 403 |
 
 ## Estado final
 
-Verificacion de codigo local exitosa. Build pasa con una advertencia no bloqueante de Turbopack por trazado de Prisma. Verificacion de servicios bloqueada por Docker daemon detenido.
+Runtime local validado. Servicios Docker saludables, migracion aplicada, seed idempotente validado, E2E y verify pasaron. Queda advertencia no bloqueante de Turbopack por trazado de Prisma.

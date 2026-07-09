@@ -45,7 +45,7 @@ docker compose --profile app up -d
 Servicios:
 
 - App: `http://localhost:3000`
-- PostgreSQL: `localhost:5432`
+- PostgreSQL: `localhost:5433` por defecto en desarrollo local (`POSTGRES_HOST_PORT`) para evitar conflictos con otros Postgres locales.
 - MinIO API: `http://localhost:9000`
 - MinIO Console: `http://localhost:9001`
 - Mailpit: `http://localhost:8025`

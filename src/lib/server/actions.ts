@@ -36,12 +36,21 @@ export async function loginAction(_: unknown, formData: FormData) {
   const db = getDb();
   const user = await db.user.findUnique({
     where: { email: parsed.data.email.toLowerCase() },
-    include: { tenantMemberships: { where: { active: true }, include: { tenant: true } } },
+    include: {
+      tenantMemberships: { where: { active: true }, include: { tenant: true } },
+      customerMemberships: {
+        where: { active: true },
+        include: { customerAccount: { include: { tenant: true } } },
+      },
+    },
   });
 
   if (user?.platformRole) redirect("/platform");
   const firstTenant = user?.tenantMemberships[0]?.tenant.slug;
-  redirect(firstTenant ? `/t/${firstTenant}` : "/login");
+  if (firstTenant) redirect(`/t/${firstTenant}`);
+
+  const firstCustomerTenant = user?.customerMemberships[0]?.customerAccount.tenant.slug;
+  redirect(firstCustomerTenant ? `/t/${firstCustomerTenant}/portal` : "/login");
 }
 
 export async function logoutAction() {

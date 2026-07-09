@@ -1,9 +1,6 @@
 # BACKLOG
 
-- Iniciar Docker Desktop y ejecutar `pnpm setup:local`.
-- Verificar migracion real en PostgreSQL.
-- Ejecutar seed real y probar credenciales.
-- Añadir pruebas de aislamiento tenant A vs tenant B contra base real.
+- Ampliar pruebas E2E al flujo operativo completo solicitud -> viaje -> evidencia -> POD.
 - Implementar formulario de upload a MinIO con validacion MIME/tamano.
 - Implementar cola IndexedDB idempotente para conductor.
 - Completar reinicio de tenant demo.
