@@ -1,4 +1,6 @@
 import type { Metadata } from "next";
+import { GeistSans } from "geist/font/sans";
+import { GeistMono } from "geist/font/mono";
 import { RegisterServiceWorker } from "@/components/register-service-worker";
 import "./globals.css";
 
@@ -14,8 +16,8 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="es" className="h-full antialiased">
-      <body className="min-h-full flex flex-col">
+    <html lang="es" className={`h-full antialiased ${GeistSans.variable} ${GeistMono.variable}`}>
+      <body className="min-h-full flex flex-col font-sans">
         <RegisterServiceWorker />
         {children}
       </body>

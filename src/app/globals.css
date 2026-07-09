@@ -1,15 +1,154 @@
 @import "tailwindcss";
 
+/*
+ * NCI Logistics Control Tower — Design tokens
+ * Fuente de verdad documentada en docs/DESIGN_SYSTEM.md.
+ * Los componentes consumen tokens semánticos; no escribir hex directos en JSX.
+ */
 :root {
-  --background: #f6f8fb;
-  --foreground: #102033;
+  /* Neutros fríos */
+  --background: #f3f6fa;
+  --surface: #ffffff;
+  --surface-elevated: #ffffff;
+  --surface-sunken: #e9eef6;
+  --foreground: #10233b;
+  --muted: #eef2f8;
+  --muted-foreground: #4f617b;
+  --faint-foreground: #64748b;
+  --border: #dce3ee;
+  --border-strong: #c2cddf;
+
+  /* Azul marino institucional (navegación, identidad) */
+  --nav: #0b2338;
+  --nav-surface: #12304c;
+  --nav-border: rgba(148, 184, 214, 0.16);
+  --nav-foreground: #e9f0f7;
+  --nav-muted: #9db2c6;
+  --nav-active: #f97316;
+
+  /* Acción principal */
+  --primary: #1d4ed8;
+  --primary-hover: #1e40af;
+  --primary-foreground: #ffffff;
+  --primary-soft: #e7eefc;
+  --primary-strong: #1e3a8a;
+
+  /* Institucional (botones oscuros, superficies de marca) */
+  --secondary: #0f2d46;
+  --secondary-hover: #16405f;
+  --secondary-foreground: #ffffff;
+
+  /* Acentos */
+  --accent: #ea580c;
+  --accent-hover: #c2410c;
+  --accent-strong: #9a3412;
+  --accent-soft: #fef0e6;
+
+  --success: #0f766e;
+  --success-hover: #115e59;
+  --success-strong: #134e4a;
+  --success-soft: #e4f5f2;
+
+  --warning: #b45309;
+  --warning-strong: #92400e;
+  --warning-soft: #fdf1e0;
+
+  --danger: #dc2626;
+  --danger-hover: #b91c1c;
+  --danger-strong: #991b1b;
+  --danger-soft: #fdebeb;
+
+  --info: #0369a1;
+  --info-strong: #075985;
+  --info-soft: #e5f2fa;
+
+  --focus-ring: #0d9488;
+
+  /* Branding por tenant: valores por defecto de plataforma.
+     TenantBrandingProvider los sobreescribe en el subárbol autorizado. */
+  --brand-primary: #0f2d46;
+  --brand-secondary: #1d4ed8;
+  --brand-accent: #ea580c;
+
+  /* Movimiento */
+  --duration-fast: 140ms;
+  --duration-base: 220ms;
+  --duration-slow: 320ms;
+  --ease-out-soft: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-in-out-soft: cubic-bezier(0.65, 0, 0.35, 1);
+
+  /* Elevación (sombras frías, sutiles) */
+  --shadow-xs: 0 1px 2px rgba(16, 35, 59, 0.06);
+  --shadow-sm: 0 1px 3px rgba(16, 35, 59, 0.08), 0 1px 2px rgba(16, 35, 59, 0.04);
+  --shadow-md: 0 6px 16px -6px rgba(16, 35, 59, 0.14), 0 2px 6px -2px rgba(16, 35, 59, 0.08);
+  --shadow-lg: 0 18px 40px -16px rgba(16, 35, 59, 0.22), 0 4px 12px -4px rgba(16, 35, 59, 0.1);
 }
 
 @theme inline {
   --color-background: var(--background);
+  --color-surface: var(--surface);
+  --color-surface-elevated: var(--surface-elevated);
+  --color-surface-sunken: var(--surface-sunken);
   --color-foreground: var(--foreground);
-  --font-sans: "Geist", "Geist Fallback", ui-sans-serif, system-ui, sans-serif;
-  --font-mono: "Geist Mono", "Geist Mono Fallback", ui-monospace, monospace;
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-faint-foreground: var(--faint-foreground);
+  --color-border: var(--border);
+  --color-border-strong: var(--border-strong);
+
+  --color-nav: var(--nav);
+  --color-nav-surface: var(--nav-surface);
+  --color-nav-border: var(--nav-border);
+  --color-nav-foreground: var(--nav-foreground);
+  --color-nav-muted: var(--nav-muted);
+  --color-nav-active: var(--nav-active);
+
+  --color-primary: var(--primary);
+  --color-primary-hover: var(--primary-hover);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary-soft: var(--primary-soft);
+  --color-primary-strong: var(--primary-strong);
+
+  --color-secondary: var(--secondary);
+  --color-secondary-hover: var(--secondary-hover);
+  --color-secondary-foreground: var(--secondary-foreground);
+
+  --color-accent: var(--accent);
+  --color-accent-hover: var(--accent-hover);
+  --color-accent-strong: var(--accent-strong);
+  --color-accent-soft: var(--accent-soft);
+
+  --color-success: var(--success);
+  --color-success-hover: var(--success-hover);
+  --color-success-strong: var(--success-strong);
+  --color-success-soft: var(--success-soft);
+
+  --color-warning: var(--warning);
+  --color-warning-strong: var(--warning-strong);
+  --color-warning-soft: var(--warning-soft);
+
+  --color-danger: var(--danger);
+  --color-danger-hover: var(--danger-hover);
+  --color-danger-strong: var(--danger-strong);
+  --color-danger-soft: var(--danger-soft);
+
+  --color-info: var(--info);
+  --color-info-strong: var(--info-strong);
+  --color-info-soft: var(--info-soft);
+
+  --color-focus-ring: var(--focus-ring);
+
+  --color-brand-primary: var(--brand-primary);
+  --color-brand-secondary: var(--brand-secondary);
+  --color-brand-accent: var(--brand-accent);
+
+  --font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-geist-mono), ui-monospace, monospace;
+
+  --shadow-xs: var(--shadow-xs);
+  --shadow-sm: var(--shadow-sm);
+  --shadow-md: var(--shadow-md);
+  --shadow-lg: var(--shadow-lg);
 }
 
 * {
@@ -18,12 +157,15 @@
 
 html {
   background: var(--background);
+  scroll-behavior: smooth;
 }
 
 body {
   min-height: 100vh;
   background: var(--background);
   color: var(--foreground);
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
 }
 
 a {
@@ -38,14 +180,146 @@ textarea {
   font: inherit;
 }
 
+button:not(:disabled),
+[role="button"]:not([aria-disabled="true"]) {
+  cursor: pointer;
+}
+
 :focus-visible {
-  outline: 3px solid #14b8a6;
+  outline: 3px solid var(--focus-ring);
   outline-offset: 2px;
 }
 
+::selection {
+  background: var(--primary-soft);
+  color: var(--primary-strong);
+}
+
+/* ---------------------------------------------------------------------------
+ * Animaciones — ver docs/ANIMATION_GUIDELINES.md
+ * Solo transform/opacity. Entradas cortas, salidas más cortas, easing suave.
+ * ------------------------------------------------------------------------- */
+
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes fade-in-up {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes scale-in {
+  from {
+    opacity: 0;
+    transform: scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes slide-in-left {
+  from {
+    opacity: 0;
+    transform: translateX(-14px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes pulse-dot {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.35;
+  }
+}
+
+/* Entrada de página completa */
+.anim-page {
+  animation: fade-in-up var(--duration-slow) var(--ease-out-soft) both;
+}
+
+/* Entrada escalonada de tarjetas/filas: style={{ "--stagger": n }} (n = índice, tope recomendado 8) */
+.anim-item {
+  animation: fade-in-up var(--duration-base) var(--ease-out-soft) both;
+  animation-delay: calc(min(var(--stagger, 0), 8) * 45ms);
+}
+
+/* Paneles, popovers y mapas */
+.anim-scale-in {
+  animation: scale-in var(--duration-base) var(--ease-out-soft) both;
+}
+
+.anim-slide-in-left {
+  animation: slide-in-left var(--duration-base) var(--ease-out-soft) both;
+}
+
+/* Indicador "en vivo" (punto que respira) */
+.anim-live-dot {
+  animation: pulse-dot 2.4s var(--ease-in-out-soft) infinite;
+}
+
+/* Colapsables nativos: rotación del chevron */
+details[open] > summary .collapsible-chevron {
+  transform: rotate(180deg);
+}
+
+.collapsible-chevron {
+  transition: transform var(--duration-fast) var(--ease-out-soft);
+}
+
+details > summary {
+  list-style: none;
+}
+
+details > summary::-webkit-details-marker {
+  display: none;
+}
+
+/* Fondo del mapa demo de seguimiento */
 .control-map {
   background-image:
-    linear-gradient(120deg, rgba(20, 184, 166, 0.12), transparent 35%),
-    radial-gradient(circle at 20% 20%, rgba(37, 99, 235, 0.18), transparent 25%),
-    linear-gradient(135deg, #f8fafc, #e2e8f0);
+    linear-gradient(120deg, rgba(13, 148, 136, 0.1), transparent 40%),
+    radial-gradient(circle at 18% 22%, rgba(29, 78, 216, 0.14), transparent 30%),
+    linear-gradient(135deg, #f8fafc, #e4ebf5);
+}
+
+/* Rejilla sutil para superficies "torre de control" (hero, login) */
+.control-grid {
+  background-image:
+    linear-gradient(rgba(148, 184, 214, 0.08) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(148, 184, 214, 0.08) 1px, transparent 1px);
+  background-size: 36px 36px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
 }
