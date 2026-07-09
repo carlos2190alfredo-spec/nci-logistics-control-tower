@@ -50,6 +50,7 @@ export default async function CustomerPortalPage({ params }: { params: Promise<{
         <Card>
           <h2 className="text-lg font-bold">Nueva solicitud de transporte</h2>
           <form action={createServiceRequestAction.bind(null, tenantSlug)} className="mt-4 grid gap-3">
+            <input name="intent" type="hidden" value="REQUESTED" />
             <label className="grid gap-1 text-sm font-medium text-slate-700">
               Tipo de servicio
               <select className="min-h-10 rounded-md border border-slate-300 px-3" name="serviceTypeId">
@@ -59,7 +60,37 @@ export default async function CustomerPortalPage({ params }: { params: Promise<{
             <Field label="Origen" name="origin" defaultValue="Manzanillo International Terminal" />
             <Field label="Destino" name="destination" defaultValue="Puerto de Balboa" />
             <Field label="Fecha requerida" name="requestedDate" type="datetime-local" />
-            <TextArea label="Notas visibles" name="customerNotes" />
+            <label className="grid gap-1 text-sm font-medium text-slate-700">
+              Prioridad
+              <select className="min-h-10 rounded-md border border-slate-300 px-3" name="priority">
+                <option value="NORMAL">Normal</option>
+                <option value="URGENT">Urgente</option>
+              </select>
+            </label>
+            <Field label="Contacto" name="contactName" defaultValue="Coordinador Demo" />
+            <Field label="Telefono contacto" name="contactPhone" defaultValue="+50760000000" />
+            <Field label="Numero de contenedor" name="containerNumber" defaultValue="NCIU7654321" />
+            <Field label="Tamano" name="containerSize" defaultValue="40HC" />
+            <Field label="Tipo de contenedor" name="containerType" defaultValue="Dry" />
+            <Field label="Naviera" name="shippingLine" defaultValue="Naviera Demo" />
+            <Field label="Terminal" name="terminal" defaultValue="MIT" />
+            <Field label="Numero de sello" name="sealNumber" defaultValue="SELLO-123" />
+            <label className="grid gap-1 text-sm font-medium text-slate-700">
+              Estado de carga
+              <select className="min-h-10 rounded-md border border-slate-300 px-3" name="loadStatus">
+                <option value="LOADED">Cargado</option>
+                <option value="EMPTY">Vacio</option>
+              </select>
+            </label>
+            <label className="grid gap-1 text-sm font-medium text-slate-700">
+              Retorno de vacio
+              <select className="min-h-10 rounded-md border border-slate-300 px-3" name="emptyReturnRequired">
+                <option value="YES">Si</option>
+                <option value="NO">No</option>
+              </select>
+            </label>
+            <Field label="Booking o referencia" name="bookingReference" defaultValue="BOOK-DEMO-001" />
+            <TextArea label="Instrucciones visibles" name="customerNotes" />
             <SubmitButton>Crear solicitud</SubmitButton>
           </form>
         </Card>
@@ -85,6 +116,21 @@ export default async function CustomerPortalPage({ params }: { params: Promise<{
       </div>
 
       <div className="mt-6 grid gap-6 lg:grid-cols-2">
+        <Card>
+          <h2 className="text-lg font-bold">Solicitudes recientes</h2>
+          <div className="mt-4 grid gap-3">
+            {requests.length ? requests.map((request) => (
+              <div className="rounded-lg border border-slate-200 p-3" key={request.id}>
+                <div className="flex flex-wrap items-center gap-2">
+                  <p className="font-semibold">{request.reference}</p>
+                  <Badge tone={request.status === "CONVERTED" ? "green" : "blue"}>{request.status}</Badge>
+                </div>
+                <p className="mt-1 text-sm text-slate-600">{request.origin} {" -> "} {request.destination}</p>
+              </div>
+            )) : <p className="text-sm text-slate-600">Sin solicitudes.</p>}
+          </div>
+        </Card>
+
         <Card>
           <h2 className="text-lg font-bold">Servicios y linea de tiempo</h2>
           <div className="mt-4 grid gap-3">
@@ -119,6 +165,16 @@ export default async function CustomerPortalPage({ params }: { params: Promise<{
           </div>
         </Card>
       </div>
+      <Card className="mt-6">
+        <h2 className="text-lg font-bold">Documentos autorizados</h2>
+        <div className="mt-4 grid gap-2">
+          {documents.length ? documents.map((document) => (
+            <a className="rounded-md border border-slate-200 p-3 text-sm font-semibold text-blue-700" href={`/api/t/${tenantSlug}/documents/${document.id}`} key={document.id}>
+              {document.filename}
+            </a>
+          )) : <p className="text-sm text-slate-600">Sin documentos autorizados.</p>}
+        </div>
+      </Card>
     </AppShell>
   );
 }

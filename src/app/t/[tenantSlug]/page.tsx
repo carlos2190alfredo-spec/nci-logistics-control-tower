@@ -2,7 +2,7 @@ import Link from "next/link";
 import { AppShell } from "@/components/app-shell";
 import { TripMap } from "@/components/trip-map";
 import { Badge, Card, SubmitButton, TextArea } from "@/components/ui";
-import { assignTripAction, confirmRequestAsTripAction, reportIncidentAction, transitionTripAction } from "@/lib/server/actions";
+import { approveProofAction, assignTripAction, confirmRequestAsTripAction, reportIncidentAction, transitionTripAction } from "@/lib/server/actions";
 import { requireTenantMembership } from "@/lib/server/auth";
 import { getDb } from "@/lib/server/db";
 import { nextStatuses } from "@/lib/domain/state-machine";
@@ -20,7 +20,15 @@ export default async function TenantControlTowerPage({ params }: { params: Promi
     }),
     db.trip.findMany({
       where: { tenantId: tenant.id },
-      include: { customerAccount: true, driver: true, vehicle: true, equipment: true, events: { orderBy: { createdAt: "desc" }, take: 4 } },
+      include: {
+        customerAccount: true,
+        driver: true,
+        vehicle: true,
+        equipment: true,
+        proof: true,
+        documents: { orderBy: { createdAt: "desc" } },
+        events: { orderBy: { createdAt: "desc" }, take: 4 },
+      },
       orderBy: { scheduledAt: "asc" },
       take: 20,
     }),
@@ -76,7 +84,7 @@ export default async function TenantControlTowerPage({ params }: { params: Promi
           <h2 className="text-lg font-bold">Solicitudes de cliente</h2>
           <div className="mt-4 grid gap-3">
             {requests.length ? requests.map((request) => (
-              <div className="rounded-lg border border-slate-200 p-3" key={request.id}>
+              <div className="rounded-lg border border-slate-200 p-3" data-testid={`request-card-${request.id}`} key={request.id}>
                 <div className="flex items-start justify-between gap-3">
                   <div>
                     <p className="font-semibold">{request.reference}</p>
@@ -100,7 +108,7 @@ export default async function TenantControlTowerPage({ params }: { params: Promi
           {trips.map((trip) => {
             const next = nextStatuses(trip.status, membership.role);
             return (
-              <div className="grid gap-4 rounded-lg border border-slate-200 p-4 lg:grid-cols-[1fr_0.9fr]" key={trip.id}>
+              <div className="grid gap-4 rounded-lg border border-slate-200 p-4 lg:grid-cols-[1fr_0.9fr]" data-testid={`trip-card-${trip.id}`} key={trip.id}>
                 <div>
                   <div className="flex flex-wrap items-center gap-2">
                     <p className="font-semibold">{trip.reference}</p>
@@ -116,6 +124,7 @@ export default async function TenantControlTowerPage({ params }: { params: Promi
                 <div className="grid gap-3">
                   <form action={assignTripAction.bind(null, tenantSlug)} className="grid gap-2 rounded-md bg-slate-50 p-3">
                     <input name="tripId" type="hidden" value={trip.id} />
+                    <input name="scheduledAt" type="hidden" value={trip.scheduledAt.toISOString().slice(0, 16)} />
                     <div className="grid gap-2 sm:grid-cols-3">
                       <select className="rounded-md border border-slate-300 px-2 py-2" name="vehicleId" defaultValue={trip.vehicleId ?? ""}>
                         {vehicles.map((vehicle) => <option key={vehicle.id} value={vehicle.id}>{vehicle.code}</option>)}
@@ -127,6 +136,7 @@ export default async function TenantControlTowerPage({ params }: { params: Promi
                         {drivers.map((driver) => <option key={driver.id} value={driver.id}>{driver.code}</option>)}
                       </select>
                     </div>
+                    <input className="rounded-md border border-slate-300 px-2 py-2 text-sm" name="notes" placeholder="Notas de asignacion" />
                     <SubmitButton>Asignar</SubmitButton>
                   </form>
                   <form action={transitionTripAction.bind(null, tenantSlug)} className="flex flex-wrap gap-2">
@@ -143,6 +153,23 @@ export default async function TenantControlTowerPage({ params }: { params: Promi
                     <TextArea label="Incidencia visible al cliente" name="customerMessage" />
                     <SubmitButton className="bg-orange-600 hover:bg-orange-700">Registrar incidencia</SubmitButton>
                   </form>
+                  {trip.proof ? (
+                    <div className="rounded-md border border-emerald-200 bg-emerald-50 p-3">
+                      <p className="text-sm font-semibold text-emerald-900">Evidencia: {trip.proof.status}</p>
+                      <p className="text-xs text-emerald-800">Receptor: {trip.proof.receiverName}</p>
+                      <div className="mt-2 grid gap-1">
+                        {trip.documents.filter((document) => document.proofId === trip.proof?.id).map((document) => (
+                          <span className="text-xs text-slate-700" key={document.id}>{document.filename}</span>
+                        ))}
+                      </div>
+                      {trip.proof.status === "SUBMITTED" ? (
+                        <form action={approveProofAction.bind(null, tenantSlug)} className="mt-3">
+                          <input name="tripId" type="hidden" value={trip.id} />
+                          <SubmitButton className="bg-emerald-700 hover:bg-emerald-800">Aprobar evidencia y generar POD</SubmitButton>
+                        </form>
+                      ) : null}
+                    </div>
+                  ) : null}
                 </div>
               </div>
             );

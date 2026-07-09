@@ -27,3 +27,16 @@
 - MinIO recibio objeto demo bajo prefijo de tenant y nego acceso publico sin firma.
 - `pnpm test:e2e` paso con 6 pruebas.
 - `pnpm verify` paso completo.
+
+## 2026-07-09 End-to-End Workflow
+
+- Se agregaron migraciones para `trip_assignments`, estado de prueba de entrega e idempotencia de solicitudes de cliente.
+- Se implemento solicitud operacional completa desde portal cliente.
+- Se implemento conversion a viaje, asignacion con validaciones y bitacora de asignaciones.
+- Se implemento evidencia de conductor con upload real a MinIO, firma digital e incidencia visible al cliente.
+- Se implemento aprobacion de evidencia, generacion de POD PDF, documentos customer-visible y signed URLs.
+- Se agregaron rutas API para POD y documentos autorizados con aislamiento tenant/customer.
+- Se agrego E2E serial del flujo solicitud -> viaje -> asignacion -> conductor -> incidencia -> evidencia/firma -> aprobacion -> POD -> cierre -> cliente.
+- Se agregaron pruebas negativas para tenant cruzado, cliente cruzado y conductor no asignado.
+- `pnpm test:e2e` paso con 10 pruebas.
+- `pnpm verify` paso completo despues de seed doble.

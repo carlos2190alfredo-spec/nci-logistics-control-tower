@@ -1,14 +1,15 @@
-import type { ReactNode } from "react";
+import type { HTMLAttributes, ReactNode } from "react";
 import { cn } from "@/lib/utils";
 
 export function Card({
   children,
   className,
-}: {
+  ...props
+}: HTMLAttributes<HTMLElement> & {
   children: ReactNode;
   className?: string;
 }) {
-  return <section className={cn("rounded-lg border border-slate-200 bg-white p-5 shadow-sm", className)}>{children}</section>;
+  return <section className={cn("rounded-lg border border-slate-200 bg-white p-5 shadow-sm", className)} {...props}>{children}</section>;
 }
 
 export function Badge({ children, tone = "slate" }: { children: ReactNode; tone?: "slate" | "blue" | "green" | "orange" | "red" }) {

@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { AppShell } from "@/components/app-shell";
 import { Badge, Card, Field, SubmitButton, TextArea } from "@/components/ui";
+import { SignaturePad } from "@/components/signature-pad";
 import { reportIncidentAction, submitProofAction, transitionTripAction } from "@/lib/server/actions";
 import { requireTenantRole } from "@/lib/server/auth";
 import { getDb } from "@/lib/server/db";
@@ -35,7 +36,7 @@ export default async function DriverPage({ params }: { params: Promise<{ tenantS
         {trips.map((trip) => {
           const next = nextStatuses(trip.status, membership.role);
           return (
-            <Card key={trip.id}>
+            <Card data-testid={`driver-trip-card-${trip.id}`} key={trip.id}>
               <div className="flex flex-wrap items-center gap-2">
                 <p className="text-xl font-bold">{trip.reference}</p>
                 <Badge tone="blue">{trip.status}</Badge>
@@ -57,7 +58,8 @@ export default async function DriverPage({ params }: { params: Promise<{ tenantS
               <form action={reportIncidentAction.bind(null, tenantSlug)} className="mt-4 grid gap-3 rounded-md bg-orange-50 p-3">
                 <input name="tripId" type="hidden" value={trip.id} />
                 <input name="category" type="hidden" value="Retraso" />
-                <TextArea label="Reportar incidencia" name="internalDescription" />
+                <TextArea label="Descripcion interna de incidencia" name="internalDescription" />
+                <TextArea label="Mensaje visible al cliente" name="customerMessage" />
                 <SubmitButton className="min-h-14 bg-orange-600 text-base hover:bg-orange-700">Reportar</SubmitButton>
               </form>
 
@@ -65,6 +67,17 @@ export default async function DriverPage({ params }: { params: Promise<{ tenantS
                 <input name="tripId" type="hidden" value={trip.id} />
                 <Field label="Nombre del receptor" name="receiverName" defaultValue="Receptor Demo" />
                 <TextArea label="Observacion de entrega" name="observation" />
+                <label className="grid gap-1 text-sm font-medium text-slate-700">
+                  Fotografia o documento de evidencia
+                  <input
+                    accept="image/jpeg,image/png,image/webp,application/pdf"
+                    className="rounded-md border border-slate-300 bg-white px-3 py-2"
+                    name="evidenceFile"
+                    required
+                    type="file"
+                  />
+                </label>
+                <SignaturePad />
                 <SubmitButton className="min-h-14 bg-emerald-700 text-base hover:bg-emerald-800">Registrar evidencia y firma</SubmitButton>
               </form>
             </Card>

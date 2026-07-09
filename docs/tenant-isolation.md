@@ -27,6 +27,9 @@ El tenant activo se resuelve desde la ruta `/t/[tenantSlug]` y se valida contra 
 
 ## Casos de prueba pendientes
 
-- Tenant A no accede a viaje de Tenant B.
-- Cliente A no accede a viaje de Cliente B.
+## Casos de prueba automatizados
+
+- Tenant A no accede a POD de Tenant B.
+- Cliente A no accede a POD de Cliente B dentro del mismo tenant.
 - Driver no accede a viaje no asignado.
+- Cliente solo ve documentos `CUSTOMER_VISIBLE` dentro de su `tenantId` y `customerAccountId`.

@@ -21,6 +21,7 @@ Recorrido:
 2. Entrar como operaciones y convertir a viaje.
 3. Asignar unidad/conductor desde centro de control.
 4. Entrar como conductor y avanzar estados.
-5. Registrar incidencia y evidencia.
-6. Cerrar desde operaciones.
-7. Volver como cliente y descargar POD.
+5. Registrar incidencia visible al cliente, evidencia y firma.
+6. Aprobar evidencia desde operaciones para generar POD PDF.
+7. Cerrar desde operaciones.
+8. Volver como cliente, consultar cierre, documentos autorizados y descargar POD.

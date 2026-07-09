@@ -103,10 +103,10 @@ pnpm backup:restore backups/nci-logistics-YYYYMMDD-HHMMSS.sql
 
 ## Limitaciones actuales
 
-- Docker no pudo verificarse durante la sesion inicial porque el daemon no estaba corriendo.
+- Runtime Docker local validado con PostgreSQL, MinIO y Mailpit saludables.
 - El flujo offline IndexedDB del conductor esta preparado solo como PWA base; la cola robusta queda pendiente.
-- Upload real a MinIO desde UI queda pendiente.
-- E2E completo y pruebas de aislamiento contra DB real quedan pendientes hasta levantar Docker.
+- Upload real a MinIO, generacion de POD y aislamiento E2E contra DB real estan validados.
+- Build pasa con advertencia no bloqueante de Turbopack por trazado dinamico de Prisma.
 
 ## Protocolo de continuidad
 
