@@ -1,121 +1,87 @@
 # HANDOFF LATEST
 
 Fecha: 2026-07-10
-Agente: Claude Opus 4.7 (auditoría independiente + remediación)
+Agente: Claude Opus 4.6 (pipeline de cuarentena de archivos + ClamAV)
 
-## Objetivo de la sesión
+## Objetivo de la sesion
 
-Auditar independientemente el commit `0141575`, remediar hallazgos P0/P1 confirmados y agregar recuperación de contraseña, rotación de sesión post-login y gestión de sesiones activas — sin romper el flujo operativo, el aislamiento multitenant ni las 19 pruebas E2E existentes.
+Implementar un pipeline de cuarentena de archivos con ClamAV local, almacenamiento offline de fotos en IndexedDB con EXIF removal, y escaneo antivirus obligatorio antes de cualquier acceso a archivos — sin romper el flujo operativo, el aislamiento multitenant ni las 23 pruebas E2E existentes.
 
 ## Cambios principales
 
-### Documentos de auditoría (commit `d0cd97a`)
+### Infraestructura
 
-- `docs/CLAUDE_SECURITY_AUDIT.md` — informe independiente con 8 hallazgos y 3 análisis de dependencia.
-- `docs/SECURITY_REMEDIATION_PLAN.md` — clasificación P0/P1/P2, criterios de aceptación y plan por bloques.
+- `docker-compose.yml` — servicio ClamAV (`clamav/clamav:1.4`, puerto 3310, healthcheck PING/PONG, volumen persistente `clamav_data`).
 
-### Migración
+### Migracion
 
-- `prisma/migrations/20260710080000_session_metadata_and_reset_revocation/migration.sql`:
-  - `sessions.user_agent`, `sessions.ip_hash`, `sessions.last_seen_at`.
-  - `password_reset_tokens.revoked_at`, `password_reset_tokens.requested_ip_hash`.
-  - Índice `(user_id, created_at)` en `password_reset_tokens`.
+- `prisma/migrations/20260710224425_file_quarantine_pipeline/migration.sql`:
+  - Enums `FileStatus` (8 estados) y `ScanVerdict` (3 valores).
+  - Tabla `file_attachments` con status, quarantineKey, objectKey, scanVerdict, scanDetail, timestamps.
+  - Tabla `file_scan_events` para trazabilidad de cada escaneo.
+  - Tabla `attachment_receipts` para idempotencia de uploads offline.
+  - Relaciones con `tenants`, `trips` y `proof_of_deliveries`.
 
-### Servidor
+### Servidor — Nuevos modulos
 
-- `src/lib/server/auth.ts` — rewritten: `signIn` revoca cookie previa antes de crear la nueva; guarda metadatos; `getSession` actualiza `lastSeenAt` con throttle; nuevos helpers `getCurrentSession`, `revokeAllUserSessions`, `revokeSessionById`, `revokeOtherSessions`.
-- `src/lib/server/crypto.ts` — agrega `keyedHash` (HMAC-SHA256 con `SESSION_METADATA_KEY`) para identificar sesiones e IPs sin filtrar valores en claro.
-- `src/lib/server/password-reset.ts` — flujo completo (request/validate/consume/prune), TTL 20 min, hash SHA-256, revocación de tokens previos, `revokeAllUserSessions` tras reset.
-- `src/lib/server/password-reset-actions.ts` — server actions con rate limit doble (correo + IP), delay constante 300 ms.
-- `src/lib/server/session-management.ts` — `listUserSessions`, `SessionSummary` que NO expone tokenHash/ipHash/User-Agent completo.
-- `src/lib/server/session-actions.ts` — actions para cerrar una, cerrar otras, cerrar todas.
-- `src/lib/server/offline-sync.ts` — receipt creado como PRIMER paso de la transacción (VULN-001); omite `currentServerState` en `ASSIGNMENT_CHANGED` (VULN-007).
+- `src/lib/server/antivirus.ts` — `AntivirusProvider` interface, `ClamAVProvider` (TCP INSTREAM protocol), inyeccion de dependencia via `getAntivirusProvider()`/`setAntivirusProvider()`.
+- `src/lib/server/file-pipeline.ts` — `quarantineUpload()`, `scanFile()`, `promoteFile()`, `rejectFile()`, `processUploadThroughPipeline()`. Patron targetKey para preservar paths de objectKey.
+- `src/lib/server/exif-strip.ts` — `stripExif()` remueve APP1/APP2/APP12/APP13/COM de JPEG.
+
+### Servidor — Modificaciones
+
+- `src/lib/server/actions.ts` — `submitProofAction` usa `processUploadThroughPipeline()` en lugar de upload directo; archivos INFECTED se rechazan sin crear Document.
+- `src/app/api/t/[tenantSlug]/documents/[documentId]/route.ts` — GET verifica que FileAttachment tenga status AVAILABLE o CLEAN; retorna 403 si el archivo esta en cuarentena.
+
+### Cliente — Nuevo modulo
+
+- `src/lib/offline/photo-store.ts` — IndexedDB separada (`nci-lct-photos`), `stripExifClient()`, quota 50 fotos/owner, 10 MB/foto, TTL 7 dias, purgado automatico.
 
 ### UI
 
-- `src/app/recuperar/page.tsx` — formulario de solicitud.
-- `src/app/recuperar/[token]/page.tsx` — validación + formulario de restablecimiento.
-- `src/components/auth/request-reset-form.tsx`, `src/components/auth/reset-password-form.tsx` — client forms con Alert y SubmitButton.
-- `src/components/login-form.tsx` — enlace "Olvide mi contrasena" + banner de éxito.
-- `src/app/account/sessions/page.tsx` — gestión de sesiones activas.
+- `src/components/shell/shell-chrome.tsx` y `src/components/shell/driver-shell.tsx` — link a `/account/sessions` con icono Shield.
+- `src/lib/ui/status.ts` — etiquetas y tonos en espanol para FileStatus.
 
-### Dependencias
+### Verificaciones de seguridad
 
-- `@aws-sdk/client-s3` y `@aws-sdk/s3-request-presigner` actualizados a `3.1083.0` (`@aws-sdk/xml-builder@3.972.34` sin `fast-xml-parser`). **7 advisories cerradas**.
+- `scripts/security-check.ts` — 5 verificaciones nuevas (20 total): quarantine prefix, fail-closed AV, EXIF strip, submitProof pipeline, shells link sessions.
 
-### Scripts
+### Tests
 
-- `pnpm security:check` ampliado a 15 comprobaciones.
+- `src/lib/server/file-pipeline.test.ts` — 8 tests de superficie de compilacion.
+- `src/lib/server/antivirus.test.ts` — 6 tests (INSTREAM command, response parsing).
+- `src/lib/server/exif-strip.test.ts` — 5 tests (strip markers, preserve non-JPEG).
 
-### Documentación
+### Documentacion
 
-- `docs/CLAUDE_SECURITY_AUDIT.md`, `docs/SECURITY_REMEDIATION_PLAN.md` (fase de auditoría).
-- `docs/AUTHENTICATION_SECURITY.md`, `docs/SESSION_MANAGEMENT.md`, `docs/DEPENDENCY_REACHABILITY.md`.
-- ADR-009 (rotación/revocación), ADR-010 (recuperación).
-- `docs/CURRENT_STATE.md`, `docs/HANDOFF_LATEST.md`, `docs/VERIFICATION_LATEST.md`, `docs/SESSION_LOG.md`.
+- `docs/decisions/ADR-011-file-quarantine-pipeline.md` — decision de arquitectura del pipeline.
+- `docs/decisions/ADR-012-offline-photo-storage.md` — decision de almacenamiento offline de fotos.
+- `docs/FILE_QUARANTINE_ARCHITECTURE.md` — arquitectura tecnica del pipeline.
 
-## Comandos ejecutados
+## Resultados de verificacion
 
-- `pnpm audit --prod --json` (pre-fase: 9 advisories; post-upgrade: 2 no alcanzables).
-- `pnpm exec prisma migrate deploy` (aplicó `20260710080000_session_metadata_and_reset_revocation`).
-- `pnpm exec prisma generate`.
-- `pnpm typecheck`, `pnpm lint`, `pnpm test`, `pnpm test:e2e`.
-- `pnpm security:check`.
+| Suite | Resultado |
+| --- | --- |
+| `pnpm verify` | Paso (lint + typecheck + 47 unit + build) |
+| `pnpm test:e2e` | 23/23 (0 regresiones) |
+| `pnpm security:check` | 20/20 |
 
-## Pruebas
+## Principios de seguridad aplicados
 
-- **Unit**: 28/28 — pre-existentes + `password-reset-pure.test.ts` (5 asserts sobre contratos) + `session-management.test.ts` (SessionSummary sin hashes).
-- **E2E**: 4/4 en la suite `security-auth` (rotación, respuesta neutral, reset invalida sesiones, gestión cerrar demás). Suite completa pendiente de verificación final.
-- **Security check**: 15/15.
+- **Quarantine-first**: todo archivo sube a `quarantine/` en MinIO.
+- **Fail-closed**: si ClamAV no responde, archivo queda en QUARANTINE (nunca AVAILABLE).
+- **EXIF removal**: server-side y client-side antes de almacenar.
+- **Download gate**: endpoint de descarga verifica status AVAILABLE/CLEAN.
+- **No binarios en PostgreSQL**: archivos solo en MinIO.
+- **No signed URLs en IndexedDB**: solo blobs con metadata.
+- **No cookies/tokens en IndexedDB**: store separado exclusivo para fotos.
 
-## Problemas encontrados y resueltos
+## Requisitos para el proximo agente
 
-- `next/headers` requerido en `signIn` para leer User-Agent e IP; agregado con `try/catch` para no romper llamadas fuera del contexto de request.
-- Race condition VULN-001 confirmada: la solución mueve el receipt al inicio de la transacción para que el UNIQUE aborte antes de crear el `tripEvent`.
-- SEC-AUTH-002 tenía timeout corto para el envío SMTP; ampliado a 15s.
+- Docker Desktop corriendo con ClamAV saludable (puede tardar 2-5 min en primera inicializacion).
+- PostgreSQL en localhost:5433, MinIO en localhost:9000, Mailpit en localhost:8025.
+- `pnpm install` y `pnpm exec prisma generate` antes de ejecutar.
 
-## Pendientes / fuera de alcance
+## Estado
 
-- 2FA / MFA.
-- Escaneo AV real (ClamAV).
-- Bloqueo temporal progresivo por usuario.
-- Rotación proactiva de token de sesión periódica.
-- Recuperación por SMS/WhatsApp.
-- Enlace visible desde los shells hacia `/account/sessions` (funciona por URL directa).
-- 2 advisories transitivas restantes (`effect`, `postcss`) — aceptadas y documentadas.
-
-## Estado del árbol
-
-- Sin remote; sin push; commits locales por bloque.
-
-## CLAUDE SECURITY AUDIT HANDOFF
-
-**Arquitectura implementada**: rotación de sesión post-login + recuperación de contraseña con Mailpit + gestión de sesiones activas + fix de race condition en cola offline.
-
-**Archivos sensibles a revisar** (para próxima auditoría):
-- `src/lib/server/auth.ts` — signIn con revocación de cookie previa; helpers de gestión.
-- `src/lib/server/password-reset.ts` — flujo completo.
-- `src/lib/server/password-reset-actions.ts` — rate limits y delay.
-- `src/lib/server/session-management.ts` — expone solo SessionSummary.
-- `src/lib/server/offline-sync.ts` — receipt-first transaction.
-
-**Endpoints/rutas nuevos**: `/recuperar`, `/recuperar/[token]`, `/account/sessions`.
-
-**Migraciones**: `20260710080000_session_metadata_and_reset_revocation`.
-
-**Controles agregados**: rotación de sesión, recuperación segura de contraseña, gestión de sesiones activas, cierre de race en receipts.
-
-**Riesgos residuales**: cifrado at-rest de IndexedDB no aplicable; X-Forwarded-For sin sanitizar en despliegue tras proxy no confiable; 2 advisories transitivas build-time.
-
-**Pruebas nuevas**: SEC-AUTH-001..004 en `tests/e2e/security-auth.spec.ts`; `password-reset-pure.test.ts`; `session-management.test.ts`.
-
-**Preguntas abiertas**:
-- ¿Debe el LogoutGuard del conductor forzar el flujo `revokeAllUserSessions` al descartar cola?
-- ¿Es necesario un endpoint de "confirmar identidad" (contraseña actual) antes de listar sesiones activas?
-- ¿Rate limit por email en reset debería reducirse a 3/15min en producción?
-
-## Próximo paso exacto
-
-1. Verificar `pnpm test:e2e` verde y commitear.
-2. Auditoría independiente sobre archivos de la sección "CLAUDE SECURITY AUDIT HANDOFF" en próxima sesión.
-3. Fases futuras: 2FA/MFA, ClamAV, fotografías offline, rotación proactiva de sesión, enlace visible al /account/sessions.
+Working tree limpio. Sin remotes configurados. No se hizo push.
