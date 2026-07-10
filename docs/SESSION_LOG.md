@@ -51,3 +51,19 @@
 - Animaciones CSS discretas con prefers-reduced-motion (ADR-006, docs/ANIMATION_GUIDELINES.md); sin librería de animación.
 - Correcciones: ids únicos con useId en campos repetidos por tarjeta, buttonStyles extraído a módulo puro, minmax(0,fr) en grids con tablas, firma sin trazo demo.
 - `pnpm verify` paso completo; `pnpm test:e2e` paso 10/10; verificación a11y/reduced-motion por script; 0 errores de consola en 4 viewports.
+
+## 2026-07-09 Offline-first driver + security hardening
+
+- Migración `20260709180000_offline_sync_and_rate_limit`: tablas `offline_command_receipts` y `rate_limit_buckets`.
+- Modelo offline cliente (IndexedDB) aislado por owner con backoff exponencial, `useSyncExternalStore` y provider por conductor.
+- Endpoint `POST /api/t/[tenantSlug]/driver/sync` con Origin check, rate limit persistente, idempotencia por `payload_hash` y auditoría de manipulación (`PAYLOAD_TAMPERED`).
+- Whitelist server-side de acciones offline y transiciones por rol DRIVER; máquina de estados reutilizada.
+- Firma real embebida en el POD PDF con `pdfkit.standalone` y data URL PNG validado por longitud mínima.
+- SignaturePad inicia sin trazo demo, con marca digital de captura.
+- Headers de seguridad globales en next.config.ts (CSP, nosniff, X-Frame, Referrer-Policy, Permissions-Policy, COOP/CORP).
+- Service worker v2 con blocklist de rutas privadas (`/api`, `/platform`, `/t/`) y hosts MinIO.
+- Uploads validan magic bytes; signed URLs con TTL 60 s y Content-Disposition attachment.
+- Logger centralizado con redacción; códigos de error seguros.
+- `nodemailer` 7 → 9.0.3 (parches SMTP command injection y CRLF).
+- Scripts nuevos: `pnpm security:check`, `pnpm security:test`, `pnpm security:audit`.
+- Documentación: THREAT_MODEL, OFFLINE_ARCHITECTURE, OFFLINE_SECURITY, SECURITY_HARDENING, SECURITY_CHECKLIST, INCIDENT_RESPONSE, ADR-007, ADR-008.
