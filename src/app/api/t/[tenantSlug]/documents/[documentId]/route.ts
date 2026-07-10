@@ -2,13 +2,31 @@ import { NextResponse } from "next/server";
 import { requireCustomerMembership } from "@/lib/server/auth";
 import { getDb } from "@/lib/server/db";
 import { getSignedReadUrl } from "@/lib/server/storage";
+import { enforceRateLimit } from "@/lib/server/rate-limit";
+import { clientIpFrom } from "@/lib/server/http-security";
+import { ErrorCodes, errorMessages } from "@/lib/server/errors";
+import { audit } from "@/lib/server/audit";
 
 export async function GET(
-  _request: Request,
+  request: Request,
   { params }: { params: Promise<{ tenantSlug: string; documentId: string }> },
 ) {
   const { tenantSlug, documentId } = await params;
-  const { tenant, customerAccount } = await requireCustomerMembership(tenantSlug);
+  const { user, tenant, customerAccount } = await requireCustomerMembership(tenantSlug);
+
+  const rate = await enforceRateLimit({
+    scope: "document.download",
+    key: `${tenant.id}:${user.id}:${clientIpFrom(request)}`,
+    limit: 60,
+    windowSeconds: 60,
+  });
+  if (!rate.allowed) {
+    return NextResponse.json(
+      { error: ErrorCodes.RATE_LIMITED, message: errorMessages.RATE_LIMITED },
+      { status: 429, headers: { "Retry-After": String(rate.retryAfterSeconds) } },
+    );
+  }
+
   const document = await getDb().document.findFirst({
     where: {
       id: documentId,
@@ -19,5 +37,28 @@ export async function GET(
   });
 
   if (!document) return new NextResponse("No encontrado", { status: 404 });
-  return NextResponse.redirect(await getSignedReadUrl(document.objectKey));
+
+  await audit({
+    tenantId: tenant.id,
+    actorId: user.id,
+    actorRole: "CUSTOMER",
+    action: "document.download",
+    entity: "Document",
+    entityId: document.id,
+    after: { filename: document.filename },
+  });
+
+  const signed = await getSignedReadUrl(document.objectKey, {
+    expiresIn: 60,
+    contentDisposition: `attachment; filename="${document.filename}"`,
+  });
+  return NextResponse.redirect(signed, {
+    status: 303,
+    headers: {
+      "Cache-Control": "no-store",
+      "X-Content-Type-Options": "nosniff",
+    },
+  });
 }
+
+export const dynamic = "force-dynamic";

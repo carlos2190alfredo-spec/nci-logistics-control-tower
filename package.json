@@ -25,6 +25,9 @@
     "test:coverage": "vitest run --coverage",
     "test:e2e": "playwright test",
     "verify": "pnpm lint && pnpm typecheck && pnpm test && pnpm build",
+    "security:check": "tsx scripts/security-check.ts",
+    "security:test": "playwright test tests/e2e/offline-sync.spec.ts",
+    "security:audit": "pnpm audit --prod || true",
     "postinstall": "prisma generate"
   },
   "dependencies": {
@@ -36,7 +39,7 @@
     "geist": "1.5.1",
     "lucide-react": "0.562.0",
     "next": "16.2.10",
-    "nodemailer": "7.0.11",
+    "nodemailer": "9.0.3",
     "pdfkit": "0.17.2",
     "react": "19.2.4",
     "react-dom": "19.2.4",
