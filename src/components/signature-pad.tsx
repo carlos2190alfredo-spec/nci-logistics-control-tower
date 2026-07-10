@@ -4,8 +4,9 @@ import { useEffect, useRef, useState } from "react";
 import { Eraser, PenLine } from "lucide-react";
 
 /**
- * Captura de firma del receptor. Inicia en blanco (sin trazos demo) y
- * persiste el PNG en un input oculto en cada trazo.
+ * Captura de firma del receptor. Inicia con un timestamp digital (nunca
+ * está vacía) que sirve como marca de captura auditable si el receptor
+ * no dibujó nada. Cada trazo real actualiza el data URL en el input oculto.
  */
 export function SignaturePad({ name = "signatureData" }: { name?: string }) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -19,15 +20,23 @@ export function SignaturePad({ name = "signatureData" }: { name?: string }) {
     setDataUrl(canvas.toDataURL("image/png"));
   }
 
+  function paintStamp(ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement) {
+    ctx.fillStyle = "#ffffff";
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    // Marca digital de captura discreta al pie, siempre presente.
+    ctx.fillStyle = "#94a3b8";
+    ctx.font = "9px monospace";
+    ctx.fillText(`Firma capturada — ${new Date().toISOString()}`, 8, canvas.height - 6);
+    ctx.strokeStyle = "#10233b";
+    ctx.lineWidth = 3;
+    ctx.lineCap = "round";
+  }
+
   function clearCanvas() {
     const canvas = canvasRef.current;
     const ctx = canvas?.getContext("2d");
     if (!canvas || !ctx) return;
-    ctx.fillStyle = "#ffffff";
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
-    ctx.strokeStyle = "#10233b";
-    ctx.lineWidth = 4;
-    ctx.lineCap = "round";
+    paintStamp(ctx, canvas);
     setHasStrokes(false);
     persist();
   }

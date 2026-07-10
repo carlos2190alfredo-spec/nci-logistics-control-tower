@@ -82,7 +82,10 @@ export default async function TenantControlTowerPage({ params }: { params: Promi
           documents: { orderBy: { createdAt: "desc" } },
           events: { orderBy: { createdAt: "desc" }, take: 4 },
         },
-        orderBy: { scheduledAt: "asc" },
+        // Priorizar viajes recién confirmados/creados sobre los más antiguos;
+        // un viaje nuevo debe aparecer en el centro de control aun cuando
+        // ya haya muchos otros activos.
+        orderBy: { createdAt: "desc" },
         take: 30,
       }),
       db.trip.findMany({

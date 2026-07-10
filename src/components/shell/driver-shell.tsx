@@ -14,12 +14,14 @@ export function DriverShell({
   title,
   user,
   topNav,
+  logoutSlot,
 }: {
   children: ReactNode;
   tenantName: string;
   title: string;
   user: { name: string };
   topNav?: ReactNode;
+  logoutSlot?: ReactNode;
 }) {
   return (
     <div className="min-h-screen bg-background">
@@ -37,15 +39,17 @@ export function DriverShell({
             <p className="truncate text-xs text-nav-muted">{user.name}</p>
           </div>
           <ConnectivityIndicator />
-          <form action={logoutAction}>
-            <button
-              className="inline-flex min-h-10 items-center gap-2 rounded-lg border border-nav-border px-3 text-sm font-semibold text-nav-foreground transition-colors hover:bg-nav-surface"
-              type="submit"
-            >
-              <LogOut aria-hidden className="size-4" />
-              Salir
-            </button>
-          </form>
+          {logoutSlot ?? (
+            <form action={logoutAction}>
+              <button
+                className="inline-flex min-h-10 items-center gap-2 rounded-lg border border-nav-border px-3 text-sm font-semibold text-nav-foreground transition-colors hover:bg-nav-surface"
+                type="submit"
+              >
+                <LogOut aria-hidden className="size-4" />
+                Salir
+              </button>
+            </form>
+          )}
         </div>
         {topNav ? <div className="mx-auto flex max-w-3xl items-center gap-2 px-4 pb-3">{topNav}</div> : null}
       </header>
