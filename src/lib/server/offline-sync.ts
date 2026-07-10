@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import type { OfflineCommandStatus, Prisma, TenantRole, TripStatus } from "@/generated/prisma";
+import type { TenantRole, TripStatus } from "@/generated/prisma";
 import { canTransition, customerVisibleStatus, nextStatuses } from "@/lib/domain/state-machine";
 import { audit } from "@/lib/server/audit";
 import { getDb } from "@/lib/server/db";
@@ -39,38 +39,16 @@ function reject(command: OfflineCommand, code: ErrorCode, retryable = false, ext
   };
 }
 
-async function persistReceipt(
-  tx: Prisma.TransactionClient,
-  ctx: SyncContext,
-  command: OfflineCommand,
-  status: OfflineCommandStatus,
-  payloadHash: string,
-  input: { tripId?: string; resultEntityId?: string; errorCode?: string },
-) {
-  await tx.offlineCommandReceipt.upsert({
-    where: {
-      tenantId_userId_idempotencyKey: {
-        tenantId: ctx.tenantId,
-        userId: ctx.userId,
-        idempotencyKey: command.idempotencyKey,
-      },
-    },
-    create: {
-      tenantId: ctx.tenantId,
-      userId: ctx.userId,
-      driverId: ctx.driverId,
-      tripId: input.tripId,
-      idempotencyKey: command.idempotencyKey,
-      actionType: command.payload.actionType,
-      payloadHash,
-      status,
-      resultEntityId: input.resultEntityId,
-      errorCode: input.errorCode,
-      clientQueuedAt: new Date(command.clientQueuedAt),
-      expiresAt: new Date(Date.now() + RECEIPT_TTL_DAYS * 24 * 60 * 60 * 1000),
-    },
-    update: {},
-  });
+/**
+ * Contra race condition: creamos el receipt como PRIMER paso de la transacción
+ * con `create` (no `upsert`). Si un segundo request con la misma clave llega
+ * antes del commit del primero, su create dispara el UNIQUE
+ * (tenant_id, user_id, idempotency_key) y la transacción completa hace rollback
+ * ANTES de crear `tripEvent` o mutar `trip`. `err.code === 'P2002'` significa
+ * duplicado — devolvemos DUPLICATE con el resultado del receipt existente.
+ */
+function isPrismaUniqueViolation(error: unknown): boolean {
+  return typeof error === "object" && error !== null && "code" in error && (error as { code?: string }).code === "P2002";
 }
 
 async function processTransition(ctx: SyncContext, command: OfflineCommand): Promise<OfflineCommandResult> {
@@ -89,19 +67,35 @@ async function processTransition(ctx: SyncContext, command: OfflineCommand): Pro
   });
   if (!trip) return reject(command, ErrorCodes.RESOURCE_NOT_FOUND);
   if (trip.driverId !== ctx.driverId) {
-    return reject(command, ErrorCodes.ASSIGNMENT_CHANGED, false, {
-      currentServerState: trip.status,
-    });
+    // No filtramos currentServerState para no permitir enumeracion cross-driver.
+    return reject(command, ErrorCodes.ASSIGNMENT_CHANGED);
   }
   if (["CLOSED", "CANCELLED"].includes(trip.status)) {
     return reject(command, ErrorCodes.STATE_CONFLICT, false, { currentServerState: trip.status });
   }
 
   if (trip.status === nextStatus) {
-    // Idempotencia natural: el estado deseado ya se alcanzó — DUPLICATE.
-    await getDb().$transaction(async (tx) => {
-      await persistReceipt(tx, ctx, command, "DUPLICATE", payloadHash, { tripId, resultEntityId: trip.id });
-    });
+    try {
+      await db.$transaction(async (tx) => {
+        await tx.offlineCommandReceipt.create({
+          data: {
+            tenantId: ctx.tenantId,
+            userId: ctx.userId,
+            driverId: ctx.driverId,
+            tripId,
+            idempotencyKey: command.idempotencyKey,
+            actionType: command.payload.actionType,
+            payloadHash,
+            status: "DUPLICATE",
+            resultEntityId: trip.id,
+            clientQueuedAt: new Date(command.clientQueuedAt),
+            expiresAt: new Date(Date.now() + RECEIPT_TTL_DAYS * 24 * 60 * 60 * 1000),
+          },
+        });
+      });
+    } catch (error) {
+      if (!isPrismaUniqueViolation(error)) throw error;
+    }
     return {
       idempotencyKey: command.idempotencyKey,
       status: "DUPLICATE",
@@ -113,42 +107,101 @@ async function processTransition(ctx: SyncContext, command: OfflineCommand): Pro
   }
 
   if (!canTransition(trip.status, nextStatus, ctx.role)) {
-    await getDb().$transaction(async (tx) => {
-      await persistReceipt(tx, ctx, command, "CONFLICT", payloadHash, { tripId, errorCode: ErrorCodes.STATE_CONFLICT });
-    });
+    try {
+      await db.$transaction(async (tx) => {
+        await tx.offlineCommandReceipt.create({
+          data: {
+            tenantId: ctx.tenantId,
+            userId: ctx.userId,
+            driverId: ctx.driverId,
+            tripId,
+            idempotencyKey: command.idempotencyKey,
+            actionType: command.payload.actionType,
+            payloadHash,
+            status: "CONFLICT",
+            errorCode: ErrorCodes.STATE_CONFLICT,
+            clientQueuedAt: new Date(command.clientQueuedAt),
+            expiresAt: new Date(Date.now() + RECEIPT_TTL_DAYS * 24 * 60 * 60 * 1000),
+          },
+        });
+      });
+    } catch (error) {
+      if (!isPrismaUniqueViolation(error)) throw error;
+    }
     return reject(command, ErrorCodes.STATE_CONFLICT, false, {
       currentServerState: trip.status,
       nextAllowedActions: nextStatuses(trip.status, ctx.role),
     });
   }
 
-  const eventId = await db.$transaction(async (tx) => {
-    const updated = await tx.trip.update({
-      where: { id: trip.id },
-      data: {
-        status: nextStatus,
-        customerVisibleStatus: customerVisibleStatus[nextStatus],
-        simulationStartedAt: nextStatus === "EN_ROUTE_TO_ORIGIN" ? new Date() : undefined,
-      },
+  let eventId: string;
+  try {
+    eventId = await db.$transaction(async (tx) => {
+      // 1. Receipt PRIMERO: si otra tx ya lo creo, el UNIQUE aborta antes de mutar.
+      const receipt = await tx.offlineCommandReceipt.create({
+        data: {
+          tenantId: ctx.tenantId,
+          userId: ctx.userId,
+          driverId: ctx.driverId,
+          tripId,
+          idempotencyKey: command.idempotencyKey,
+          actionType: command.payload.actionType,
+          payloadHash,
+          status: "ACCEPTED",
+          clientQueuedAt: new Date(command.clientQueuedAt),
+          expiresAt: new Date(Date.now() + RECEIPT_TTL_DAYS * 24 * 60 * 60 * 1000),
+        },
+      });
+      // 2. Mutaciones dentro del mismo commit atomico.
+      await tx.trip.update({
+        where: { id: trip.id },
+        data: {
+          status: nextStatus,
+          customerVisibleStatus: customerVisibleStatus[nextStatus],
+          simulationStartedAt: nextStatus === "EN_ROUTE_TO_ORIGIN" ? new Date() : undefined,
+        },
+      });
+      const event = await tx.tripEvent.create({
+        data: {
+          tenantId: ctx.tenantId,
+          tripId: trip.id,
+          actorId: ctx.userId,
+          fromStatus: trip.status,
+          toStatus: nextStatus,
+          note: note ?? "Accion registrada por conductor (offline sync).",
+          visibleToCustomer: true,
+        },
+      });
+      await tx.offlineCommandReceipt.update({
+        where: { id: receipt.id },
+        data: { resultEntityId: event.id },
+      });
+      return event.id;
     });
-    const event = await tx.tripEvent.create({
-      data: {
-        tenantId: ctx.tenantId,
-        tripId: trip.id,
-        actorId: ctx.userId,
-        fromStatus: trip.status,
-        toStatus: nextStatus,
-        note: note ?? "Accion registrada por conductor (offline sync).",
-        visibleToCustomer: true,
-      },
-    });
-    await persistReceipt(tx, ctx, command, "ACCEPTED", payloadHash, {
-      tripId,
-      resultEntityId: event.id,
-    });
-    void updated;
-    return event.id;
-  });
+  } catch (error) {
+    if (isPrismaUniqueViolation(error)) {
+      // Otro request con misma idempotencyKey gano la carrera. Devolvemos su resultado.
+      const existing = await db.offlineCommandReceipt.findUnique({
+        where: {
+          tenantId_userId_idempotencyKey: {
+            tenantId: ctx.tenantId,
+            userId: ctx.userId,
+            idempotencyKey: command.idempotencyKey,
+          },
+        },
+      });
+      return {
+        idempotencyKey: command.idempotencyKey,
+        status: "DUPLICATE",
+        serverEventId: existing?.resultEntityId ?? undefined,
+        serverTimestamp: (existing?.processedAt ?? new Date()).toISOString(),
+        currentServerState: nextStatus,
+        nextAllowedActions: nextStatuses(nextStatus, ctx.role),
+        retryable: false,
+      };
+    }
+    throw error;
+  }
 
   await audit({
     tenantId: ctx.tenantId,
@@ -184,31 +237,69 @@ async function processIncident(ctx: SyncContext, command: OfflineCommand): Promi
   });
   if (!trip) return reject(command, ErrorCodes.RESOURCE_NOT_FOUND);
   if (trip.driverId !== ctx.driverId) {
-    return reject(command, ErrorCodes.ASSIGNMENT_CHANGED, false, { currentServerState: trip.status });
+    return reject(command, ErrorCodes.ASSIGNMENT_CHANGED);
   }
   if (["CLOSED", "CANCELLED"].includes(trip.status)) {
     return reject(command, ErrorCodes.STATE_CONFLICT, false, { currentServerState: trip.status });
   }
 
-  const incidentId = await db.$transaction(async (tx) => {
-    const incident = await tx.incident.create({
-      data: {
-        tenantId: ctx.tenantId,
-        customerAccountId: trip.customerAccountId,
-        tripId: trip.id,
-        category,
-        priority: "MEDIUM",
-        internalDescription,
-        customerMessage: customerMessage ?? null,
-        visibleToCustomer: Boolean(customerMessage),
-      },
+  let incidentId: string;
+  try {
+    incidentId = await db.$transaction(async (tx) => {
+      const receipt = await tx.offlineCommandReceipt.create({
+        data: {
+          tenantId: ctx.tenantId,
+          userId: ctx.userId,
+          driverId: ctx.driverId,
+          tripId,
+          idempotencyKey: command.idempotencyKey,
+          actionType: command.payload.actionType,
+          payloadHash,
+          status: "ACCEPTED",
+          clientQueuedAt: new Date(command.clientQueuedAt),
+          expiresAt: new Date(Date.now() + RECEIPT_TTL_DAYS * 24 * 60 * 60 * 1000),
+        },
+      });
+      const incident = await tx.incident.create({
+        data: {
+          tenantId: ctx.tenantId,
+          customerAccountId: trip.customerAccountId,
+          tripId: trip.id,
+          category,
+          priority: "MEDIUM",
+          internalDescription,
+          customerMessage: customerMessage ?? null,
+          visibleToCustomer: Boolean(customerMessage),
+        },
+      });
+      await tx.offlineCommandReceipt.update({
+        where: { id: receipt.id },
+        data: { resultEntityId: incident.id },
+      });
+      return incident.id;
     });
-    await persistReceipt(tx, ctx, command, "ACCEPTED", payloadHash, {
-      tripId,
-      resultEntityId: incident.id,
-    });
-    return incident.id;
-  });
+  } catch (error) {
+    if (isPrismaUniqueViolation(error)) {
+      const existing = await db.offlineCommandReceipt.findUnique({
+        where: {
+          tenantId_userId_idempotencyKey: {
+            tenantId: ctx.tenantId,
+            userId: ctx.userId,
+            idempotencyKey: command.idempotencyKey,
+          },
+        },
+      });
+      return {
+        idempotencyKey: command.idempotencyKey,
+        status: "DUPLICATE",
+        serverEventId: existing?.resultEntityId ?? undefined,
+        serverTimestamp: (existing?.processedAt ?? new Date()).toISOString(),
+        currentServerState: trip.status,
+        retryable: false,
+      };
+    }
+    throw error;
+  }
 
   await sendLocalNotification({
     tenantId: ctx.tenantId,
