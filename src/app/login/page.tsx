@@ -1,6 +1,9 @@
+import { Suspense } from "react";
 import Link from "next/link";
 import { ArrowLeft, Radar } from "lucide-react";
 import { LoginForm } from "@/components/login-form";
+
+export const dynamic = "force-dynamic";
 
 export default function LoginPage() {
   return (
@@ -36,7 +39,9 @@ export default function LoginPage() {
               Ingrese con su cuenta de operaciones, cliente o conductor. Su acceso queda registrado.
             </p>
             <div className="mt-6">
-              <LoginForm />
+              <Suspense fallback={null}>
+                <LoginForm />
+              </Suspense>
             </div>
           </div>
           <p className="mt-4 text-center text-xs text-faint-foreground">
