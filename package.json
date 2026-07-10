@@ -26,8 +26,15 @@
     "test:e2e": "playwright test",
     "verify": "pnpm lint && pnpm typecheck && pnpm test && pnpm build",
     "security:check": "tsx scripts/security-check.ts",
-    "security:test": "playwright test tests/e2e/offline-sync.spec.ts",
+    "security:test": "playwright test tests/e2e/offline-sync.spec.ts tests/e2e/file-security.spec.ts",
     "security:audit": "pnpm audit --prod || true",
+    "files:health": "tsx scripts/files-health.ts",
+    "files:test:eicar": "tsx scripts/files-test-eicar.ts",
+    "files:cleanup": "tsx scripts/files-cleanup.ts",
+    "files:cleanup:dry-run": "tsx scripts/files-cleanup.ts --dry-run",
+    "files:migrate-legacy": "tsx scripts/files-migrate-legacy.ts",
+    "files:migrate-legacy:dry-run": "tsx scripts/files-migrate-legacy.ts --dry-run",
+    "test:e2e:files": "playwright test tests/e2e/file-security.spec.ts",
     "postinstall": "prisma generate"
   },
   "dependencies": {

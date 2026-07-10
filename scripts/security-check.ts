@@ -200,6 +200,46 @@ const checks: Check[] = [
     },
   },
   {
+    name: "document download gates on FileAttachment by objectKey",
+    run: () => {
+      const source = readFileSync("src/app/api/t/[tenantSlug]/documents/[documentId]/route.ts", "utf8");
+      const ok = source.includes("objectKey: document.objectKey") && source.includes('status !== "AVAILABLE"');
+      return { ok, detail: ok ? "" : "document download no verifica FileAttachment por objectKey." };
+    },
+  },
+  {
+    name: "proof download gates on FileAttachment status",
+    run: () => {
+      const source = readFileSync("src/app/api/t/[tenantSlug]/proof/[tripId]/route.ts", "utf8");
+      const ok = source.includes("fileAttachment.findFirst") && source.includes('status !== "AVAILABLE"');
+      return { ok, detail: ok ? "" : "proof download no verifica FileAttachment." };
+    },
+  },
+  {
+    name: "POD filters evidence by AVAILABLE FileAttachment",
+    run: () => {
+      const source = readFileSync("src/lib/server/pod-pdf.ts", "utf8");
+      const ok = source.includes('status === "AVAILABLE"') && source.includes("availableKeys");
+      return { ok, detail: ok ? "" : "POD no filtra evidencias por FileAttachment AVAILABLE." };
+    },
+  },
+  {
+    name: "approveProofAction includes fileAttachments in query",
+    run: () => {
+      const source = readFileSync("src/lib/server/actions.ts", "utf8");
+      const ok = source.includes("fileAttachments: true");
+      return { ok, detail: ok ? "" : "approveProofAction no incluye fileAttachments." };
+    },
+  },
+  {
+    name: "ClamAV port bound to localhost only",
+    run: () => {
+      const source = readFileSync("docker-compose.yml", "utf8");
+      const ok = source.includes("127.0.0.1:3310:3310");
+      return { ok, detail: ok ? "" : "ClamAV port exposed to all interfaces." };
+    },
+  },
+  {
     name: "TS: sin errores de tipos",
     run: () => {
       try {
