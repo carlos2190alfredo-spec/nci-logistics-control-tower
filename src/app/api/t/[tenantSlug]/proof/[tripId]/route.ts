@@ -51,6 +51,16 @@ export async function GET(
 
   if (!document) return new NextResponse("No encontrado", { status: 404 });
 
+  const attachment = await db.fileAttachment.findFirst({
+    where: {
+      tenantId: tenant.id,
+      objectKey: document.objectKey,
+    },
+  });
+  if (attachment && attachment.status !== "AVAILABLE") {
+    return new NextResponse("Archivo en proceso de verificacion", { status: 403 });
+  }
+
   await audit({
     tenantId: tenant.id,
     actorId: user.id,

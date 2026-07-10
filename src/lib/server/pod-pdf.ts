@@ -4,6 +4,7 @@ import type {
   Document,
   Driver,
   Equipment,
+  FileAttachment,
   ProofOfDelivery,
   ServiceType,
   Tenant,
@@ -23,6 +24,7 @@ type PodTrip = Trip & {
   driver: Driver | null;
   proof: ProofOfDelivery | null;
   documents: Document[];
+  fileAttachments: FileAttachment[];
   events: TripEvent[];
 };
 
@@ -101,7 +103,17 @@ export async function generateProofOfDeliveryPdf(trip: PodTrip) {
   }
   doc.moveDown();
 
-  const customerDocs = trip.documents.filter((document) => document.visibility === "CUSTOMER_VISIBLE");
+  const availableKeys = new Set(
+    trip.fileAttachments
+      .filter((fa) => fa.status === "AVAILABLE")
+      .map((fa) => fa.objectKey)
+      .filter(Boolean),
+  );
+  const customerDocs = trip.documents.filter((d) => {
+    if (d.visibility !== "CUSTOMER_VISIBLE") return false;
+    if (!d.uploadedById) return true;
+    return availableKeys.has(d.objectKey);
+  });
   doc.fontSize(12).fillColor("#0f2d46").text("Evidencias autorizadas");
   if (customerDocs.length === 0) {
     doc.fontSize(10).fillColor("#334155").text("Sin evidencias autorizadas.");

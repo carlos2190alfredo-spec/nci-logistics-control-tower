@@ -715,6 +715,7 @@ export async function approveProofAction(tenantSlug: string, formData: FormData)
       driver: true,
       proof: true,
       documents: true,
+      fileAttachments: true,
       events: { orderBy: { createdAt: "asc" } },
     },
   });

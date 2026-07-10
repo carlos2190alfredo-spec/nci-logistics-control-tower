@@ -39,15 +39,20 @@ export async function GET(
 
   if (!document) return new NextResponse("No encontrado", { status: 404 });
 
-  const quarantined = await db.fileAttachment.findFirst({
+  const attachment = await db.fileAttachment.findFirst({
     where: {
       tenantId: tenant.id,
-      tripId: document.tripId ?? undefined,
-      filename: document.filename,
-      status: { notIn: ["AVAILABLE", "CLEAN"] },
+      objectKey: document.objectKey,
     },
   });
-  if (quarantined) return new NextResponse("Archivo en proceso de verificacion", { status: 403 });
+
+  if (attachment && attachment.status !== "AVAILABLE") {
+    return new NextResponse("Archivo en proceso de verificacion", { status: 403 });
+  }
+
+  if (!attachment && document.uploadedById) {
+    return new NextResponse("Archivo pendiente de clasificacion", { status: 403 });
+  }
 
   await audit({
     tenantId: tenant.id,

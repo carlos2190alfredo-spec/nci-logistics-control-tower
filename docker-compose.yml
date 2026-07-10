@@ -62,7 +62,7 @@ services:
     container_name: nci-lct-clamav
     restart: unless-stopped
     ports:
-      - "3310:3310"
+      - "127.0.0.1:3310:3310"
     volumes:
       - clamav_data:/var/lib/clamav
     healthcheck:
