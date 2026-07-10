@@ -1,86 +1,89 @@
 # HANDOFF LATEST
 
 Fecha: 2026-07-10
-Agente: Claude Opus 4.6 (pipeline de cuarentena de archivos + ClamAV)
+Agente: Claude Opus 4.6 (closure audit de pipeline de archivos y fotos offline)
 
 ## Objetivo de la sesion
 
-Implementar un pipeline de cuarentena de archivos con ClamAV local, almacenamiento offline de fotos en IndexedDB con EXIF removal, y escaneo antivirus obligatorio antes de cualquier acceso a archivos — sin romper el flujo operativo, el aislamiento multitenant ni las 23 pruebas E2E existentes.
+Auditoria adversarial de cierre del pipeline de cuarentena de archivos y sistema de fotos offline. Verificar que las defensas funcionan realmente (no solo que existen los archivos), corregir defectos confirmados, agregar pruebas E2E que faltan, y crear herramientas operativas.
 
-## Cambios principales
+## Hallazgos de la auditoria (docs/FILE_PIPELINE_CLOSURE_AUDIT.md)
 
-### Infraestructura
+| ID | Hallazgo | Severidad | Resolucion |
+| --- | --- | --- | --- |
+| CLOSURE-001 | Descarga buscaba FileAttachment por filename (no objectKey) | DEFECTO | Corregido |
+| CLOSURE-002 | Descarga de POD sin verificacion de FileAttachment | DEFECTO | Corregido |
+| CLOSURE-003 | photo-store.ts no integrado en PWA conductor | PARCIAL | Documentado |
+| CLOSURE-004 | AttachmentReceipt en schema pero sin usar | NO IMPLEMENTADO | Documentado |
+| CLOSURE-005 | POD incluia archivos no AVAILABLE | DEFECTO | Corregido |
+| CLOSURE-006 | approveProofAction sin fileAttachments en query | DEFECTO | Corregido |
+| CLOSURE-007 | Archivo limpio no se promueve automaticamente | VERIFICADO | N/A |
+| CLOSURE-008 | ClamAV expuesto a todas las interfaces | RIESGO | Corregido (127.0.0.1) |
 
-- `docker-compose.yml` — servicio ClamAV (`clamav/clamav:1.4`, puerto 3310, healthcheck PING/PONG, volumen persistente `clamav_data`).
+## Cambios de codigo
 
-### Migracion
+### Seguridad (commit b5df847)
 
-- `prisma/migrations/20260710224425_file_quarantine_pipeline/migration.sql`:
-  - Enums `FileStatus` (8 estados) y `ScanVerdict` (3 valores).
-  - Tabla `file_attachments` con status, quarantineKey, objectKey, scanVerdict, scanDetail, timestamps.
-  - Tabla `file_scan_events` para trazabilidad de cada escaneo.
-  - Tabla `attachment_receipts` para idempotencia de uploads offline.
-  - Relaciones con `tenants`, `trips` y `proof_of_deliveries`.
+- `documents/[documentId]/route.ts` — lookup por `objectKey: document.objectKey` (no filename); bloquea documentos legados de usuario sin FileAttachment
+- `proof/[tripId]/route.ts` — verifica FileAttachment status antes de servir POD
+- `pod-pdf.ts` — filtra evidencia por FileAttachment AVAILABLE; sistema bypasa
+- `actions.ts` — incluye `fileAttachments: true` en query de approveProofAction
+- `docker-compose.yml` — ClamAV port `127.0.0.1:3310:3310`
 
-### Servidor — Nuevos modulos
+### Tests E2E (commit 4f19e13)
 
-- `src/lib/server/antivirus.ts` — `AntivirusProvider` interface, `ClamAVProvider` (TCP INSTREAM protocol), inyeccion de dependencia via `getAntivirusProvider()`/`setAntivirusProvider()`.
-- `src/lib/server/file-pipeline.ts` — `quarantineUpload()`, `scanFile()`, `promoteFile()`, `rejectFile()`, `processUploadThroughPipeline()`. Patron targetKey para preservar paths de objectKey.
-- `src/lib/server/exif-strip.ts` — `stripExif()` remueve APP1/APP2/APP12/APP13/COM de JPEG.
+10 nuevos tests en `tests/e2e/file-security.spec.ts`:
+- FILE-SEC-E2E-001: EICAR detectado como INFECTED por ClamAV
+- FILE-SEC-E2E-002: archivo limpio pasa escaneo ClamAV
+- FILE-SEC-E2E-003: archivo en QUARANTINE no se puede descargar
+- FILE-SEC-E2E-004: aislamiento de tenant impide acceso cross-tenant
+- FILE-SEC-E2E-005: archivo PENDING_SCAN bloqueado
+- FILE-SEC-E2E-006: archivo INFECTED bloqueado
+- FILE-SEC-E2E-007: solo archivos AVAILABLE se sirven (303 redirect)
+- FILE-SEC-E2E-008: FileAttachment registra eventos de escaneo
+- FILE-SEC-E2E-009: pipeline crea FileAttachment para evidence upload
+- FILE-SEC-E2E-010: documento legado de usuario sin FileAttachment bloqueado
 
-### Servidor — Modificaciones
+5 verificaciones de seguridad nuevas (25 total).
 
-- `src/lib/server/actions.ts` — `submitProofAction` usa `processUploadThroughPipeline()` en lugar de upload directo; archivos INFECTED se rechazan sin crear Document.
-- `src/app/api/t/[tenantSlug]/documents/[documentId]/route.ts` — GET verifica que FileAttachment tenga status AVAILABLE o CLEAN; retorna 403 si el archivo esta en cuarentena.
+### Scripts operativos (commit c1fef46)
 
-### Cliente — Nuevo modulo
-
-- `src/lib/offline/photo-store.ts` — IndexedDB separada (`nci-lct-photos`), `stripExifClient()`, quota 50 fotos/owner, 10 MB/foto, TTL 7 dias, purgado automatico.
-
-### UI
-
-- `src/components/shell/shell-chrome.tsx` y `src/components/shell/driver-shell.tsx` — link a `/account/sessions` con icono Shield.
-- `src/lib/ui/status.ts` — etiquetas y tonos en espanol para FileStatus.
-
-### Verificaciones de seguridad
-
-- `scripts/security-check.ts` — 5 verificaciones nuevas (20 total): quarantine prefix, fail-closed AV, EXIF strip, submitProof pipeline, shells link sessions.
-
-### Tests
-
-- `src/lib/server/file-pipeline.test.ts` — 8 tests de superficie de compilacion.
-- `src/lib/server/antivirus.test.ts` — 6 tests (INSTREAM command, response parsing).
-- `src/lib/server/exif-strip.test.ts` — 5 tests (strip markers, preserve non-JPEG).
+- `files:health` — estado de ClamAV, PostgreSQL, MinIO, FileAttachment stats
+- `files:test:eicar` — prueba EICAR via TCP INSTREAM
+- `files:cleanup` / `files:cleanup:dry-run` — purga expirados
+- `files:migrate-legacy` / `files:migrate-legacy:dry-run` — clasifica documentos legados
 
 ### Documentacion
 
-- `docs/decisions/ADR-011-file-quarantine-pipeline.md` — decision de arquitectura del pipeline.
-- `docs/decisions/ADR-012-offline-photo-storage.md` — decision de almacenamiento offline de fotos.
-- `docs/FILE_QUARANTINE_ARCHITECTURE.md` — arquitectura tecnica del pipeline.
+- `docs/decisions/ADR-013-legacy-document-trust-classification.md`
+- `docs/decisions/ADR-014-pod-clean-evidence-enforcement.md`
+- `docs/FILE_PIPELINE_CLOSURE_AUDIT.md` (auditoria adversarial)
 
 ## Resultados de verificacion
 
 | Suite | Resultado |
 | --- | --- |
-| `pnpm verify` | Paso (lint + typecheck + 47 unit + build) |
-| `pnpm test:e2e` | 23/23 (0 regresiones) |
-| `pnpm security:check` | 20/20 |
+| `pnpm typecheck` | Paso |
+| `pnpm test` | 47/47 unit tests |
+| `pnpm test:e2e` | 33/33 (23 existentes + 10 nuevos) |
+| `pnpm security:check` | 25/25 |
+| `pnpm files:health` | PASS (ClamAV + PG + MinIO) |
+| `pnpm files:test:eicar` | PASS (EICAR detectado, limpio OK) |
+| `pnpm files:cleanup:dry-run` | 0 expirados |
+| `pnpm files:migrate-legacy:dry-run` | 19 sistema + 16 usuario + 10 clasificados |
 
-## Principios de seguridad aplicados
+## Items pendientes para proximo agente
 
-- **Quarantine-first**: todo archivo sube a `quarantine/` en MinIO.
-- **Fail-closed**: si ClamAV no responde, archivo queda en QUARANTINE (nunca AVAILABLE).
-- **EXIF removal**: server-side y client-side antes de almacenar.
-- **Download gate**: endpoint de descarga verifica status AVAILABLE/CLEAN.
-- **No binarios en PostgreSQL**: archivos solo en MinIO.
-- **No signed URLs en IndexedDB**: solo blobs con metadata.
-- **No cookies/tokens en IndexedDB**: store separado exclusivo para fotos.
+- **CLOSURE-003**: integrar `photo-store.ts` en la PWA del conductor (IndexedDB offline fotos)
+- **CLOSURE-004**: implementar uso de AttachmentReceipt en processUploadThroughPipeline para idempotencia
+- **OFFLINE-PHOTO-E2E**: tests E2E de flujo offline de fotos (requiere PWA integration primero)
+- **FILE-SEC-E2E-011**: test E2E de eliminacion de EXIF (parsear JPEG resultado)
 
 ## Requisitos para el proximo agente
 
-- Docker Desktop corriendo con ClamAV saludable (puede tardar 2-5 min en primera inicializacion).
-- PostgreSQL en localhost:5433, MinIO en localhost:9000, Mailpit en localhost:8025.
-- `pnpm install` y `pnpm exec prisma generate` antes de ejecutar.
+- Docker Desktop con ClamAV saludable (`docker compose ps` muestra healthy)
+- PostgreSQL en localhost:5433, MinIO en localhost:9000, Mailpit en localhost:8025
+- `pnpm install && pnpm exec prisma generate` antes de ejecutar
 
 ## Estado
 

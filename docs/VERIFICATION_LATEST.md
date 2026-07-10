@@ -1,24 +1,35 @@
 # VERIFICATION LATEST
 
-Fecha: 2026-07-10 (pipeline de cuarentena de archivos + ClamAV)
+Fecha: 2026-07-10 (closure audit de pipeline de archivos)
 
 | Comando / Verificacion | Resultado |
 | --- | --- |
 | `git status` | Working tree limpio |
 | `git remote -v` | Sin remotes |
 | `docker compose ps` | PostgreSQL 5433 / MinIO / Mailpit / ClamAV 3310 saludables |
-| `pnpm exec prisma migrate deploy` | Aplico `20260710224425_file_quarantine_pipeline` |
-| `pnpm exec prisma generate` | Paso |
-| `pnpm lint` | Paso: 0 errors |
 | `pnpm typecheck` | Paso |
-| `pnpm test` (Vitest) | **Paso: 10 archivos, 47 tests** (28 previos + 8 file-pipeline + 6 antivirus + 5 exif-strip) |
-| `pnpm build` | Paso; rutas `/login`, `/platform`, `/recuperar`, `/account/sessions` en output |
-| `pnpm verify` | Paso completo (lint + typecheck + unit + build) |
-| `pnpm test:e2e` | **Paso: 23/23** — sin regresiones |
-| `pnpm security:check` | Paso: 20/20 verificaciones estaticas (5 nuevas: quarantine prefix, fail-closed AV, EXIF strip, submitProof pipeline, shells link sessions) |
-| `pnpm audit --prod` | 2 vulnerabilidades restantes, ambas NO ALCANZABLES (build-time) — documentadas en `docs/DEPENDENCY_REACHABILITY.md` |
+| `pnpm test` (Vitest) | **Paso: 10 archivos, 47 tests** |
+| `pnpm build` | Paso |
+| `pnpm test:e2e` | **Paso: 33/33** (23 existentes + 10 nuevos FILE-SEC) |
+| `pnpm security:check` | Paso: 25/25 verificaciones estaticas |
+| `pnpm files:health` | PASS (ClamAV + PostgreSQL + MinIO) |
+| `pnpm files:test:eicar` | PASS (EICAR detectado, clean OK) |
+| `pnpm files:cleanup:dry-run` | 0 expirados |
+| `pnpm files:migrate-legacy:dry-run` | 19 sistema + 16 usuario + 10 clasificados |
 
-## Pruebas E2E desglosadas
+## Pruebas E2E desglosadas (33 total)
+
+### FILE-SEC (10)
+- `FILE-SEC-E2E-001` EICAR detectado como INFECTED por ClamAV
+- `FILE-SEC-E2E-002` archivo limpio pasa escaneo ClamAV
+- `FILE-SEC-E2E-003` archivo en QUARANTINE no se puede descargar (403)
+- `FILE-SEC-E2E-004` aislamiento de tenant impide acceso cross-tenant
+- `FILE-SEC-E2E-005` archivo PENDING_SCAN bloqueado (403)
+- `FILE-SEC-E2E-006` archivo INFECTED bloqueado (403)
+- `FILE-SEC-E2E-007` solo archivos AVAILABLE se sirven (303 redirect)
+- `FILE-SEC-E2E-008` FileAttachment registra eventos de escaneo
+- `FILE-SEC-E2E-009` pipeline crea FileAttachment para evidence upload
+- `FILE-SEC-E2E-010` documento legado de usuario sin FileAttachment bloqueado (403)
 
 ### E2E-FLOW (4)
 - `E2E-FLOW-001` flujo completo request → POD closure (incluye upload via pipeline de cuarentena)
@@ -41,50 +52,44 @@ Fecha: 2026-07-10 (pipeline de cuarentena de archivos + ClamAV)
 - `OFFLINE-E2E-007` conductor no puede sincronizar viaje de otro conductor
 - `OFFLINE-E2E-008` usuario de otro tenant no accede al sync
 
-### Otras (7)
-- Home page expone producto local y login
-- Platform user accede dashboard y logout
-- Tenant users aislados por membresía
-- Customer users dirigidos a portal y aislamiento cross-tenant
-- Driver ve solo viajes asignados
-- Dashboard, portal y navegacion cargan
-- Headers de seguridad (CSP, X-Content-Type-Options)
-- Sync exige Origin permitido
+### Security headers (2)
+- home responde con CSP y X-Content-Type-Options
+- sync exige Origin permitido
 
-## Unit tests desglosados (47)
+### Auth isolation (5)
+- platform user can access platform dashboard and logout
+- tenant users are isolated by tenant membership
+- customer users are routed to their portal and cannot cross tenants
+- driver sees assigned trips only
+- operations dashboard, customer portal, and navigation load
 
-| Archivo | Tests |
-| --- | --- |
-| `file-pipeline.test.ts` | 8 (quarantine prefix, fail-closed, promote, reject, INFECTED, EXIF strip, audit trail, state transitions) |
-| `antivirus.test.ts` | 6 (INSTREAM command, response parsing OK/FOUND/ERROR, provider exports) |
-| `exif-strip.test.ts` | 5 (strip APP1/APP2/APP13/COM, preserve non-JPEG, preserve APP0) |
-| `password-reset-pure.test.ts` | 5 |
-| `session-management.test.ts` | 2 |
-| `gps.test.ts` | 2 |
-| `state-machine.test.ts` | 3 |
-| `protocol.test.ts` | 5 |
-| `storage.test.ts` | 7 |
-| `pod-pdf.test.ts` | 4 |
+### Login (1)
+- home page exposes local product and login
 
-## Verificaciones de seguridad (20)
+## Verificaciones de seguridad (25)
 
-1. Sin queryRawUnsafe / $executeRawUnsafe
-2. Sin dangerouslySetInnerHTML
-3. Sin .env versionados
-4. Sin secretos aparentes en codigo versionado
+1. sin queryRawUnsafe / $executeRawUnsafe
+2. sin dangerouslySetInnerHTML
+3. sin .env versionados
+4. sin secretos aparentes en codigo versionado
 5. next.config.ts define headers de seguridad
-6. Cookies de sesion configuran httpOnly y sameSite
+6. cookies de sesion configuran httpOnly y sameSite
 7. SW no cachea rutas privadas
-8. Endpoints mutables validan Origin
-9. Storage valida magic bytes
-10. Auth revoca sesion previa en login
-11. Auth expone revokeAllUserSessions
-12. Password-reset persiste solo hash del token
-13. Recuperar/[token] tiene noindex y no-cache
-14. Actions de reset con rate limit por email e IP
-15. File pipeline usa quarantine prefix
-16. File pipeline fails closed when AV unavailable
-17. Antivirus provider strips EXIF from JPEG
+8. endpoints mutables validan Origin
+9. storage valida magic bytes
+10. auth revoca sesion previa en login
+11. auth expone revokeAllUserSessions
+12. password-reset persiste solo hash del token
+13. recuperar/[token] tiene noindex y no-cache
+14. actions de reset con rate limit por email e IP
+15. file pipeline usa quarantine prefix
+16. file pipeline fails closed when AV unavailable
+17. antivirus provider strips EXIF from JPEG
 18. submitProofAction uses quarantine pipeline
-19. Shells link to /account/sessions
-20. TS: sin errores de tipos
+19. shells link to /account/sessions
+20. document download gates on FileAttachment by objectKey
+21. proof download gates on FileAttachment status
+22. POD filters evidence by AVAILABLE FileAttachment
+23. approveProofAction includes fileAttachments in query
+24. ClamAV port bound to localhost only
+25. TS: sin errores de tipos
