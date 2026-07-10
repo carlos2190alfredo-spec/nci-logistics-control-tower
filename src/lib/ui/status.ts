@@ -8,7 +8,7 @@ import type {
   TenantStatus,
   TripStatus,
 } from "@/generated/prisma/enums";
-import type { ProofStatus } from "@/generated/prisma";
+import type { FileStatus, ProofStatus } from "@/generated/prisma";
 
 /**
  * Etiquetas en español y tonos semánticos para todos los estados del dominio.
@@ -165,4 +165,26 @@ export const notificationChannelLabel: Record<NotificationChannel, string> = {
 export const priorityLabel: Record<"NORMAL" | "URGENT", string> = {
   NORMAL: "Normal",
   URGENT: "Urgente",
+};
+
+export const fileStatusLabel: Record<FileStatus, string> = {
+  PENDING_UPLOAD: "Subiendo",
+  QUARANTINE: "En cuarentena",
+  PENDING_SCAN: "Esperando escaneo",
+  SCANNING: "Escaneando",
+  CLEAN: "Limpio",
+  INFECTED: "Infectado",
+  AVAILABLE: "Disponible",
+  REJECTED: "Rechazado",
+};
+
+export const fileStatusTone: Record<FileStatus, StatusTone> = {
+  PENDING_UPLOAD: "info",
+  QUARANTINE: "warning",
+  PENDING_SCAN: "warning",
+  SCANNING: "info",
+  CLEAN: "success",
+  INFECTED: "danger",
+  AVAILABLE: "success",
+  REJECTED: "danger",
 };

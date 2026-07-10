@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { LogOut, Menu, PanelLeftClose, PanelLeftOpen, X } from "lucide-react";
+import { LogOut, Menu, PanelLeftClose, PanelLeftOpen, Shield, X } from "lucide-react";
 import { logoutAction } from "@/lib/server/actions";
 import { cn } from "@/lib/utils";
 import { BrandMark } from "@/components/ui/brand";
@@ -233,6 +233,14 @@ export function ShellChrome({
                 <p className="max-w-[180px] truncate text-sm font-semibold text-foreground">{user.name}</p>
                 <p className="text-[11px] text-muted-foreground">{user.role}</p>
               </div>
+              <Link
+                className="inline-flex min-h-9 items-center gap-2 rounded-lg border border-border bg-surface px-3 text-sm font-semibold text-foreground shadow-xs transition-colors hover:bg-muted"
+                href="/account/sessions"
+                title="Sesiones activas"
+              >
+                <Shield aria-hidden className="size-4" />
+                <span className="hidden sm:inline">Sesiones</span>
+              </Link>
               <form action={logoutAction}>
                 <button
                   className="inline-flex min-h-9 items-center gap-2 rounded-lg border border-border bg-surface px-3 text-sm font-semibold text-foreground shadow-xs transition-colors hover:bg-muted"

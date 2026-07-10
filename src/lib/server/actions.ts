@@ -21,6 +21,7 @@ import { logger } from "@/lib/server/logger";
 import { sendLocalNotification } from "@/lib/providers/notifications";
 import { generateProofOfDeliveryPdf } from "@/lib/server/pod-pdf";
 import { getStorageBucket, isValidSignaturePng, uploadBuffer, validateUploadedFile } from "@/lib/server/storage";
+import { processUploadThroughPipeline } from "@/lib/server/file-pipeline";
 
 const loginSchema = z.object({
   email: z.string().email(),
@@ -620,29 +621,44 @@ export async function submitProofAction(tenantSlug: string, formData: FormData) 
     update: { receiverName, observation, signatureSvg: signatureData, status: "SUBMITTED", rejectionReason: null },
   });
 
-  const objectKey = `tenants/${tenant.slug}/trips/${trip.reference}/evidence/${Date.now()}-${filename}`;
-  await uploadBuffer({
-    objectKey,
-    body: buffer,
-    contentType: mimeType,
-    contentDisposition: `attachment; filename="${filename}"`,
+  const targetKey = `tenants/${tenant.slug}/trips/${trip.reference}/evidence/${Date.now()}-${filename}`;
+  const pipelineResult = await processUploadThroughPipeline({
+    tenantId: tenant.id,
+    tripId: trip.id,
+    proofId: proof.id,
+    uploadedById: user.id,
+    filename,
+    mimeType,
+    buffer,
+    targetKey,
   });
 
-  await db.document.create({
-    data: {
+  if (pipelineResult.verdict === "INFECTED") {
+    logger.warn("infected evidence file rejected", {
       tenantId: tenant.id,
-      customerAccountId: trip.customerAccountId,
       tripId: trip.id,
-      proofId: proof.id,
-      filename,
-      mimeType: mimeType,
-      sizeBytes: buffer.length,
-      bucket: getStorageBucket(),
-      objectKey,
-      visibility: "CUSTOMER_VISIBLE",
-      uploadedById: user.id,
-    },
-  });
+      fileAttachmentId: pipelineResult.fileAttachmentId,
+    });
+    return;
+  }
+
+  if (pipelineResult.objectKey) {
+    await db.document.create({
+      data: {
+        tenantId: tenant.id,
+        customerAccountId: trip.customerAccountId,
+        tripId: trip.id,
+        proofId: proof.id,
+        filename,
+        mimeType: mimeType,
+        sizeBytes: buffer.length,
+        bucket: getStorageBucket(),
+        objectKey: pipelineResult.objectKey,
+        visibility: "CUSTOMER_VISIBLE",
+        uploadedById: user.id,
+      },
+    });
+  }
 
   await db.trip.update({
     where: { id: trip.id },

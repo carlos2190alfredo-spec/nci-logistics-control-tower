@@ -27,7 +27,8 @@ export async function GET(
     );
   }
 
-  const document = await getDb().document.findFirst({
+  const db = getDb();
+  const document = await db.document.findFirst({
     where: {
       id: documentId,
       tenantId: tenant.id,
@@ -37,6 +38,16 @@ export async function GET(
   });
 
   if (!document) return new NextResponse("No encontrado", { status: 404 });
+
+  const quarantined = await db.fileAttachment.findFirst({
+    where: {
+      tenantId: tenant.id,
+      tripId: document.tripId ?? undefined,
+      filename: document.filename,
+      status: { notIn: ["AVAILABLE", "CLEAN"] },
+    },
+  });
+  if (quarantined) return new NextResponse("Archivo en proceso de verificacion", { status: 403 });
 
   await audit({
     tenantId: tenant.id,

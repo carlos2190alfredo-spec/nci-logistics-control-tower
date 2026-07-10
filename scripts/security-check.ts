@@ -159,6 +159,47 @@ const checks: Check[] = [
     },
   },
   {
+    name: "file pipeline usa quarantine prefix",
+    run: () => {
+      const source = readFileSync("src/lib/server/file-pipeline.ts", "utf8");
+      const ok = source.includes("quarantine/") && source.includes("CopyObjectCommand") && source.includes("DeleteObjectCommand");
+      return { ok, detail: ok ? "" : "file-pipeline.ts sin cuarentena o sin promote/delete." };
+    },
+  },
+  {
+    name: "file pipeline fails closed when AV unavailable",
+    run: () => {
+      const source = readFileSync("src/lib/server/file-pipeline.ts", "utf8");
+      const ok = source.includes("AV_UNAVAILABLE") && source.includes("fail closed");
+      return { ok, detail: ok ? "" : "file-pipeline.ts no falla cerrado sin AV." };
+    },
+  },
+  {
+    name: "antivirus provider strips EXIF from JPEG",
+    run: () => {
+      const source = readFileSync("src/lib/server/file-pipeline.ts", "utf8");
+      const ok = source.includes("stripExif") && source.includes('mimeType === "image/jpeg"');
+      return { ok, detail: ok ? "" : "file-pipeline.ts no strip EXIF de JPEG." };
+    },
+  },
+  {
+    name: "submitProofAction uses quarantine pipeline",
+    run: () => {
+      const source = readFileSync("src/lib/server/actions.ts", "utf8");
+      const ok = source.includes("processUploadThroughPipeline");
+      return { ok, detail: ok ? "" : "actions.ts no usa pipeline de cuarentena para upload." };
+    },
+  },
+  {
+    name: "shells link to /account/sessions",
+    run: () => {
+      const shell = readFileSync("src/components/shell/shell-chrome.tsx", "utf8");
+      const driver = readFileSync("src/components/shell/driver-shell.tsx", "utf8");
+      const ok = shell.includes("/account/sessions") && driver.includes("/account/sessions");
+      return { ok, detail: ok ? "" : "Shells sin link a sesiones." };
+    },
+  },
+  {
     name: "TS: sin errores de tipos",
     run: () => {
       try {

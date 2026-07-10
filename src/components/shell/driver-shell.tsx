@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
-import { LogOut } from "lucide-react";
+import Link from "next/link";
+import { LogOut, Shield } from "lucide-react";
 import { logoutAction } from "@/lib/server/actions";
 import { BrandMark } from "@/components/ui/brand";
 import { ConnectivityIndicator } from "@/components/shell/connectivity-indicator";
@@ -39,6 +40,13 @@ export function DriverShell({
             <p className="truncate text-xs text-nav-muted">{user.name}</p>
           </div>
           <ConnectivityIndicator />
+          <Link
+            className="inline-flex min-h-10 items-center gap-2 rounded-lg border border-nav-border px-3 text-sm font-semibold text-nav-foreground transition-colors hover:bg-nav-surface"
+            href="/account/sessions"
+            title="Sesiones activas"
+          >
+            <Shield aria-hidden className="size-4" />
+          </Link>
           {logoutSlot ?? (
             <form action={logoutAction}>
               <button
