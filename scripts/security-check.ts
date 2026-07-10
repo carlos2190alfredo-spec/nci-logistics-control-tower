@@ -117,6 +117,48 @@ const checks: Check[] = [
     },
   },
   {
+    name: "auth revoca sesión previa en login (anti fixation)",
+    run: () => {
+      const source = readFileSync("src/lib/server/auth.ts", "utf8");
+      const ok = source.includes("previousToken") && source.includes("session.updateMany");
+      return { ok, detail: ok ? "" : "auth.ts no revoca sesión previa en login." };
+    },
+  },
+  {
+    name: "auth expone revokeAllUserSessions",
+    run: () => {
+      const source = readFileSync("src/lib/server/auth.ts", "utf8");
+      const ok = source.includes("export async function revokeAllUserSessions");
+      return { ok, detail: ok ? "" : "revokeAllUserSessions no está expuesto." };
+    },
+  },
+  {
+    name: "password-reset persiste solo hash del token",
+    run: () => {
+      const source = readFileSync("src/lib/server/password-reset.ts", "utf8");
+      const persistsHash = source.includes("hashToken(token)");
+      const noPlain = !/tokenHash:\s*token[^H]/.test(source) && !/tokenHash:\s*rawToken/.test(source);
+      const ok = persistsHash && noPlain;
+      return { ok, detail: ok ? "" : "password-reset.ts podría guardar el token en claro." };
+    },
+  },
+  {
+    name: "recuperar/[token] tiene noindex y no-cache",
+    run: () => {
+      const source = readFileSync("src/app/recuperar/[token]/page.tsx", "utf8");
+      const ok = source.includes('robots: { index: false') && source.includes("force-dynamic");
+      return { ok, detail: ok ? "" : "página de reset falta noindex o dynamic." };
+    },
+  },
+  {
+    name: "actions de reset con rate limit por email e IP",
+    run: () => {
+      const source = readFileSync("src/lib/server/password-reset-actions.ts", "utf8");
+      const ok = source.includes('"auth.password_reset.email"') && source.includes('"auth.password_reset.ip"');
+      return { ok, detail: ok ? "" : "password-reset-actions.ts sin rate limit doble." };
+    },
+  },
+  {
     name: "TS: sin errores de tipos",
     run: () => {
       try {
