@@ -228,6 +228,7 @@ model Tenant {
   supportSessions    TenantSupportSession[]
   tripAssignments    TripAssignment[]
   offlineReceipts    OfflineCommandReceipt[]
+  fileAttachments    FileAttachment[]
 
   @@map("tenants")
 }
@@ -483,6 +484,7 @@ model Trip {
   documents             Document[]
   proof                 ProofOfDelivery?
   assignments           TripAssignment[]
+  fileAttachments       FileAttachment[]
 
   @@unique([tenantId, reference])
   @@index([tenantId, customerAccountId, status])
@@ -603,6 +605,7 @@ model ProofOfDelivery {
   approvedAt      DateTime?   @map("approved_at")
   trip            Trip        @relation(fields: [tripId], references: [id], onDelete: Cascade)
   documents       Document[]
+  fileAttachments FileAttachment[]
 
   @@index([tenantId])
   @@map("proofs_of_delivery")
@@ -701,4 +704,77 @@ model RateLimitBucket {
   @@unique([scope, key])
   @@index([windowEnd])
   @@map("rate_limit_buckets")
+}
+
+enum FileStatus {
+  PENDING_UPLOAD
+  QUARANTINE
+  PENDING_SCAN
+  SCANNING
+  CLEAN
+  INFECTED
+  AVAILABLE
+  REJECTED
+}
+
+enum ScanVerdict {
+  CLEAN
+  INFECTED
+  ERROR
+}
+
+model FileAttachment {
+  id              String          @id @default(uuid()) @db.Uuid
+  tenantId        String          @map("tenant_id") @db.Uuid
+  tripId          String?         @map("trip_id") @db.Uuid
+  proofId         String?         @map("proof_id") @db.Uuid
+  uploadedById    String?         @map("uploaded_by_id") @db.Uuid
+  filename        String
+  mimeType        String          @map("mime_type")
+  sizeBytes       Int             @map("size_bytes")
+  status          FileStatus      @default(QUARANTINE)
+  bucket          String
+  quarantineKey   String          @map("quarantine_key")
+  objectKey       String?         @map("object_key")
+  scanVerdict     ScanVerdict?    @map("scan_verdict")
+  scanDetail      String?         @map("scan_detail")
+  scannedAt       DateTime?       @map("scanned_at")
+  promotedAt      DateTime?       @map("promoted_at")
+  rejectedAt      DateTime?       @map("rejected_at")
+  createdAt       DateTime        @default(now()) @map("created_at")
+  tenant          Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  trip            Trip?           @relation(fields: [tripId], references: [id])
+  proof           ProofOfDelivery? @relation(fields: [proofId], references: [id])
+  scanEvents      FileScanEvent[]
+
+  @@index([tenantId, tripId])
+  @@index([tenantId, status])
+  @@map("file_attachments")
+}
+
+model FileScanEvent {
+  id              String        @id @default(uuid()) @db.Uuid
+  fileAttachmentId String       @map("file_attachment_id") @db.Uuid
+  verdict         ScanVerdict
+  detail          String?
+  engineVersion   String?       @map("engine_version")
+  durationMs      Int?          @map("duration_ms")
+  createdAt       DateTime      @default(now()) @map("created_at")
+  fileAttachment  FileAttachment @relation(fields: [fileAttachmentId], references: [id], onDelete: Cascade)
+
+  @@index([fileAttachmentId, createdAt])
+  @@map("file_scan_events")
+}
+
+model AttachmentReceipt {
+  id              String   @id @default(uuid()) @db.Uuid
+  tenantId        String   @map("tenant_id") @db.Uuid
+  userId          String   @map("user_id") @db.Uuid
+  idempotencyKey  String   @map("idempotency_key")
+  fileAttachmentId String? @map("file_attachment_id") @db.Uuid
+  status          String
+  createdAt       DateTime @default(now()) @map("created_at")
+
+  @@unique([tenantId, userId, idempotencyKey])
+  @@map("attachment_receipts")
 }
