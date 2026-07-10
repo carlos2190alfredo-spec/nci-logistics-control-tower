@@ -16,14 +16,22 @@ import {
   signOut,
 } from "@/lib/server/auth";
 import { getDb } from "@/lib/server/db";
+import { enforceRateLimit } from "@/lib/server/rate-limit";
+import { logger } from "@/lib/server/logger";
 import { sendLocalNotification } from "@/lib/providers/notifications";
 import { generateProofOfDeliveryPdf } from "@/lib/server/pod-pdf";
-import { fileToBuffer, getStorageBucket, uploadBuffer, validateUploadedFile } from "@/lib/server/storage";
+import { getStorageBucket, isValidSignaturePng, uploadBuffer, validateUploadedFile } from "@/lib/server/storage";
 
 const loginSchema = z.object({
   email: z.string().email(),
   password: z.string().min(8),
 });
+
+const LOGIN_DELAY_MS = 250;
+
+async function constantDelay() {
+  await new Promise((resolve) => setTimeout(resolve, LOGIN_DELAY_MS));
+}
 
 export async function loginAction(_: unknown, formData: FormData) {
   const parsed = loginSchema.safeParse({
@@ -31,10 +39,29 @@ export async function loginAction(_: unknown, formData: FormData) {
     password: formData.get("password"),
   });
 
-  if (!parsed.success) return { message: "Ingresa correo y contrasena validos." };
+  if (!parsed.success) {
+    await constantDelay();
+    return { message: "Ingresa correo y contrasena validos." };
+  }
 
-  const result = await signIn(parsed.data.email, parsed.data.password);
-  if (!result.ok) return { message: result.message };
+  const email = parsed.data.email.toLowerCase();
+  const rate = await enforceRateLimit({
+    scope: "auth.login",
+    key: email,
+    limit: 30,
+    windowSeconds: 60,
+  });
+  if (!rate.allowed) {
+    logger.warn("login rate limited", { email });
+    await constantDelay();
+    return { message: "Demasiados intentos. Reintente en unos segundos." };
+  }
+
+  const result = await signIn(email, parsed.data.password);
+  if (!result.ok) {
+    await constantDelay();
+    return { message: result.message };
+  }
 
   const db = getDb();
   const user = await db.user.findUnique({
@@ -576,9 +603,9 @@ export async function submitProofAction(tenantSlug: string, formData: FormData) 
 
   const driver = await db.driver.findFirst({ where: { tenantId: tenant.id, userId: user.id } });
   if (membership.role === "DRIVER" && trip.driverId !== driver?.id) return;
-  if (!receiverName || !signatureData.startsWith("data:image/png;base64,")) return;
+  if (!receiverName || !isValidSignaturePng(signatureData)) return;
   if (!(evidenceFile instanceof File)) return;
-  const filename = await validateUploadedFile(evidenceFile);
+  const { filename, buffer, mimeType } = await validateUploadedFile(evidenceFile);
 
   const proof = await db.proofOfDelivery.upsert({
     where: { tripId: trip.id },
@@ -596,8 +623,9 @@ export async function submitProofAction(tenantSlug: string, formData: FormData) 
   const objectKey = `tenants/${tenant.slug}/trips/${trip.reference}/evidence/${Date.now()}-${filename}`;
   await uploadBuffer({
     objectKey,
-    body: await fileToBuffer(evidenceFile),
-    contentType: evidenceFile.type,
+    body: buffer,
+    contentType: mimeType,
+    contentDisposition: `attachment; filename="${filename}"`,
   });
 
   await db.document.create({
@@ -607,8 +635,8 @@ export async function submitProofAction(tenantSlug: string, formData: FormData) 
       tripId: trip.id,
       proofId: proof.id,
       filename,
-      mimeType: evidenceFile.type,
-      sizeBytes: evidenceFile.size,
+      mimeType: mimeType,
+      sizeBytes: buffer.length,
       bucket: getStorageBucket(),
       objectKey,
       visibility: "CUSTOMER_VISIBLE",

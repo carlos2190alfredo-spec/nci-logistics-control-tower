@@ -1,5 +1,18 @@
 import PDFDocument from "pdfkit/js/pdfkit.standalone";
-import type { Document, Equipment, ProofOfDelivery, ServiceType, Trip, TripEvent, Vehicle, Driver, CustomerAccount, Tenant, TenantBranding } from "@/generated/prisma";
+import type {
+  CustomerAccount,
+  Document,
+  Driver,
+  Equipment,
+  ProofOfDelivery,
+  ServiceType,
+  Tenant,
+  TenantBranding,
+  Trip,
+  TripEvent,
+  Vehicle,
+} from "@/generated/prisma";
+import { logger } from "@/lib/server/logger";
 
 type PodTrip = Trip & {
   tenant: Tenant & { branding: TenantBranding | null };
@@ -20,6 +33,21 @@ function collectPdf(doc: PDFKit.PDFDocument) {
     doc.on("end", () => resolve(Buffer.concat(chunks)));
   });
   return { chunks, finished };
+}
+
+const PNG_MIN_BYTES = 200;
+
+/**
+ * Valida que la firma sea un data URL PNG plausible. Rechaza SVGs, JPEGs,
+ * data URLs vacíos o payloads menores al mínimo esperado (evita "firmas"
+ * de 1 píxel u otros abusos).
+ */
+function isValidSignatureDataUrl(input: string | null | undefined): input is string {
+  if (!input) return false;
+  const match = /^data:image\/png;base64,([A-Za-z0-9+/=]+)$/.exec(input);
+  if (!match) return false;
+  const bytes = Buffer.byteLength(match[1], "base64");
+  return bytes >= PNG_MIN_BYTES;
 }
 
 export async function generateProofOfDeliveryPdf(trip: PodTrip) {
@@ -53,11 +81,25 @@ export async function generateProofOfDeliveryPdf(trip: PodTrip) {
   doc.text(`Observacion: ${proof?.observation ?? "Sin observacion"}`);
   doc.moveDown();
 
-  if (proof?.signatureSvg?.startsWith("data:image/png;base64,")) {
-    doc.fontSize(12).fillColor("#0f2d46").text("Firma");
-    doc.fontSize(10).fillColor("#334155").text("Firma digital capturada en la aplicacion del conductor.");
-    doc.moveDown();
+  doc.fontSize(12).fillColor("#0f2d46").text("Firma del receptor");
+  if (proof && isValidSignatureDataUrl(proof.signatureSvg)) {
+    try {
+      const y = doc.y;
+      doc.rect(48, y, 260, 90).stroke("#dce3ee");
+      doc.image(proof.signatureSvg, 52, y + 4, { fit: [252, 82] });
+      doc.moveDown();
+      doc.y = y + 96;
+      doc.fontSize(9).fillColor("#64748b").text(
+        `Firma capturada digitalmente por ${proof.receiverName} el ${(proof.approvedAt ?? proof.deliveredAt).toISOString()}.`,
+      );
+    } catch (error) {
+      logger.warn("signature embed failed", { tripId: trip.id, error: error instanceof Error ? error.message : "unknown" });
+      doc.fontSize(10).fillColor("#b91c1c").text("Firma capturada pero no representable en PDF; ver evidencia adjunta.");
+    }
+  } else {
+    doc.fontSize(10).fillColor("#b45309").text("Sin firma valida capturada en dispositivo del conductor.");
   }
+  doc.moveDown();
 
   const customerDocs = trip.documents.filter((document) => document.visibility === "CUSTOMER_VISIBLE");
   doc.fontSize(12).fillColor("#0f2d46").text("Evidencias autorizadas");
@@ -80,3 +122,6 @@ export async function generateProofOfDeliveryPdf(trip: PodTrip) {
 
   return finished;
 }
+
+/** Expuesto para pruebas: mismo criterio que el generador. */
+export { isValidSignatureDataUrl };
