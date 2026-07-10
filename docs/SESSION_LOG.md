@@ -67,3 +67,18 @@
 - `nodemailer` 7 → 9.0.3 (parches SMTP command injection y CRLF).
 - Scripts nuevos: `pnpm security:check`, `pnpm security:test`, `pnpm security:audit`.
 - Documentación: THREAT_MODEL, OFFLINE_ARCHITECTURE, OFFLINE_SECURITY, SECURITY_HARDENING, SECURITY_CHECKLIST, INCIDENT_RESPONSE, ADR-007, ADR-008.
+
+## 2026-07-10 Auditoría independiente + remediación P0/P1
+
+- Auditoría independiente (docs/CLAUDE_SECURITY_AUDIT.md) con 8 hallazgos + 3 análisis de dependencia. Plan (docs/SECURITY_REMEDIATION_PLAN.md) commiteado antes de tocar código.
+- VULN-001 (P0): race en offline sync corregida con receipt-first transaction.
+- VULN-002 (P1): signIn revoca sesión previa del mismo navegador (mitigación de fixation).
+- VULN-003 + VULN-004 (P1): flujo completo de recuperación de contraseña con Mailpit, token con hash SHA-256, TTL 20min, un solo uso, revocación de tokens previos, rate limit doble, invalidación de todas las sesiones tras reset.
+- VULN-005 (P1): página /account/sessions con SessionSummary (sin hashes ni User-Agent completo), acciones cerrar-una/otras/todas.
+- VULN-007 (P2): currentServerState eliminado en respuestas ASSIGNMENT_CHANGED.
+- VULN-DEP-001 (P1): @aws-sdk/client-s3 → 3.1083.0 cerró 7 advisories (incluye 1 crítica y 4 altas).
+- VULN-DEP-002 y VULN-DEP-003: documentadas como NOT_REACHABLE en docs/DEPENDENCY_REACHABILITY.md.
+- Nueva migración 20260710080000_session_metadata_and_reset_revocation (user_agent, ip_hash, last_seen_at, revoked_at, requested_ip_hash).
+- 5 comprobaciones estáticas nuevas en pnpm security:check (15/15).
+- 28/28 unit tests + 23/23 E2E (incluye 4 SEC-AUTH nuevos).
+- ADR-009 (rotación/revocación) + ADR-010 (recuperación).

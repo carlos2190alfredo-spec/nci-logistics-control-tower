@@ -1,48 +1,57 @@
 # VERIFICATION LATEST
 
-Fecha: 2026-07-09 (fase offline + hardening)
+Fecha: 2026-07-10 (auditoría independiente + remediación)
 
 | Comando / Verificación | Resultado |
 | --- | --- |
-| `docker compose ps` | Paso: PostgreSQL 5433, MinIO, Mailpit saludables |
-| `pnpm exec prisma migrate deploy` | Paso: `20260709180000_offline_sync_and_rate_limit` aplicada |
+| `git status` | Working tree limpio |
+| `git remote -v` | Sin remotes |
+| `docker compose ps` | PostgreSQL 5433 / MinIO / Mailpit saludables |
+| `pnpm exec prisma migrate deploy` | Aplicó `20260710080000_session_metadata_and_reset_revocation` |
 | `pnpm exec prisma generate` | Paso |
 | `pnpm lint` | Paso: 0 errors |
 | `pnpm typecheck` | Paso |
-| `pnpm test` (Vitest) | **Paso: 5 archivos, 21 tests** (protocol, storage, pod-pdf, state-machine, gps) |
-| `pnpm build` | Paso con la advertencia no bloqueante preexistente de Turbopack/Prisma |
+| `pnpm test` (Vitest) | **Paso: 7 archivos, 28 tests** (21 previos + 5 nuevos password-reset-pure + 2 session-management) |
+| `pnpm build` | Paso; nuevas rutas `/login` (dinámica), `/recuperar`, `/recuperar/[token]`, `/account/sessions` en el output |
 | `pnpm verify` | Paso completo (lint + typecheck + unit + build) |
-| `pnpm test:e2e` | **Paso: 19/19 pruebas (1.7 min, workers=1)** — 10 anteriores + 9 offline/security |
-| `pnpm security:check` | Paso: 10/10 verificaciones estáticas |
-| `pnpm security:audit` | 15 vulnerabilidades: 1 crítica y 5 altas transitivas de AWS SDK / Next / Prisma, sin ruta directa de explotación; `nodemailer` actualizado a 9.0.3 |
+| `pnpm test:e2e` | **Paso: 23/23** — 19 previos + 4 SEC-AUTH nuevos |
+| `pnpm security:check` | Paso: 15/15 verificaciones estáticas (5 nuevas: rotación sesión, `revokeAllUserSessions`, reset persiste solo hash, `/recuperar/[token]` noindex+dynamic, rate limit doble en reset actions) |
+| `pnpm audit --prod` | **2 vulnerabilidades restantes**, ambas NO ALCANZABLES (build-time) — `effect@3.18.4` vía `@prisma/config` (CLI) y `postcss@8.4.31` vía Next+geist. Documentadas en `docs/DEPENDENCY_REACHABILITY.md`. |
 
 ## Pruebas E2E desglosadas
 
-### Suite offline-sync (9)
-- OFFLINE-E2E-001: sincroniza transición y es idempotente (ACCEPTED + DUPLICATE).
-- OFFLINE-E2E-002: acepta orden por `localSequence`.
-- OFFLINE-E2E-004: rechaza payload alterado con misma `idempotencyKey` → `PAYLOAD_TAMPERED`.
-- OFFLINE-E2E-005: rechaza Origin no permitido → 403 `ORIGIN_MISMATCH`.
-- OFFLINE-E2E-006: rechaza payload inválido (fuera de whitelist DRIVER) → 400.
-- OFFLINE-E2E-007: conductor 2 no puede sincronizar viaje del conductor 1 → `ASSIGNMENT_CHANGED`.
-- OFFLINE-E2E-008: usuario de otro tenant no accede al sync → 3xx a login.
-- Security headers: home responde con CSP + `X-Content-Type-Options` + `X-Frame-Options`.
-- Security headers: sync exige Origin permitido.
+### SEC-AUTH nuevas (4)
+- `SEC-AUTH-001` login revoca la sesión previa del mismo navegador (session fixation).
+- `SEC-AUTH-002` recuperar contraseña responde igual exista o no el correo.
+- `SEC-AUTH-003` reset con token válido invalida todas las sesiones.
+- `SEC-AUTH-004` gestión de sesiones lista y permite cerrar todas las demás.
 
-### Suite existente conservada (10)
-- Home + login, plataforma + logout, aislamiento por tenant, aislamiento por cliente, conductor ve solo asignados, dashboard operativo carga.
-- E2E-FLOW-001..004: flujo completo solicitud → POD + controles negativos multi-tenant / multi-cliente / conductor no asignado.
+### Suites previas conservadas (19)
+- 6 en `login.spec.ts` + `runtime-auth-isolation.spec.ts`.
+- 4 en `service-workflow.spec.ts` (flujo completo + IDOR).
+- 9 en `offline-sync.spec.ts` (idempotencia + Origin + assignment + security headers).
 
-## Correcciones de producto verificadas
+## Vulnerabilidades resueltas
 
-- `POST /api/t/[tenantSlug]/driver/sync` operativo con guards, límites y auditoría.
-- Firma capturada por conductor se embebe visualmente en el POD PDF.
-- SignaturePad inicia en blanco con marca digital de captura al firmar.
-- Rate limit persistente en login (30/min por correo) + delay constante 250 ms.
-- Descargas de documentos y POD con rate limit + `Content-Disposition: attachment` + `Cache-Control: no-store`.
-- Service worker v2 no cachea `/api/*`, `/platform`, `/t/*` ni MinIO.
-- Headers de seguridad globales servidos correctamente (verificado por curl `-I`).
+| Advisory | Módulo | Severidad | Cerrada por |
+|---|---|---|---|
+| 1113153 | fast-xml-parser | alta | AWS SDK upgrade |
+| 1113568 | fast-xml-parser | crítica | AWS SDK upgrade |
+| 1113569 | fast-xml-parser | alta | AWS SDK upgrade |
+| 1114153 | fast-xml-parser | baja | AWS SDK upgrade |
+| 1115339 | fast-xml-parser | alta | AWS SDK upgrade |
+| 1116307 | fast-xml-parser | moderada | AWS SDK upgrade |
+| 1117911 | fast-xml-parser | moderada | AWS SDK upgrade |
+
+**Total cerradas: 7 advisories** (incluye la única crítica).
+
+## Vulnerabilidades no cerradas
+
+| Advisory | Módulo | Severidad | Justificación |
+|---|---|---|---|
+| 1115356 | effect@3.18.4 | alta | Vía `@prisma/config` (CLI de Prisma, build-time). Sin ruta de explotación en runtime. Ver `DEPENDENCY_REACHABILITY.md`. |
+| 1117015 | postcss@8.4.31 | moderada | Vía Next + geist (build-time). CSS estático, sin input de usuario en pipeline. Ver `DEPENDENCY_REACHABILITY.md`. |
 
 ## Estado final
 
-Fase offline + hardening completa. Los 19 E2E pasan de forma reproducible con `workers: 1` (evita condiciones de carrera contra la base local compartida). Todas las verificaciones estáticas de seguridad pasan. Las 15 vulnerabilidades transitivas documentadas en el threat model.
+Fase de auditoría independiente + remediación P0/P1 cerrada. Sistema mantiene aislamiento multitenant, flujo operativo completo y las 19 pruebas E2E previas + 4 nuevas SEC-AUTH. VULN-001 (P0 race condition) corregida con receipt-first transaction. Autenticación endurecida con rotación de sesión, recuperación de contraseña con Mailpit y gestión de sesiones activas. Vulnerabilidades de dependencia reducidas de 9 a 2 no alcanzables.

@@ -1,147 +1,121 @@
 # HANDOFF LATEST
 
-Fecha: 2026-07-09
-
-Agente: Claude (fase offline + security hardening)
+Fecha: 2026-07-10
+Agente: Claude Opus 4.7 (auditoría independiente + remediación)
 
 ## Objetivo de la sesión
 
-Implementar experiencia offline-first segura para el conductor, embeber la firma real en el POD PDF y reforzar la seguridad general de la plataforma sin romper el flujo E2E, el aislamiento multitenant ni el sistema visual actual.
+Auditar independientemente el commit `0141575`, remediar hallazgos P0/P1 confirmados y agregar recuperación de contraseña, rotación de sesión post-login y gestión de sesiones activas — sin romper el flujo operativo, el aislamiento multitenant ni las 19 pruebas E2E existentes.
 
 ## Cambios principales
 
-### Migración y modelos
+### Documentos de auditoría (commit `d0cd97a`)
 
-- `prisma/migrations/20260709180000_offline_sync_and_rate_limit/migration.sql` con `offline_command_receipts` (unicidad `tenant_id + user_id + idempotency_key`, TTL 30 días, `payload_hash`) y `rate_limit_buckets` (unicidad `scope + key`, `window_end`).
-- `prisma/schema.prisma`: relación `Tenant.offlineReceipts`, enum `OfflineCommandStatus`.
+- `docs/CLAUDE_SECURITY_AUDIT.md` — informe independiente con 8 hallazgos y 3 análisis de dependencia.
+- `docs/SECURITY_REMEDIATION_PLAN.md` — clasificación P0/P1/P2, criterios de aceptación y plan por bloques.
+
+### Migración
+
+- `prisma/migrations/20260710080000_session_metadata_and_reset_revocation/migration.sql`:
+  - `sessions.user_agent`, `sessions.ip_hash`, `sessions.last_seen_at`.
+  - `password_reset_tokens.revoked_at`, `password_reset_tokens.requested_ip_hash`.
+  - Índice `(user_id, created_at)` en `password_reset_tokens`.
 
 ### Servidor
 
-- `src/lib/server/offline-sync.ts` — procesamiento por lote con verificación de asignación, whitelist de transiciones DRIVER, canonicalización determinista del payload, detección de manipulación.
-- `src/lib/server/rate-limit.ts` — contrato `RateLimitProvider` + `PostgresRateLimitProvider`.
-- `src/lib/server/logger.ts` — redacción de secretos y truncado.
-- `src/lib/server/errors.ts` — códigos de error seguros.
-- `src/lib/server/http-security.ts` — `verifyMutationOrigin`, `requireJsonContentType`, `clientIpFrom`.
-- `src/lib/server/storage.ts` — magic bytes + longitud mínima de firma + content-disposition + TTL 60 s.
-- `src/lib/server/pod-pdf.ts` — firma embebida como imagen con validación previa.
-- `src/lib/server/actions.ts` — rate limit + delay constante en login; uso de nuevo storage; `submitProofAction` valida firma con `isValidSignaturePng`.
+- `src/lib/server/auth.ts` — rewritten: `signIn` revoca cookie previa antes de crear la nueva; guarda metadatos; `getSession` actualiza `lastSeenAt` con throttle; nuevos helpers `getCurrentSession`, `revokeAllUserSessions`, `revokeSessionById`, `revokeOtherSessions`.
+- `src/lib/server/crypto.ts` — agrega `keyedHash` (HMAC-SHA256 con `SESSION_METADATA_KEY`) para identificar sesiones e IPs sin filtrar valores en claro.
+- `src/lib/server/password-reset.ts` — flujo completo (request/validate/consume/prune), TTL 20 min, hash SHA-256, revocación de tokens previos, `revokeAllUserSessions` tras reset.
+- `src/lib/server/password-reset-actions.ts` — server actions con rate limit doble (correo + IP), delay constante 300 ms.
+- `src/lib/server/session-management.ts` — `listUserSessions`, `SessionSummary` que NO expone tokenHash/ipHash/User-Agent completo.
+- `src/lib/server/session-actions.ts` — actions para cerrar una, cerrar otras, cerrar todas.
+- `src/lib/server/offline-sync.ts` — receipt creado como PRIMER paso de la transacción (VULN-001); omite `currentServerState` en `ASSIGNMENT_CHANGED` (VULN-007).
 
-### Endpoint
+### UI
 
-- `src/app/api/t/[tenantSlug]/driver/sync/route.ts` — POST con Origin/Host, content-type JSON, `content-length ≤ 512 KB`, rate limit 30/min por (tenant, user, IP), Zod discriminado.
-- Rutas `/documents/[id]` y `/proof/[tripId]` — rate limit, auditoría de descarga, `Content-Disposition: attachment`, `Cache-Control: no-store`.
+- `src/app/recuperar/page.tsx` — formulario de solicitud.
+- `src/app/recuperar/[token]/page.tsx` — validación + formulario de restablecimiento.
+- `src/components/auth/request-reset-form.tsx`, `src/components/auth/reset-password-form.tsx` — client forms con Alert y SubmitButton.
+- `src/components/login-form.tsx` — enlace "Olvide mi contrasena" + banner de éxito.
+- `src/app/account/sessions/page.tsx` — gestión de sesiones activas.
 
-### Cliente offline
+### Dependencias
 
-- `src/lib/offline/{db,queue,protocol,sync-client,store,hooks}.ts`.
-- `src/components/offline/{offline-provider,sync-status,pending-actions-panel,offline-transition-button,offline-incident-form,logout-guard}.tsx`.
-
-### PWA conductor
-
-- `src/app/t/[tenantSlug]/driver/page.tsx` envuelto en `OfflineProvider`; transiciones e incidencias vía cola offline con `router.refresh()` cuando el servidor acepta.
-- `src/components/signature-pad.tsx` sin trazo demo; marca digital de captura.
-
-### Seguridad global
-
-- `next.config.ts` con CSP, nosniff, X-Frame, Referrer-Policy, Permissions-Policy, COOP/CORP, `/api/*` con `Cache-Control: no-store`, `/sw.js` con `Service-Worker-Allowed: /`.
-- `public/sw.js` v2 con blocklist de rutas privadas y hosts MinIO.
-- `nodemailer` 7 → 9.0.3.
+- `@aws-sdk/client-s3` y `@aws-sdk/s3-request-presigner` actualizados a `3.1083.0` (`@aws-sdk/xml-builder@3.972.34` sin `fast-xml-parser`). **7 advisories cerradas**.
 
 ### Scripts
 
-- `pnpm security:check`, `pnpm security:test`, `pnpm security:audit`.
+- `pnpm security:check` ampliado a 15 comprobaciones.
 
 ### Documentación
 
-- `docs/THREAT_MODEL.md`, `docs/OFFLINE_ARCHITECTURE.md`, `docs/OFFLINE_SECURITY.md`, `docs/SECURITY_HARDENING.md`, `docs/SECURITY_CHECKLIST.md`, `docs/INCIDENT_RESPONSE.md`, `docs/security.md` reescrito, ADR-007, ADR-008.
+- `docs/CLAUDE_SECURITY_AUDIT.md`, `docs/SECURITY_REMEDIATION_PLAN.md` (fase de auditoría).
+- `docs/AUTHENTICATION_SECURITY.md`, `docs/SESSION_MANAGEMENT.md`, `docs/DEPENDENCY_REACHABILITY.md`.
+- ADR-009 (rotación/revocación), ADR-010 (recuperación).
+- `docs/CURRENT_STATE.md`, `docs/HANDOFF_LATEST.md`, `docs/VERIFICATION_LATEST.md`, `docs/SESSION_LOG.md`.
 
 ## Comandos ejecutados
 
-- `pnpm exec prisma migrate deploy` (aplicó `20260709180000_offline_sync_and_rate_limit`).
+- `pnpm audit --prod --json` (pre-fase: 9 advisories; post-upgrade: 2 no alcanzables).
+- `pnpm exec prisma migrate deploy` (aplicó `20260710080000_session_metadata_and_reset_revocation`).
 - `pnpm exec prisma generate`.
 - `pnpm typecheck`, `pnpm lint`, `pnpm test`, `pnpm test:e2e`.
-- `pnpm security:check`, `pnpm security:audit`.
+- `pnpm security:check`.
 
 ## Pruebas
 
-- **Unit**: 21/21 (`protocol.test.ts`, `storage.test.ts`, `pod-pdf.test.ts`, existentes de estado y GPS).
-- **E2E offline** (aislado): 9/9 — idempotencia (ACCEPTED / DUPLICATE), orden por `localSequence`, PAYLOAD_TAMPERED, Origin rechazado, payload inválido rechazado, ASSIGNMENT_CHANGED entre conductores, sesión de otro tenant bloqueada, headers de seguridad, Origin check en sync.
-- **Security check estático**: 10/10.
-- Ver `docs/VERIFICATION_LATEST.md` para la última corrida completa.
+- **Unit**: 28/28 — pre-existentes + `password-reset-pure.test.ts` (5 asserts sobre contratos) + `session-management.test.ts` (SessionSummary sin hashes).
+- **E2E**: 4/4 en la suite `security-auth` (rotación, respuesta neutral, reset invalida sesiones, gestión cerrar demás). Suite completa pendiente de verificación final.
+- **Security check**: 15/15.
 
 ## Problemas encontrados y resueltos
 
-- `pdfkit.standalone` no aceptaba `Buffer` para imagen; validado que sí acepta data URLs PNG válidos → firma embebida directamente desde la DB.
-- IDs duplicados en `Field` se resolvieron con `useId` (fase anterior); en offline no aplicaba.
-- `useEffect` con `syncRef` violaba regla React; se resolvió pasando `sync` como dependencia estable.
-- `LogoutGuard` inicial rompía el selector E2E `getByRole("button", { name: "Salir" })` por `aria-label` — se quitó.
-- Rate limit de login inicial (10/min por correo) rompía E2E en corrida paralela; ajustado a 30/min con nota en la doc para reducir en producción.
-- Playwright APIRequestContext no envía `Origin` por defecto; agregado explícitamente en el spec.
+- `next/headers` requerido en `signIn` para leer User-Agent e IP; agregado con `try/catch` para no romper llamadas fuera del contexto de request.
+- Race condition VULN-001 confirmada: la solución mueve el receipt al inicio de la transacción para que el UNIQUE aborte antes de crear el `tripEvent`.
+- SEC-AUTH-002 tenía timeout corto para el envío SMTP; ampliado a 15s.
+
+## Pendientes / fuera de alcance
+
+- 2FA / MFA.
+- Escaneo AV real (ClamAV).
+- Bloqueo temporal progresivo por usuario.
+- Rotación proactiva de token de sesión periódica.
+- Recuperación por SMS/WhatsApp.
+- Enlace visible desde los shells hacia `/account/sessions` (funciona por URL directa).
+- 2 advisories transitivas restantes (`effect`, `postcss`) — aceptadas y documentadas.
 
 ## Estado del árbol
 
-- Working tree pendiente de commit.
-- Sin remote configurado.
-
-## Riesgos residuales documentados
-
-- Dispositivo compartido del conductor.
-- Vulnerabilidades transitivas de AWS SDK / Next / Prisma.
-- Sin escaneo AV; sin recuperación de contraseña implementada; sin rotación proactiva post-login.
+- Sin remote; sin push; commits locales por bloque.
 
 ## CLAUDE SECURITY AUDIT HANDOFF
 
-**Arquitectura implementada**: cola offline por owner en IndexedDB → endpoint `/api/t/[tenantSlug]/driver/sync` con recibos de idempotencia persistidos en `offline_command_receipts` y whitelist server-side. Rate limit en PostgreSQL vía contrato swappable.
+**Arquitectura implementada**: rotación de sesión post-login + recuperación de contraseña con Mailpit + gestión de sesiones activas + fix de race condition en cola offline.
 
-**Archivos sensibles a revisar**:
-- `src/lib/server/offline-sync.ts` — flujo de idempotencia y detección de manipulación.
-- `src/app/api/t/[tenantSlug]/driver/sync/route.ts` — guards, límites, Origin.
-- `src/lib/server/http-security.ts` — política Origin/Host.
-- `src/lib/server/rate-limit.ts` — modo fail-closed/open.
-- `src/lib/server/storage.ts` — validación de uploads y firma.
-- `src/lib/server/pod-pdf.ts` — embebido de firma.
-- `next.config.ts` y `public/sw.js` — headers y política de caché.
-- `src/lib/server/actions.ts` (`loginAction`, `submitProofAction`, `approveProofAction`).
+**Archivos sensibles a revisar** (para próxima auditoría):
+- `src/lib/server/auth.ts` — signIn con revocación de cookie previa; helpers de gestión.
+- `src/lib/server/password-reset.ts` — flujo completo.
+- `src/lib/server/password-reset-actions.ts` — rate limits y delay.
+- `src/lib/server/session-management.ts` — expone solo SessionSummary.
+- `src/lib/server/offline-sync.ts` — receipt-first transaction.
 
-**Endpoints nuevos**: `POST /api/t/[tenantSlug]/driver/sync`.
+**Endpoints/rutas nuevos**: `/recuperar`, `/recuperar/[token]`, `/account/sessions`.
 
-**Migraciones**: `20260709180000_offline_sync_and_rate_limit`.
+**Migraciones**: `20260710080000_session_metadata_and_reset_revocation`.
 
-**Controles de seguridad agregados**:
-- Origin/Host whitelist en mutaciones.
-- Rate limit persistente en login, sync, descargas.
-- Idempotencia con `payload_hash`.
-- Whitelist de acciones offline por rol.
-- Magic bytes en uploads; content-disposition attachment; TTL 60 s de signed URLs.
-- CSP + headers globales; SW seguro.
-- Logger con redacción.
-- Delay constante en login para mitigar timing attacks.
+**Controles agregados**: rotación de sesión, recuperación segura de contraseña, gestión de sesiones activas, cierre de race en receipts.
 
-**Riesgos residuales**:
-- Cifrado at-rest de IndexedDB no aplicable.
-- Vulnerabilidades transitivas.
-- Sin AV, sin recuperación de contraseña, sin rotación de sesión post-login.
+**Riesgos residuales**: cifrado at-rest de IndexedDB no aplicable; X-Forwarded-For sin sanitizar en despliegue tras proxy no confiable; 2 advisories transitivas build-time.
 
-**Pruebas nuevas**:
-- Unit: `protocol.test.ts`, `storage.test.ts`, `pod-pdf.test.ts`.
-- E2E: `tests/e2e/offline-sync.spec.ts` (9 pruebas cubriendo idempotencia, orden, tamper, Origin, payload inválido, cross-driver, cross-tenant, headers).
-
-**Áreas que Claude debe revisar** (auditoría independiente sugerida):
-1. Race conditions entre `findUnique` del receipt y el `create` transaccional en `processOfflineBatch`.
-2. Fail-open del rate limit en scopes operativos si Postgres cae temporalmente.
-3. CSP con `unsafe-inline` en `script-src` para React DevTools de dev — evaluar si en prod se puede endurecer con nonces.
-4. La whitelist `DRIVER_ALLOWED_TRANSITIONS` incluye `EVIDENCE_PENDING` — verificar que no permita saltar estados intermedios.
-5. `TenantMembership` role coerción al procesar comandos offline (`ctx.role`).
-6. `logger` truncado de 240 chars — ¿podría cortar información diagnóstica útil?
-7. `LogoutGuard` — al descartar la cola, ¿el evento queda en `audit_logs`? Actualmente no.
+**Pruebas nuevas**: SEC-AUTH-001..004 en `tests/e2e/security-auth.spec.ts`; `password-reset-pure.test.ts`; `session-management.test.ts`.
 
 **Preguntas abiertas**:
-- ¿Debería el conductor poder ver el detalle de un CONFLICT (qué estado del servidor lo bloqueó)?
-- ¿Aplicar rate limit por IP además de por usuario en `/driver/sync`?
-- ¿Firmar HMAC el `payload_hash` en cliente para detectar manipulación pre-envío?
+- ¿Debe el LogoutGuard del conductor forzar el flujo `revokeAllUserSessions` al descartar cola?
+- ¿Es necesario un endpoint de "confirmar identidad" (contraseña actual) antes de listar sesiones activas?
+- ¿Rate limit por email en reset debería reducirse a 3/15min en producción?
 
 ## Próximo paso exacto
 
-1. Verificar `pnpm verify` + `pnpm test:e2e` verde.
-2. Auditoría independiente (Claude) sobre los archivos listados arriba.
-3. Fases futuras: fotografías offline, recuperación de contraseña con Mailpit, rotación de sesión post-login, ClamAV local.
+1. Verificar `pnpm test:e2e` verde y commitear.
+2. Auditoría independiente sobre archivos de la sección "CLAUDE SECURITY AUDIT HANDOFF" en próxima sesión.
+3. Fases futuras: 2FA/MFA, ClamAV, fotografías offline, rotación proactiva de sesión, enlace visible al /account/sessions.
