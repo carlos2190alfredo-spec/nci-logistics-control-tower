@@ -6,6 +6,11 @@ import { getDb } from "@/lib/server/db";
 import { audit } from "@/lib/server/audit";
 import { logger } from "@/lib/server/logger";
 
+export type AuthLevel = "PASSWORD_ONLY" | "MFA_VERIFIED" | "PARTIAL_MFA_PENDING";
+
+const MFA_REQUIRED_PLATFORM_ROLES: PlatformRole[] = ["PLATFORM_SUPER_ADMIN", "PLATFORM_SUPPORT"];
+const MFA_REQUIRED_TENANT_ROLES: TenantRole[] = ["TENANT_OWNER", "TENANT_ADMIN"];
+
 const SESSION_DAYS = 7;
 
 export const sessionCookieName = process.env.SESSION_COOKIE_NAME ?? "nci_lct_session";
@@ -34,9 +39,12 @@ async function collectRequestMetadata() {
  * crea una nueva sesión con userAgent + ipHash truncados. Nunca revela si el
  * usuario existe: el llamador aplica delay constante.
  */
-export async function signIn(email: string, password: string) {
+export async function signIn(email: string, password: string): Promise<{ ok: true; mfaRequired: boolean } | { ok: false; message: string }> {
   const db = getDb();
-  const user = await db.user.findUnique({ where: { email: email.toLowerCase() } });
+  const user = await db.user.findUnique({
+    where: { email: email.toLowerCase() },
+    include: { mfaSecret: true },
+  });
 
   if (!user || !user.active) return { ok: false, message: "Credenciales invalidas." };
 
@@ -52,15 +60,19 @@ export async function signIn(email: string, password: string) {
   const cookieStore = await cookies();
   const previousToken = cookieStore.get(sessionCookieName)?.value;
   if (previousToken) {
-    // Revoca la sesión del navegador que estaba antes del login (fixation).
     await db.session.updateMany({
       where: { tokenHash: hashToken(previousToken), revokedAt: null },
       data: { revokedAt: new Date() },
     });
   }
 
+  const mfaActive = user.mfaSecret?.verified === true;
+  const authLevel: AuthLevel = mfaActive ? "PARTIAL_MFA_PENDING" : "PASSWORD_ONLY";
+
   const token = createOpaqueToken();
-  const expiresAt = new Date(Date.now() + SESSION_DAYS * 24 * 60 * 60 * 1000);
+  const expiresAt = mfaActive
+    ? new Date(Date.now() + 15 * 60 * 1000)
+    : new Date(Date.now() + SESSION_DAYS * 24 * 60 * 60 * 1000);
   const { userAgent, ipHash } = await collectRequestMetadata();
 
   const session = await db.session.create({
@@ -71,6 +83,7 @@ export async function signIn(email: string, password: string) {
       userAgent,
       ipHash,
       lastSeenAt: new Date(),
+      authLevel,
     },
   });
   await db.user.update({
@@ -83,6 +96,7 @@ export async function signIn(email: string, password: string) {
     action: "auth.login",
     entity: "Session",
     entityId: session.id,
+    after: mfaActive ? { mfaRequired: true } : undefined,
   });
 
   cookieStore.set(sessionCookieName, token, {
@@ -93,7 +107,7 @@ export async function signIn(email: string, password: string) {
     path: "/",
   });
 
-  return { ok: true };
+  return { ok: true, mfaRequired: mfaActive };
 }
 
 export async function signOut() {
@@ -156,7 +170,37 @@ export async function getSession() {
 export async function requireAuthenticatedUser() {
   const session = await getSession();
   if (!session) redirect("/login");
+  if (session.authLevel === "PARTIAL_MFA_PENDING") redirect("/mfa/verify");
   return session.user;
+}
+
+export async function getPartialSession() {
+  const cookieStore = await cookies();
+  const token = cookieStore.get(sessionCookieName)?.value;
+  if (!token) return null;
+
+  const db = getDb();
+  const session = await db.session.findUnique({
+    where: { tokenHash: hashToken(token) },
+    include: { user: true },
+  });
+
+  if (!session || session.revokedAt || session.expiresAt < new Date() || !session.user.active) {
+    return null;
+  }
+
+  return session;
+}
+
+export async function promoteSessionToMfaVerified(sessionId: string) {
+  const db = getDb();
+  await db.session.update({
+    where: { id: sessionId },
+    data: {
+      authLevel: "MFA_VERIFIED",
+      expiresAt: new Date(Date.now() + SESSION_DAYS * 24 * 60 * 60 * 1000),
+    },
+  });
 }
 
 /** Devuelve la sesión activa completa o null (para la UI de gestión). */
@@ -276,6 +320,22 @@ export async function revokeSessionById(userId: string, sessionId: string) {
     });
   }
   return result.count > 0;
+}
+
+export async function requiresMfaForRole(userId: string): Promise<boolean> {
+  const db = getDb();
+  const user = await db.user.findUnique({
+    where: { id: userId },
+    include: { tenantMemberships: { where: { active: true } } },
+  });
+  if (!user) return false;
+
+  if (user.platformRole && MFA_REQUIRED_PLATFORM_ROLES.includes(user.platformRole)) return true;
+
+  for (const membership of user.tenantMemberships) {
+    if (MFA_REQUIRED_TENANT_ROLES.includes(membership.role)) return true;
+  }
+  return false;
 }
 
 /** Revoca todas las sesiones del usuario EXCEPTO la del token actual. */

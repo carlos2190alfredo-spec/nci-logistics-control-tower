@@ -57,6 +57,9 @@ export function Field({
   accept,
   className,
   inputClassName,
+  autoComplete,
+  inputMode,
+  maxLength,
 }: {
   label: string;
   name: string;
@@ -68,6 +71,9 @@ export function Field({
   accept?: string;
   className?: string;
   inputClassName?: string;
+  autoComplete?: string;
+  inputMode?: "none" | "text" | "decimal" | "numeric" | "tel" | "search" | "email" | "url";
+  maxLength?: number;
 }) {
   const controlId = useId();
   return (
@@ -75,9 +81,12 @@ export function Field({
       <input
         accept={accept}
         aria-describedby={help ? `${controlId}-help` : undefined}
+        autoComplete={autoComplete}
         className={cn(controlStyles, type === "file" && "file:mr-3 file:rounded-md file:border-0 file:bg-muted file:px-3 file:py-1 file:text-sm file:font-medium file:text-foreground", inputClassName)}
         defaultValue={defaultValue}
         id={controlId}
+        inputMode={inputMode}
+        maxLength={maxLength}
         name={name}
         placeholder={placeholder}
         required={required}

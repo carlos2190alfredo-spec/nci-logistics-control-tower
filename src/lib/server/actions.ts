@@ -64,6 +64,10 @@ export async function loginAction(_: unknown, formData: FormData) {
     return { message: result.message };
   }
 
+  if (result.mfaRequired) {
+    redirect("/mfa/verify");
+  }
+
   const db = getDb();
   const user = await db.user.findUnique({
     where: { email: parsed.data.email.toLowerCase() },
