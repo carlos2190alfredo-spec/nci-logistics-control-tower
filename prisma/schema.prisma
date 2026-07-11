@@ -138,22 +138,27 @@ model User {
   sessions            Session[]
   passwordResetTokens PasswordResetToken[]
   driverProfiles      Driver[]
+  mfaSecret           UserMfaSecret?
+  mfaRecoveryCodes    MfaRecoveryCode[]
+  mfaChallenges       MfaChallenge[]
 
   @@map("users")
 }
 
 model Session {
-  id               String    @id @default(uuid()) @db.Uuid
-  userId           String    @map("user_id") @db.Uuid
-  tokenHash        String    @unique @map("token_hash")
-  expiresAt        DateTime  @map("expires_at")
-  revokedAt        DateTime? @map("revoked_at")
-  supportSessionId String?   @map("support_session_id") @db.Uuid
-  userAgent        String?   @map("user_agent")
-  ipHash           String?   @map("ip_hash")
-  lastSeenAt       DateTime? @map("last_seen_at")
-  createdAt        DateTime  @default(now()) @map("created_at")
-  user             User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id               String         @id @default(uuid()) @db.Uuid
+  userId           String         @map("user_id") @db.Uuid
+  tokenHash        String         @unique @map("token_hash")
+  expiresAt        DateTime       @map("expires_at")
+  revokedAt        DateTime?      @map("revoked_at")
+  supportSessionId String?        @map("support_session_id") @db.Uuid
+  userAgent        String?        @map("user_agent")
+  ipHash           String?        @map("ip_hash")
+  lastSeenAt       DateTime?      @map("last_seen_at")
+  authLevel        String         @default("PASSWORD_ONLY") @map("auth_level")
+  createdAt        DateTime       @default(now()) @map("created_at")
+  user             User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  mfaChallenges    MfaChallenge[]
 
   @@index([userId])
   @@map("sessions")
@@ -764,6 +769,54 @@ model FileScanEvent {
 
   @@index([fileAttachmentId, createdAt])
   @@map("file_scan_events")
+}
+
+model UserMfaSecret {
+  id              String    @id @default(uuid()) @db.Uuid
+  userId          String    @unique @map("user_id") @db.Uuid
+  encryptedSecret String    @map("encrypted_secret")
+  iv              String
+  authTag         String    @map("auth_tag")
+  algorithm       String    @default("SHA1")
+  digits          Int       @default(6)
+  period          Int       @default(30)
+  verified        Boolean   @default(false)
+  createdAt       DateTime  @default(now()) @map("created_at")
+  verifiedAt      DateTime? @map("verified_at")
+  user            User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("user_mfa_secrets")
+}
+
+model MfaRecoveryCode {
+  id        String    @id @default(uuid()) @db.Uuid
+  userId    String    @map("user_id") @db.Uuid
+  codeHash  String    @map("code_hash")
+  usedAt    DateTime? @map("used_at")
+  createdAt DateTime  @default(now()) @map("created_at")
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, codeHash])
+  @@index([userId])
+  @@map("mfa_recovery_codes")
+}
+
+model MfaChallenge {
+  id          String    @id @default(uuid()) @db.Uuid
+  userId      String    @map("user_id") @db.Uuid
+  sessionId   String    @map("session_id") @db.Uuid
+  purpose     String
+  expiresAt   DateTime  @map("expires_at")
+  attempts    Int       @default(0)
+  maxAttempts Int       @default(5) @map("max_attempts")
+  completedAt DateTime? @map("completed_at")
+  createdAt   DateTime  @default(now()) @map("created_at")
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  session     Session   @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@index([userId, purpose, createdAt])
+  @@index([sessionId])
+  @@map("mfa_challenges")
 }
 
 model AttachmentReceipt {
