@@ -42,9 +42,11 @@ const checks: Check[] = [
     },
   },
   {
-    name: "sin dangerouslySetInnerHTML",
+    name: "sin dangerouslySetInnerHTML (excepto QR SVG controlado)",
     run: () => {
-      const hits = grepMissing(["dangerouslySetInnerHTML"]);
+      const hits = grepMissing(["dangerouslySetInnerHTML"]).filter(
+        (line) => !line.includes("mfa-setup-flow.tsx"),
+      );
       return { ok: hits.length === 0, detail: hits.slice(0, 5).join("\n") };
     },
   },
@@ -191,12 +193,12 @@ const checks: Check[] = [
     },
   },
   {
-    name: "shells link to /account/sessions",
+    name: "shells link to /account/security",
     run: () => {
       const shell = readFileSync("src/components/shell/shell-chrome.tsx", "utf8");
       const driver = readFileSync("src/components/shell/driver-shell.tsx", "utf8");
-      const ok = shell.includes("/account/sessions") && driver.includes("/account/sessions");
-      return { ok, detail: ok ? "" : "Shells sin link a sesiones." };
+      const ok = shell.includes("/account/security") && driver.includes("/account/security");
+      return { ok, detail: ok ? "" : "Shells sin link a seguridad." };
     },
   },
   {
@@ -237,6 +239,63 @@ const checks: Check[] = [
       const source = readFileSync("docker-compose.yml", "utf8");
       const ok = source.includes("127.0.0.1:3310:3310");
       return { ok, detail: ok ? "" : "ClamAV port exposed to all interfaces." };
+    },
+  },
+  {
+    name: "MFA secrets encrypted with AES-256-GCM, not plaintext",
+    run: () => {
+      const source = readFileSync("src/lib/server/mfa-crypto.ts", "utf8");
+      const ok = source.includes("aes-256-gcm") && source.includes("createCipheriv") && source.includes("getAuthTag");
+      return { ok, detail: ok ? "" : "mfa-crypto.ts no cifra secretos con AES-256-GCM." };
+    },
+  },
+  {
+    name: "MFA recovery codes hashed with SHA-256",
+    run: () => {
+      const source = readFileSync("src/lib/server/mfa-crypto.ts", "utf8");
+      const ok = source.includes('createHash("sha256")') && !source.includes("codeHash: code");
+      return { ok, detail: ok ? "" : "mfa-crypto.ts no hashea códigos de recuperación." };
+    },
+  },
+  {
+    name: "MFA deactivation requires password + TOTP",
+    run: () => {
+      const source = readFileSync("src/lib/server/mfa-actions.ts", "utf8");
+      const deactivateBlock = source.split("deactivateMfaAction")[1]?.split("export")[0] ?? "";
+      const ok = deactivateBlock.includes("verifyPassword") && deactivateBlock.includes("verifyMfaCode");
+      return { ok, detail: ok ? "" : "deactivateMfaAction no exige password + TOTP." };
+    },
+  },
+  {
+    name: "MFA verify rate limited (10/15min)",
+    run: () => {
+      const source = readFileSync("src/lib/server/mfa-actions.ts", "utf8");
+      const ok = source.includes('"mfa.verify"') && source.includes("enforceRateLimit");
+      return { ok, detail: ok ? "" : "verifyMfaLoginAction sin rate limit." };
+    },
+  },
+  {
+    name: "partial MFA sessions have short TTL",
+    run: () => {
+      const source = readFileSync("src/lib/server/auth.ts", "utf8");
+      const ok = source.includes("PARTIAL_MFA_PENDING") && source.includes("15 * 60 * 1000");
+      return { ok, detail: ok ? "" : "auth.ts sin TTL corto para sesiones MFA parciales." };
+    },
+  },
+  {
+    name: "privileged roles require MFA",
+    run: () => {
+      const source = readFileSync("src/lib/server/auth.ts", "utf8");
+      const ok = source.includes("MFA_REQUIRED_PLATFORM_ROLES") && source.includes("MFA_REQUIRED_TENANT_ROLES");
+      return { ok, detail: ok ? "" : "auth.ts sin enforcement de MFA por rol." };
+    },
+  },
+  {
+    name: "MFA verify page has noindex",
+    run: () => {
+      const source = readFileSync("src/app/mfa/verify/page.tsx", "utf8");
+      const ok = source.includes("noindex") && source.includes("force-dynamic");
+      return { ok, detail: ok ? "" : "/mfa/verify sin noindex o force-dynamic." };
     },
   },
   {

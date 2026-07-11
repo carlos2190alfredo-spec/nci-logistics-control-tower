@@ -1,6 +1,7 @@
 import { config } from "dotenv";
 import { PrismaClient } from "../src/generated/prisma";
 import { hashPassword } from "../src/lib/server/crypto";
+import { encryptSecret } from "../src/lib/server/mfa-crypto";
 
 config({ path: ".env" });
 config({ path: ".env.local", override: true });
@@ -74,6 +75,28 @@ async function main() {
     await Promise.all(credentials.map(async ([email, password, name]) => [email, await user(email, password, name)])),
   );
   await prisma.user.update({ where: { email: "platform@nci.local" }, data: { platformRole: "PLATFORM_SUPER_ADMIN" } });
+
+  const SEED_TOTP_SECRET = "JBSWY3DPEHPK3PXP4567ABCDEFGHIJKL";
+  const mfaRequiredEmails = ["platform@nci.local", "owner@panatruck.local", "owner@translogistica.local"];
+  for (const email of mfaRequiredEmails) {
+    const u = users[email];
+    const { encrypted, iv, authTag } = encryptSecret(SEED_TOTP_SECRET);
+    await prisma.userMfaSecret.upsert({
+      where: { userId: u.id },
+      update: { encryptedSecret: encrypted, iv, authTag, verified: true, verifiedAt: new Date() },
+      create: {
+        userId: u.id,
+        encryptedSecret: encrypted,
+        iv,
+        authTag,
+        algorithm: "SHA1",
+        digits: 6,
+        period: 30,
+        verified: true,
+        verifiedAt: new Date(),
+      },
+    });
+  }
 
   const tenants = [
     {

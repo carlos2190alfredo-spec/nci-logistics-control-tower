@@ -1,4 +1,8 @@
 import { expect, test, type Page } from "@playwright/test";
+import { TOTP } from "otpauth";
+
+const SEED_TOTP_SECRET = "JBSWY3DPEHPK3PXP4567ABCDEFGHIJKL";
+const MFA_USERS = new Set(["platform@nci.local", "owner@panatruck.local", "owner@translogistica.local"]);
 
 const users = {
   platform: ["platform@nci.local", "NCIPlatform2026!"],
@@ -16,6 +20,13 @@ async function login(page: Page, email: string, password: string) {
   await page.getByLabel("Contrasena").fill(password);
   await page.getByRole("button", { name: "Entrar" }).click();
   await page.waitForLoadState("networkidle");
+
+  if (MFA_USERS.has(email) && page.url().includes("/mfa/verify")) {
+    const totp = new TOTP({ secret: SEED_TOTP_SECRET, algorithm: "SHA1", digits: 6, period: 30 });
+    await page.getByLabel("Codigo de verificacion").fill(totp.generate());
+    await page.getByRole("button", { name: "Verificar" }).click();
+    await page.waitForLoadState("networkidle");
+  }
 }
 
 test("platform user can access platform dashboard and logout", async ({ page }) => {

@@ -1,12 +1,15 @@
 import { expect, test, type BrowserContext, type Page } from "@playwright/test";
 import { config } from "dotenv";
+import { TOTP } from "otpauth";
 import { PrismaClient } from "../../src/generated/prisma";
 import { hashPassword } from "../../src/lib/server/crypto";
+import { encryptSecret } from "../../src/lib/server/mfa-crypto";
 
 config({ path: ".env.local" });
 
 const db = new PrismaClient();
 
+const SEED_TOTP_SECRET = "JBSWY3DPEHPK3PXP4567ABCDEFGHIJKL";
 const testUser = { email: `sec-e2e-${Date.now()}@nci.local`, password: "InitialTest2026!" };
 
 async function login(page: Page, email: string, password: string) {
@@ -15,15 +18,28 @@ async function login(page: Page, email: string, password: string) {
   await page.getByLabel("Contrasena").fill(password);
   await page.getByRole("button", { name: "Entrar" }).click();
   await page.waitForLoadState("networkidle");
+
+  if (page.url().includes("/mfa/verify")) {
+    const totp = new TOTP({ secret: SEED_TOTP_SECRET, algorithm: "SHA1", digits: 6, period: 30 });
+    await page.getByLabel("Codigo de verificacion").fill(totp.generate());
+    await page.getByRole("button", { name: "Verificar" }).click();
+    await page.waitForLoadState("networkidle");
+  }
 }
 
 async function ensureUser(email: string, password: string) {
-  const platform = await db.user.findUnique({ where: { email: "platform@nci.local" } });
-  return db.user.upsert({
+  const user = await db.user.upsert({
     where: { email },
-    update: { active: true, passwordHash: await hashPassword(password), platformRole: platform?.platformRole ?? "PLATFORM_SUPER_ADMIN" },
+    update: { active: true, passwordHash: await hashPassword(password), platformRole: "PLATFORM_SUPER_ADMIN" },
     create: { email, name: "Auth Security Test", passwordHash: await hashPassword(password), platformRole: "PLATFORM_SUPER_ADMIN" },
   });
+  const { encrypted, iv, authTag } = encryptSecret(SEED_TOTP_SECRET);
+  await db.userMfaSecret.upsert({
+    where: { userId: user.id },
+    update: { encryptedSecret: encrypted, iv, authTag, verified: true, verifiedAt: new Date() },
+    create: { userId: user.id, encryptedSecret: encrypted, iv, authTag, algorithm: "SHA1", digits: 6, period: 30, verified: true, verifiedAt: new Date() },
+  });
+  return user;
 }
 
 test.describe.serial("SEC-AUTH session rotation and management", () => {

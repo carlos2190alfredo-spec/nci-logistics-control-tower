@@ -1,104 +1,92 @@
 # HANDOFF LATEST
 
 Fecha: 2026-07-11
-Agente: Claude Opus 4.6 (PWA instalable, fotos offline, sync engine, attachment receipts)
+Agente: Claude Opus 4.6 (MFA TOTP, enforcement por rol, dashboard de seguridad)
 
 ## Objetivo de la sesion
 
-Completar la PWA del conductor como aplicacion instalable con soporte offline real: PWA manifest con iconos, service worker con actualizaciones controladas, captura de fotos con EXIF stripping y almacenamiento en IndexedDB, motor de sincronizacion con backoff exponencial, endpoint de upload con idempotencia via AttachmentReceipt, y vinculacion de fotos AVAILABLE con evidencia y POD.
+Implementar autenticacion multifactor (MFA/2FA) con TOTP segun RFC 6238: setup flow con QR, codigos de recuperacion, sesiones parciales, enforcement para roles privilegiados, reautenticacion de acciones sensibles, dashboard de seguridad, y documentacion completa.
 
 ## Fases completadas
 
 | Fase | Commit | Descripcion |
 | --- | --- | --- |
-| A | 8879daf | Auditoria PWA y offline (19 hallazgos documentados) |
-| B | 34a0ef6 | PWA instalable (manifest, iconos PNG, SW controlado, offline fallback) |
-| C | 8f44b90 | Integracion photo-store en UI conductor (captura, EXIF strip, thumbnails) |
-| D | 536bd37 | Endpoint attachment con AttachmentReceipt idempotente |
-| E | d84048d | PhotoSyncEngine con backoff, polling de cuarentena, cleanup |
-| F | 9ecdc54 | Conexion fotos AVAILABLE con evidencia y POD |
-| G | 4c059a3 | Tests: 6 unit + 13 E2E nuevos (53 unit + 46 E2E total) |
-| H | (actual) | ADR-015, ADR-016, ADR-017, handoff |
+| Audit | 893c28f | Auditoria MFA con 8 hallazgos documentados (MFA_SECURITY_AUDIT.md) |
+| Phase 1 | cb1ffa0 | Modelo de datos Prisma + core criptografico TOTP (AES-256-GCM, SHA-256) |
+| Phase 2 | 244286c | Sesiones parciales + flujo de verificacion MFA en login |
+| Phase 3 | 24a2b0d | Setup flow con QR, dashboard de seguridad, enforcement por rol |
+| Phase 4 | (actual) | Tests, ADR-018, ADR-019, actualizacion documentacion |
 
 ## Arquitectura implementada
 
-### PWA (ADR-015)
-- `manifest.webmanifest`: instalable, standalone, iconos PNG 192/512/maskable
-- `sw.js`: cache-first para shell, network-only para APIs, offline fallback
-- `register-service-worker.tsx`: actualizaciones controladas, banner install/update
-- Guard contra recarga en primera instalacion del SW
+### MFA TOTP (ADR-018)
+- `src/lib/server/mfa.ts`: core criptografico con AES-256-GCM para secretos, SHA-256 para codigos de recuperacion
+- TOTP: SHA1, 6 digitos, periodo 30s, ventana ±1 (compatible con Google Authenticator, Authy, 1Password)
+- 10 codigos de recuperacion hex (5-5-5-5), uso unico, hasheados
+- Challenges MFA: TTL 5 min, max 5 intentos, proposito etiquetado
 
-### Fotos offline (ADR-016)
-- IndexedDB `nci-lct-photos` separada de la cola de comandos
-- Aislamiento por `ownerKey` (userId::tenantId::driverId)
-- EXIF stripping cliente: APP1, APP2, APP12, APP13, COM
-- SHA-256 content hash, thumbnails via OffscreenCanvas
-- Quota: 50 fotos/owner, 10 MB/foto, 7 dias TTL
+### Sesiones parciales
+- Login con MFA activo → `PARTIAL_MFA_PENDING` con TTL 15 min
+- `requireAuthenticatedUser()` redirige a `/mfa/verify`
+- Verificacion exitosa → `MFA_VERIFIED` con TTL 7 dias
+- `getPartialSession()` para la pagina de verificacion sin check de auth level
 
-### Sync engine
-- `photo-sync-engine.ts`: upload via FormData, max 2 concurrentes
-- Backoff exponencial: 1s-16s, max 5 intentos
-- Polling cuarentena cada 10s, cleanup AVAILABLE a 24h
-- Integrado en OfflineProvider (30s ciclo + online trigger)
-- Barra de estado con conteos y boton manual
+### Enforcement (ADR-019)
+- Roles obligatorios: PLATFORM_SUPER_ADMIN, PLATFORM_SUPPORT, TENANT_OWNER, TENANT_ADMIN
+- Guards: `requirePlatformRole()`, `requireTenantRole()`, `loginAction()`
+- Sin MFA → redirige a `/account/security/mfa/setup`
+- Reautenticacion: `requireRecentMfaOrPasswordAction` con ventana 15 min
 
-### Attachment receipts (ADR-017)
-- `POST /api/t/[slug]/driver/attachment`: multipart upload idempotente
-- `GET /api/t/[slug]/driver/attachment?idempotencyKey=...`: status check
-- `@@unique([tenantId, userId, idempotencyKey])` previene duplicados
-- Origin validation, rate limit 20/60s, driver/trip authorization
-- Pipeline: upload → scan → Document record
-
-### Vinculacion evidencia-POD
-- Evidence form pasa fileAttachmentIds de fotos AVAILABLE
-- `submitProofAction` valida FileAttachments y vincula Documents al proof
-- POD PDF ya filtra por AVAILABLE (ADR-014)
+### UI
+- `/mfa/verify`: verificacion post-login (TOTP o recovery code)
+- `/account/security`: dashboard con estado MFA, codigos restantes, warnings
+- `/account/security/mfa/setup`: setup flow (QR + manual) o panel de gestion
+- Shells: link actualizado a `/account/security`
 
 ## Archivos nuevos/modificados clave
 
 | Archivo | Descripcion |
 | --- | --- |
-| `public/manifest.webmanifest` | Manifest PWA con iconos y metadata |
-| `public/sw.js` | Service worker con cache controlado |
-| `public/icons/*.png` | Iconos PWA generados |
-| `src/components/register-service-worker.tsx` | Update/install banners |
-| `src/app/offline/page.tsx` | Pagina offline fallback |
-| `src/lib/offline/photo-store.ts` | IndexedDB fotos, EXIF strip, hash |
-| `src/lib/offline/photo-sync-engine.ts` | Motor de sincronizacion |
-| `src/components/offline/evidence-photo-capture.tsx` | UI captura fotos |
-| `src/components/offline/evidence-form.tsx` | Form evidencia con fotos |
-| `src/app/api/t/[tenantSlug]/driver/attachment/route.ts` | Endpoint upload |
-| `tests/e2e/pwa-photo-sync.spec.ts` | 13 E2E tests |
-| `src/lib/offline/photo-store.test.ts` | 6 unit tests EXIF |
-| `docs/decisions/ADR-015..017` | Decisiones arquitectonicas |
+| `prisma/migrations/20260711073243_mfa_totp_and_recovery/` | Migracion: auth_level, user_mfa_secrets, mfa_recovery_codes, mfa_challenges |
+| `src/lib/server/mfa.ts` | Core TOTP + crypto + recovery codes + challenges |
+| `src/lib/server/mfa-actions.ts` | Server actions: verify, setup, activate, deactivate, regenerate, status, reauth |
+| `src/lib/server/auth.ts` | Sesiones parciales, promotion, enforcement por rol |
+| `src/lib/server/actions.ts` | loginAction con bifurcacion MFA |
+| `src/app/mfa/verify/page.tsx` | Pagina verificacion MFA post-login |
+| `src/components/mfa-verify-form.tsx` | Form TOTP/recovery toggle |
+| `src/app/account/security/page.tsx` | Dashboard de seguridad |
+| `src/app/account/security/mfa/setup/page.tsx` | Setup/gestion MFA |
+| `src/components/mfa-setup-flow.tsx` | Multi-step: QR → verify → recovery codes |
+| `src/components/mfa-manage-panel.tsx` | Regenerar codigos, desactivar MFA |
+| `src/components/ui/field.tsx` | Props: autoComplete, inputMode, maxLength |
+| `src/lib/server/mfa.test.ts` | 30 tests unitarios MFA |
+| `scripts/security-check.ts` | 7 verificaciones MFA nuevas (32 total) |
+| `docs/decisions/ADR-018-mfa-totp.md` | Decision: TOTP, AES-256-GCM, recovery codes |
+| `docs/decisions/ADR-019-mfa-enforcement-reauth.md` | Decision: enforcement por rol, reautenticacion |
 
-## Verificaciones finales
+## Variables de entorno nuevas
 
-- TypeScript: sin errores
-- ESLint: sin errores ni warnings
-- Unit tests: 53/53 (11 archivos)
-- E2E tests: 46/46
-- Security tests: 4/4
-- Production build: exitoso
-- Working tree: limpio (despues de commit final)
+| Variable | Descripcion | Ejemplo |
+| --- | --- | --- |
+| `MFA_ENCRYPTION_KEY` | Clave AES-256-GCM para cifrar secretos TOTP (64 chars hex = 32 bytes) | `openssl rand -hex 32` |
 
-## Restricciones cumplidas
+## Conteos de verificacion
 
-- No se cachean APIs autenticadas, signed URLs, ni secretos en IndexedDB
-- No se confian tenantId/driverId/userId/roles del navegador
-- No se debilita aislamiento multitenant
-- No se hardcodea Panatruck
-- No se editan migraciones aplicadas
-- No se usa `any` para silenciar TypeScript
-- No se eliminan ni desactivan pruebas existentes
-- Toda la interfaz en espanol
-- 33 E2E originales intactos; total incremento a 46
-- No push, no remote
+| Tipo | Antes | Despues |
+| --- | --- | --- |
+| Unit tests (Vitest) | 53 | 83 |
+| E2E tests (Playwright) | 46 | 46 |
+| Security checks | 25 | 32 |
 
-## Pendiente para produccion
+## Backlog / riesgos residuales
 
-1. Configurar ClamAV TCP en produccion (127.0.0.1:3310)
-2. Configurar MinIO o S3 con bucket real
-3. Revisar politica de retencion de fotos (actualmente 7 dias local, 24h post-AVAILABLE)
-4. Considerar notificaciones push para conductores (SW ya registrado)
-5. Prueba de campo offline real con dispositivo Android
+- **MFA-VULN-008**: WebAuthn/FIDO2 como segundo factor alternativo (fase futura).
+- Perdida de autenticador + codigos agotados requiere soporte manual.
+- E2E tests para MFA no incluidos (requieren infraestructura TOTP en Playwright; candidato para fase futura con mocking de reloj).
+
+## Dependencias nuevas
+
+| Paquete | Version | Uso |
+| --- | --- | --- |
+| `otpauth` | 9.5.1 | Generacion y verificacion TOTP |
+| `qrcode` | 1.5.4 | Generacion QR SVG server-side |

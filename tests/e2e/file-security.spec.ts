@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { test, expect, type Page } from "@playwright/test";
 import { config } from "dotenv";
+import { TOTP } from "otpauth";
 import { PrismaClient } from "../../src/generated/prisma";
 import {
   S3Client,
@@ -12,6 +13,8 @@ import { Socket } from "node:net";
 config({ path: ".env.local" });
 
 const db = new PrismaClient();
+const SEED_TOTP_SECRET = "JBSWY3DPEHPK3PXP4567ABCDEFGHIJKL";
+const MFA_USERS = new Set(["owner@panatruck.local", "owner@translogistica.local", "platform@nci.local"]);
 
 const s3 = new S3Client({
   endpoint: process.env.MINIO_ENDPOINT ?? "http://localhost:9000",
@@ -45,6 +48,13 @@ async function login(page: Page, email: string, password: string) {
   await page.getByLabel("Contrasena").fill(password);
   await page.getByRole("button", { name: "Entrar" }).click();
   await page.waitForLoadState("networkidle");
+
+  if (MFA_USERS.has(email) && page.url().includes("/mfa/verify")) {
+    const totp = new TOTP({ secret: SEED_TOTP_SECRET, algorithm: "SHA1", digits: 6, period: 30 });
+    await page.getByLabel("Codigo de verificacion").fill(totp.generate());
+    await page.getByRole("button", { name: "Verificar" }).click();
+    await page.waitForLoadState("networkidle");
+  }
 }
 
 function clamavPing(): Promise<boolean> {

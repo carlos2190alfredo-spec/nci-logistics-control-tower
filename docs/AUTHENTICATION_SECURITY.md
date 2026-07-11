@@ -56,6 +56,22 @@ Base: [SECURITY_HARDENING.md](SECURITY_HARDENING.md), [SESSION_MANAGEMENT.md](SE
   - Cerrar todas (redirige a login).
 - Cada revocación queda auditada (`auth.sessions.revoke_one`, `auth.sessions.revoke_others`, `auth.sessions.revoke_all`).
 
+### Autenticacion multifactor (MFA/2FA)
+
+- TOTP (RFC 6238) con `otpauth` v9.5.1. SHA1, 6 digitos, periodo 30s, ventana ±1.
+- Secreto TOTP cifrado en reposo con AES-256-GCM. Clave en `MFA_ENCRYPTION_KEY` (env var).
+- 10 codigos de recuperacion hex (5-5-5-5), hasheados con SHA-256, uso unico.
+- **Sesiones parciales**: login con MFA activo crea sesion `PARTIAL_MFA_PENDING` (TTL 15 min). `requireAuthenticatedUser()` redirige a `/mfa/verify`. Tras verificacion: `MFA_VERIFIED` (TTL 7 dias).
+- Rate limit: 10 intentos de verificacion MFA por usuario cada 15 minutos.
+- **Enforcement**: roles privilegiados (PLATFORM_SUPER_ADMIN, PLATFORM_SUPPORT, TENANT_OWNER, TENANT_ADMIN) requieren MFA activo. Guards en `requirePlatformRole()`, `requireTenantRole()`, `loginAction()`.
+- **Desactivacion segura**: requiere password + TOTP. Elimina secreto, codigos y challenges en transaccion.
+- **Regeneracion de codigos**: requiere password + TOTP. Invalida codigos anteriores.
+- **Reautenticacion**: `requireRecentMfaOrPasswordAction` con ventana 15 min via `MfaChallenge`.
+- **Dashboard**: `/account/security` con estado MFA, codigos restantes, warning para roles privilegiados.
+- **Pagina de verificacion** `/mfa/verify`: `noindex`, `force-dynamic`.
+- **Auditoria**: `mfa.activated`, `mfa.deactivated`, `mfa.login_verified`, `mfa.login_code_failed`, `mfa.recovery_code_used`, `mfa.recovery_code_failed`, `mfa.recovery_codes_regenerated`.
+- Decisiones: ADR-018, ADR-019.
+
 ## Anti-patrones evitados
 
 - No hay bloqueo permanente de cuentas — solo rate limit y delay.
@@ -67,6 +83,7 @@ Base: [SECURITY_HARDENING.md](SECURITY_HARDENING.md), [SESSION_MANAGEMENT.md](SE
 
 - Unit — `src/lib/server/password-reset-pure.test.ts` (5 asserts sobre contratos: solo hash en DB, TTL corto, tx, revocación de sesiones, respuesta silenciosa a correo inexistente).
 - Unit — `src/lib/server/session-management.test.ts` (SessionSummary no expone hashes).
+- Unit — `src/lib/server/mfa.test.ts` (30 tests: TOTP generation/verification, recovery codes, security invariants).
 - E2E — `tests/e2e/security-auth.spec.ts`:
   - `SEC-AUTH-001` login revoca sesión previa del mismo navegador.
   - `SEC-AUTH-002` respuesta neutral para correo inexistente.
@@ -77,5 +94,6 @@ Base: [SECURITY_HARDENING.md](SECURITY_HARDENING.md), [SESSION_MANAGEMENT.md](SE
 
 - Robo de cookie por XSS o malware local. Mitigación: `httpOnly`, CSP restrictiva, sin `dangerouslySetInnerHTML`.
 - Dispositivo compartido físicamente. Mitigación: `LogoutGuard` + gestión de sesiones.
-- Sin 2FA / MFA. Aceptado para el piloto; documentado como P2 futuro.
+- Perdida de autenticador + codigos de recuperacion agotados requiere soporte manual.
+- WebAuthn/FIDO2 como alternativa adicional de segundo factor (backlog MFA-VULN-008).
 - Rate limit por IP puede eludirse tras proxy no confiable. Ver [DEPENDENCY_REACHABILITY.md](DEPENDENCY_REACHABILITY.md).

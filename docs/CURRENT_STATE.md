@@ -1,48 +1,47 @@
 # CURRENT STATE
 
-Fecha: 2026-07-10
+Fecha: 2026-07-11
 
 ## Fase actual
 
-Auditoría independiente + remediación P0/P1 completada. Rotación de sesión post-login, recuperación de contraseña con Mailpit, gestión de sesiones activas y actualización de AWS SDK (cerró 7 advisories) implementadas y verificadas.
+MFA/2FA con TOTP completado. Autenticacion multifactor implementada: setup flow con QR, sesiones parciales, enforcement por rol, dashboard de seguridad, codigos de recuperacion, reautenticacion para acciones sensibles.
 
-## Implementado (fase actual)
+## Implementado (fase actual — MFA TOTP)
 
-- **Migración** `20260710080000_session_metadata_and_reset_revocation` (aplicada): agrega `sessions.user_agent`, `sessions.ip_hash`, `sessions.last_seen_at`, `password_reset_tokens.revoked_at` y `password_reset_tokens.requested_ip_hash`; índice `(user_id, created_at)` en `password_reset_tokens`.
-- **VULN-001 (P0) corregida**: `processOfflineBatch` ahora crea el `offlineCommandReceipt` como PRIMER paso de la transacción con `create` (no `upsert`), forzando el UNIQUE a fallar antes de mutar `trip` o crear `tripEvent`. Segundos requests concurrentes con la misma clave reciben `DUPLICATE` con el resultado ganador.
-- **VULN-002 (P1) corregida**: `signIn` revoca la sesión asociada a la cookie previa antes de crear la nueva; nueva sesión persiste `userAgent` + `ipHash` + `lastSeenAt`.
-- **VULN-003 + VULN-004 (P1) corregidas**: flujo completo de recuperación de contraseña:
-  - `src/lib/server/password-reset.ts` (request, validate, consume, prune).
-  - `src/lib/server/password-reset-actions.ts` con rate limit doble.
-  - Rutas `/recuperar` y `/recuperar/[token]` con `noindex` + `force-dynamic`.
-  - Consumo del token invalida TODAS las sesiones del usuario (`revokeAllUserSessions`).
-- **VULN-005 (P1) corregida**: `/account/sessions` con listado, cerrar una, cerrar todas las demás, cerrar todas. `SessionSummary` no expone tokens ni hashes.
-- **VULN-007 (P2) corregida**: `currentServerState` ya no viaja en respuestas `ASSIGNMENT_CHANGED` (evita enumeración cross-driver).
-- **VULN-DEP-001 (P1)**: `@aws-sdk/client-s3` y `@aws-sdk/s3-request-presigner` actualizados a `3.1083.0`; el nuevo `@aws-sdk/xml-builder@3.972.34` ya no depende de `fast-xml-parser`. **7 advisories cerradas** (1 crítica + 4 altas + 2 moderadas).
-- **VULN-DEP-002 y VULN-DEP-003**: documentadas en `docs/DEPENDENCY_REACHABILITY.md` como NOT_REACHABLE (build-time only, sin ruta de explotación en nuestro uso).
-- **Login**: enlace "Olvide mi contrasena" agregado; banner de éxito tras reset (`?password-reset=ok`).
-- **`revokeAllUserSessions`, `revokeSessionById`, `revokeOtherSessions`, `getCurrentSession`** expuestos desde `src/lib/server/auth.ts`.
-- **Logger + redacción**: sin cambios; ya cubría el escenario.
-- **Scripts** — `pnpm security:check` ampliado: 15 comprobaciones (rotación de sesión, `revokeAllUserSessions`, reset persiste solo hash, `/recuperar/[token]` con noindex, rate limit doble en reset actions).
-- **Documentación** — `docs/CLAUDE_SECURITY_AUDIT.md`, `docs/SECURITY_REMEDIATION_PLAN.md`, `docs/AUTHENTICATION_SECURITY.md`, `docs/SESSION_MANAGEMENT.md`, `docs/DEPENDENCY_REACHABILITY.md`, ADR-009 (rotación/revocación), ADR-010 (recuperación).
+- **Migracion** `20260711073243_mfa_totp_and_recovery` (aplicada): agrega `auth_level` a sessions, crea tablas `user_mfa_secrets`, `mfa_recovery_codes`, `mfa_challenges` con indices y foreign keys.
+- **MFA-VULN-001 (P0) corregida**: TOTP (RFC 6238) con `otpauth` v9.5.1. Secretos cifrados con AES-256-GCM. Setup en dos pasos: generar secreto + verificar codigo. QR SVG server-side con `qrcode` v1.5.4.
+- **MFA-VULN-002 (P0) corregida**: 10 codigos de recuperacion hex formateados, almacenados como SHA-256 hash, uso unico. Regeneracion requiere password + TOTP.
+- **MFA-VULN-003 (P0) corregida**: sesiones parciales con `authLevel = PARTIAL_MFA_PENDING` y TTL de 15 min. `requireAuthenticatedUser()` redirige a `/mfa/verify`. Promocion a `MFA_VERIFIED` con TTL de 7 dias tras verificacion exitosa.
+- **MFA-VULN-004 (P1) corregida**: enforcement para `PLATFORM_SUPER_ADMIN`, `PLATFORM_SUPPORT`, `TENANT_OWNER`, `TENANT_ADMIN`. Guards en `requirePlatformRole()`, `requireTenantRole()`, y `loginAction()`.
+- **MFA-VULN-005 (P1) corregida**: desactivacion y regeneracion requieren password + TOTP. Desactivacion elimina secreto, codigos y challenges en transaccion.
+- **MFA-VULN-006 (P1) corregida**: rate limit de 10 intentos por usuario cada 15 minutos en verificacion MFA.
+- **MFA-VULN-007 (P2) corregida**: dashboard de seguridad en `/account/security` con estado MFA, conteo de codigos de recuperacion, advertencia para roles privilegiados sin MFA. Navegacion shells actualizada.
+- **Auditoria completa**: eventos `mfa.activated`, `mfa.deactivated`, `mfa.login_verified`, `mfa.login_code_failed`, `mfa.recovery_code_used`, `mfa.recovery_code_failed`, `mfa.recovery_codes_regenerated`.
+- **Tests**: 30 tests unitarios nuevos (83 total). 7 verificaciones de seguridad nuevas (32 total).
+- **Documentacion**: ADR-018 (MFA TOTP), ADR-019 (enforcement/reauth), HANDOFF, VERIFICATION, SECURITY actualizados.
 
 ## Base preservada
 
 - Next.js App Router con TypeScript estricto.
-- Docker (PostgreSQL 5433, MinIO, Mailpit) saludable.
-- Autenticación Argon2id + sesiones opacas SHA-256 + cookies httpOnly SameSite Lax.
+- Docker (PostgreSQL 5433, MinIO, Mailpit, ClamAV 3310) saludable.
+- Autenticacion Argon2id + sesiones opacas SHA-256 + cookies httpOnly SameSite Lax.
 - Flujo operativo completo cliente → operaciones → conductor → evidencia → POD → cierre.
 - Cola offline del conductor con idempotencia server-side.
 - Firma real embebida en el POD PDF.
+- Pipeline de cuarentena de archivos con ClamAV.
+- PWA instalable con fotos offline y sync engine.
 - Aislamiento multitenant server-side (guards y filtros por `tenantId`).
-- 19 E2E previos.
+- Recuperacion de contrasena con Mailpit.
+- Gestion de sesiones activas.
+- 46 E2E tests.
 
 ## Riesgos residuales documentados
 
-- Dispositivo compartido del conductor y del usuario administrativo — mitigado con logout guard, gestión de sesiones y advertencias en UI.
-- `X-Forwarded-For` sin sanitizar detrás de proxy no confiable — documentado en `DEPENDENCY_REACHABILITY.md`; requiere configuración correcta al desplegar.
-- 2 advisories transitivas restantes (`effect` vía Prisma CLI, `postcss` vía Next+geist) — NOT_REACHABLE en runtime; revisión trimestral.
-- Sin escaneo AV real, sin 2FA, sin recuperación externa por SMS/WhatsApp.
+- **MFA-VULN-008** (backlog): WebAuthn/FIDO2 como opcion adicional de segundo factor. Candidato para fase futura.
+- Perdida de dispositivo autenticador + codigos de recuperacion agotados requiere intervencion manual de soporte.
+- Dispositivo compartido del conductor — mitigado con logout guard, gestion de sesiones.
+- `X-Forwarded-For` sin sanitizar detras de proxy no confiable.
+- 2 advisories transitivas restantes (`effect` via Prisma CLI, `postcss` via Next+geist) — NOT_REACHABLE en runtime.
 
 ## Ultima verificacion
 
