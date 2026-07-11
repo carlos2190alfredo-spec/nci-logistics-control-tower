@@ -599,6 +599,7 @@ export async function submitProofAction(tenantSlug: string, formData: FormData) 
   const observation = String(formData.get("observation") ?? "");
   const signatureData = String(formData.get("signatureData") ?? "");
   const evidenceFile = formData.get("evidenceFile");
+  const availablePhotoIdsRaw = String(formData.get("availablePhotoIds") ?? "");
   const db = getDb();
   const trip = await db.trip.findFirstOrThrow({ where: { id: tripId, tenantId: tenant.id } });
 
@@ -658,6 +659,33 @@ export async function submitProofAction(tenantSlug: string, formData: FormData) 
         uploadedById: user.id,
       },
     });
+  }
+
+  const availablePhotoIds = availablePhotoIdsRaw
+    .split(",")
+    .map((id) => id.trim())
+    .filter(Boolean);
+  if (availablePhotoIds.length > 0) {
+    const validAttachments = await db.fileAttachment.findMany({
+      where: {
+        id: { in: availablePhotoIds },
+        tenantId: tenant.id,
+        status: "AVAILABLE",
+      },
+      select: { objectKey: true },
+    });
+    const objectKeys = validAttachments.map((a) => a.objectKey).filter(Boolean) as string[];
+    if (objectKeys.length > 0) {
+      await db.document.updateMany({
+        where: {
+          tenantId: tenant.id,
+          tripId: trip.id,
+          objectKey: { in: objectKeys },
+          proofId: null,
+        },
+        data: { proofId: proof.id },
+      });
+    }
   }
 
   await db.trip.update({

@@ -23,11 +23,11 @@ function generateId() {
 export function EvidencePhotoCapture({
   ownerKey,
   tripId,
-  onPhotoCountChange,
+  onPhotosChange,
 }: {
   ownerKey: string;
   tripId: string;
-  onPhotoCountChange?: (count: number) => void;
+  onPhotosChange?: (photos: OfflinePhoto[]) => void;
 }) {
   const [photos, setPhotos] = useState<OfflinePhoto[]>([]);
   const [processing, setProcessing] = useState(false);
@@ -39,10 +39,10 @@ export function EvidencePhotoCapture({
     listPhotosForTrip(ownerKey, tripId).then((list) => {
       if (cancelled) return;
       setPhotos(list);
-      onPhotoCountChange?.(list.length);
+      onPhotosChange?.(list);
     });
     return () => { cancelled = true; };
-  }, [ownerKey, tripId, onPhotoCountChange, refreshKey]);
+  }, [ownerKey, tripId, onPhotosChange, refreshKey]);
 
   const refresh = useCallback(() => {
     setRefreshKey((k) => k + 1);
