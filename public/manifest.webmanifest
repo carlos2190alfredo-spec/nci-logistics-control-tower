@@ -2,15 +2,42 @@
   "name": "NCI Logistics Control Tower",
   "short_name": "LCT",
   "description": "Control tower logistico multitenant local",
-  "start_url": "/",
+  "lang": "es",
+  "start_url": "/login",
+  "scope": "/",
   "display": "standalone",
+  "orientation": "portrait-primary",
   "background_color": "#f6f8fb",
   "theme_color": "#0f2d46",
+  "categories": ["business", "logistics"],
   "icons": [
     {
-      "src": "/window.svg",
+      "src": "/icons/icon-192x192.png",
       "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "/icons/icon-512x512.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    },
+    {
+      "src": "/icons/icon-maskable-512x512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    },
+    {
+      "src": "/window.svg",
+      "sizes": "any",
       "type": "image/svg+xml"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Iniciar sesion",
+      "url": "/login",
+      "icons": [{ "src": "/icons/icon-192x192.png", "sizes": "192x192" }]
     }
   ]
 }

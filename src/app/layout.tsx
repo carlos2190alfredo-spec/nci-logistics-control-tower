@@ -8,6 +8,10 @@ export const metadata: Metadata = {
   title: "NCI Logistics Control Tower",
   description: "Plataforma logistica multitenant local de NCI Automation",
   manifest: "/manifest.webmanifest",
+  icons: {
+    icon: "/icons/icon-192x192.png",
+    apple: "/apple-touch-icon.png",
+  },
 };
 
 export default function RootLayout({

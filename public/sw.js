@@ -1,23 +1,20 @@
 /*
  * Service Worker de NCI Logistics Control Tower.
- * Política:
- * - Cachea solo el shell público (/, /login) y assets estáticos.
+ * Politica:
+ * - Cachea solo el shell publico (/, /login, /offline) y assets estaticos.
  * - No cachea /api/*, /platform/*, /t/* ni MinIO (nada autenticado o privado).
  * - No guarda respuestas 401/403; no cachea signed URLs.
  * - Elimina caches viejos al activar.
+ * - Actualizacion controlada: no ejecuta skipWaiting automaticamente.
+ *   El cliente decide cuando activar la nueva version.
  */
-const CACHE_VERSION = "nci-lct-v2";
-const SHELL_URLS = ["/", "/login", "/manifest.webmanifest"];
+const CACHE_VERSION = "nci-lct-v3";
+const SHELL_URLS = ["/", "/login", "/offline", "/manifest.webmanifest"];
 const PRIVATE_PATH_PREFIXES = ["/api/", "/platform", "/t/"];
 const PRIVATE_HOST_PATTERNS = [/localhost:9000/, /minio/];
 
 self.addEventListener("install", (event) => {
-  event.waitUntil(
-    caches
-      .open(CACHE_VERSION)
-      .then((cache) => cache.addAll(SHELL_URLS))
-      .then(() => self.skipWaiting()),
-  );
+  event.waitUntil(caches.open(CACHE_VERSION).then((cache) => cache.addAll(SHELL_URLS)));
 });
 
 self.addEventListener("activate", (event) => {
@@ -28,6 +25,12 @@ self.addEventListener("activate", (event) => {
       await self.clients.claim();
     })(),
   );
+});
+
+self.addEventListener("message", (event) => {
+  if (event.data && event.data.type === "SKIP_WAITING") {
+    self.skipWaiting();
+  }
 });
 
 function isPrivateRequest(url) {
@@ -58,6 +61,10 @@ self.addEventListener("fetch", (event) => {
         return response;
       } catch (error) {
         if (cached) return cached;
+        if (request.mode === "navigate") {
+          const offlinePage = await caches.match("/offline");
+          if (offlinePage) return offlinePage;
+        }
         throw error;
       }
     })(),
