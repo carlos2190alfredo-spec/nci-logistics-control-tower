@@ -1,8 +1,8 @@
 import Link from "next/link";
-import { ArrowLeft, ArrowRight, CalendarClock, CircleAlert, MapPin, PackageCheck, Truck, TriangleAlert } from "lucide-react";
+import { ArrowLeft, ArrowRight, CalendarClock, CircleAlert, MapPin, Truck, TriangleAlert } from "lucide-react";
 import { DriverShell } from "@/components/shell/driver-shell";
-import { SignaturePad } from "@/components/signature-pad";
 import { OfflineProvider } from "@/components/offline/offline-provider";
+import { EvidenceForm } from "@/components/offline/evidence-form";
 import { SyncStatus } from "@/components/offline/sync-status";
 import { PendingActionsPanel } from "@/components/offline/pending-actions-panel";
 import { OfflineTransitionButton } from "@/components/offline/offline-transition-button";
@@ -12,12 +12,8 @@ import {
   Card,
   Collapsible,
   EmptyState,
-  Field,
   StatusBadge,
-  SubmitButton,
-  TextArea,
 } from "@/components/ui";
-import { submitProofAction } from "@/lib/server/actions";
 import { requireTenantRole } from "@/lib/server/auth";
 import { getDb } from "@/lib/server/db";
 import { nextStatuses } from "@/lib/domain/state-machine";
@@ -48,6 +44,7 @@ export default async function DriverPage({ params }: { params: Promise<{ tenantS
   });
 
   const owner = { userId: user.id, tenantId: tenant.id, tenantSlug, driverId: driver?.id ?? null };
+  const ownerKey = `${user.id}::${tenant.id}::${driver?.id ?? "no-driver"}`;
 
   return (
     <OfflineProvider owner={owner}>
@@ -129,33 +126,13 @@ export default async function DriverPage({ params }: { params: Promise<{ tenantS
                   </Collapsible>
 
                   {showEvidence ? (
-                    <div className="mt-4 grid gap-3 rounded-xl border border-border bg-surface-sunken/60 p-3.5">
-                      <p className="flex items-center gap-2 text-sm font-bold text-foreground">
-                        <PackageCheck aria-hidden className="size-4.5 text-success" />
-                        Evidencia de entrega
-                      </p>
-                      {proofRejected ? (
-                        <Alert tone="danger" title="Evidencia rechazada">
-                          {trip.proof?.rejectionReason ?? "Vuelva a capturar la evidencia."}
-                        </Alert>
-                      ) : null}
-                      <form action={submitProofAction.bind(null, tenantSlug)} className="grid gap-3">
-                        <input name="tripId" type="hidden" value={trip.id} />
-                        <Field defaultValue="Receptor Demo" label="Nombre del receptor" name="receiverName" />
-                        <TextArea label="Observacion de entrega" name="observation" />
-                        <Field
-                          accept="image/jpeg,image/png,image/webp,application/pdf"
-                          help="Formatos: JPG, PNG, WEBP o PDF."
-                          label="Fotografia o documento de evidencia"
-                          name="evidenceFile"
-                          type="file"
-                        />
-                        <SignaturePad />
-                        <SubmitButton size="lg" variant="success">
-                          Registrar evidencia y firma
-                        </SubmitButton>
-                      </form>
-                    </div>
+                    <EvidenceForm
+                      tenantSlug={tenantSlug}
+                      tripId={trip.id}
+                      ownerKey={ownerKey}
+                      proofRejected={proofRejected ?? false}
+                      rejectionReason={trip.proof?.rejectionReason}
+                    />
                   ) : null}
 
                   {trip.events.length ? (

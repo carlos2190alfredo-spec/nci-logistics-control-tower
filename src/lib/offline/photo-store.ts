@@ -17,7 +17,14 @@ const MAX_PHOTOS_PER_OWNER = 50;
 const MAX_PHOTO_BYTES = 10 * 1024 * 1024;
 const PHOTO_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 
-export type PhotoStatus = "PENDING" | "UPLOADING" | "UPLOADED" | "FAILED";
+export type PhotoStatus =
+  | "LOCAL_PENDING"
+  | "READY_TO_UPLOAD"
+  | "UPLOADING"
+  | "UPLOADED_QUARANTINE"
+  | "AVAILABLE"
+  | "FAILED"
+  | "CONFLICT";
 
 export type OfflinePhoto = {
   localPhotoId: string;
@@ -27,8 +34,11 @@ export type OfflinePhoto = {
   mimeType: string;
   sizeBytes: number;
   blob: Blob;
+  thumbnailDataUrl?: string;
+  contentHash?: string;
   status: PhotoStatus;
   idempotencyKey: string;
+  fileAttachmentId?: string;
   createdAt: number;
   lastAttemptAt?: number;
   attempts: number;
@@ -111,7 +121,7 @@ export async function listPhotosForOwner(ownerKey: string): Promise<OfflinePhoto
   return withPhotoStore("readonly", async (store) => {
     const index = store.index("owner_status");
     const items: OfflinePhoto[] = [];
-    for (const status of ["PENDING", "UPLOADING", "UPLOADED", "FAILED"] as PhotoStatus[]) {
+    for (const status of ["LOCAL_PENDING", "READY_TO_UPLOAD", "UPLOADING", "UPLOADED_QUARANTINE", "AVAILABLE", "FAILED", "CONFLICT"] as PhotoStatus[]) {
       const range = IDBKeyRange.only([ownerKey, status]);
       await new Promise<void>((resolve, reject) => {
         const cursor = index.openCursor(range);
@@ -131,7 +141,7 @@ export async function listPhotosForOwner(ownerKey: string): Promise<OfflinePhoto
 export async function listPendingPhotos(ownerKey: string): Promise<OfflinePhoto[]> {
   return withPhotoStore("readonly", async (store) => {
     const index = store.index("owner_status");
-    const range = IDBKeyRange.only([ownerKey, "PENDING"]);
+    const range = IDBKeyRange.only([ownerKey, "READY_TO_UPLOAD"]);
     const items: OfflinePhoto[] = [];
     return new Promise((resolve, reject) => {
       const cursor = index.openCursor(range);
@@ -230,4 +240,45 @@ export function stripExifClient(arrayBuffer: ArrayBuffer): ArrayBuffer {
     pos += chunk.length;
   }
   return out.buffer;
+}
+
+export async function listPhotosForTrip(ownerKey: string, tripId: string): Promise<OfflinePhoto[]> {
+  return withPhotoStore("readonly", async (store) => {
+    const index = store.index("owner_trip");
+    const range = IDBKeyRange.only([ownerKey, tripId]);
+    const items: OfflinePhoto[] = [];
+    return new Promise((resolve, reject) => {
+      const cursor = index.openCursor(range);
+      cursor.onsuccess = () => {
+        const c = cursor.result;
+        if (!c) return resolve(items);
+        items.push(c.value as OfflinePhoto);
+        c.continue();
+      };
+      cursor.onerror = () => reject(cursor.error);
+    });
+  });
+}
+
+export async function computeContentHash(buffer: ArrayBuffer): Promise<string> {
+  const hash = await crypto.subtle.digest("SHA-256", buffer);
+  return Array.from(new Uint8Array(hash)).map((b) => b.toString(16).padStart(2, "0")).join("");
+}
+
+export async function createThumbnailDataUrl(blob: Blob, maxSize = 120): Promise<string> {
+  const bitmap = await createImageBitmap(blob);
+  const scale = Math.min(maxSize / bitmap.width, maxSize / bitmap.height, 1);
+  const w = Math.round(bitmap.width * scale);
+  const h = Math.round(bitmap.height * scale);
+  const canvas = new OffscreenCanvas(w, h);
+  const ctx = canvas.getContext("2d")!;
+  ctx.drawImage(bitmap, 0, 0, w, h);
+  bitmap.close();
+  const thumbBlob = await canvas.convertToBlob({ type: "image/jpeg", quality: 0.6 });
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result as string);
+    reader.onerror = () => reject(reader.error);
+    reader.readAsDataURL(thumbBlob);
+  });
 }
