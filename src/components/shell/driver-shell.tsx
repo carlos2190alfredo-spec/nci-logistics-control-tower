@@ -42,8 +42,8 @@ export function DriverShell({
           <ConnectivityIndicator />
           <Link
             className="inline-flex min-h-10 items-center gap-2 rounded-lg border border-nav-border px-3 text-sm font-semibold text-nav-foreground transition-colors hover:bg-nav-surface"
-            href="/account/sessions"
-            title="Sesiones activas"
+            href="/account/security"
+            title="Seguridad de la cuenta"
           >
             <Shield aria-hidden className="size-4" />
           </Link>

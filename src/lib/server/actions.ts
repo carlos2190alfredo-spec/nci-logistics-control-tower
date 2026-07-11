@@ -12,9 +12,11 @@ import {
   requirePlatformRole,
   requireTenantMembership,
   requireTenantRole,
+  requiresMfaForRole,
   signIn,
   signOut,
 } from "@/lib/server/auth";
+import { userHasMfaActive } from "@/lib/server/mfa";
 import { getDb } from "@/lib/server/db";
 import { enforceRateLimit } from "@/lib/server/rate-limit";
 import { logger } from "@/lib/server/logger";
@@ -79,6 +81,14 @@ export async function loginAction(_: unknown, formData: FormData) {
       },
     },
   });
+
+  if (user) {
+    const needsMfa = await requiresMfaForRole(user.id);
+    const hasMfa = await userHasMfaActive(user.id);
+    if (needsMfa && !hasMfa) {
+      redirect("/account/security/mfa/setup");
+    }
+  }
 
   if (user?.platformRole) redirect("/platform");
   const firstTenant = user?.tenantMemberships[0]?.tenant.slug;

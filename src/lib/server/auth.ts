@@ -211,6 +211,12 @@ export async function getCurrentSession() {
 export async function requirePlatformRole(roles: PlatformRole[]) {
   const user = await requireAuthenticatedUser();
   if (!user.platformRole || !roles.includes(user.platformRole)) redirect("/login");
+
+  if (MFA_REQUIRED_PLATFORM_ROLES.includes(user.platformRole)) {
+    const mfaSecret = await getDb().userMfaSecret.findUnique({ where: { userId: user.id } });
+    if (!mfaSecret?.verified) redirect("/account/security/mfa/setup");
+  }
+
   return user;
 }
 
@@ -241,6 +247,12 @@ export async function requireTenantMembership(tenantSlug: string) {
 export async function requireTenantRole(tenantSlug: string, roles: TenantRole[]) {
   const context = await requireTenantMembership(tenantSlug);
   if (!roles.includes(context.membership.role)) redirect(`/t/${tenantSlug}`);
+
+  if (MFA_REQUIRED_TENANT_ROLES.includes(context.membership.role)) {
+    const mfaSecret = await getDb().userMfaSecret.findUnique({ where: { userId: context.user.id } });
+    if (!mfaSecret?.verified) redirect("/account/security/mfa/setup");
+  }
+
   return context;
 }
 

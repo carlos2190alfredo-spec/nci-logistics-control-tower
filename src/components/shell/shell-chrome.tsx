@@ -235,11 +235,11 @@ export function ShellChrome({
               </div>
               <Link
                 className="inline-flex min-h-9 items-center gap-2 rounded-lg border border-border bg-surface px-3 text-sm font-semibold text-foreground shadow-xs transition-colors hover:bg-muted"
-                href="/account/sessions"
-                title="Sesiones activas"
+                href="/account/security"
+                title="Seguridad de la cuenta"
               >
                 <Shield aria-hidden className="size-4" />
-                <span className="hidden sm:inline">Sesiones</span>
+                <span className="hidden sm:inline">Seguridad</span>
               </Link>
               <form action={logoutAction}>
                 <button

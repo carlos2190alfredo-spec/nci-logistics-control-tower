@@ -7,7 +7,7 @@ import { SubmitButton } from "@/components/ui/button";
 import { Field } from "@/components/ui/field";
 
 export function MfaVerifyForm() {
-  const [state, action] = useActionState(verifyMfaLoginAction, { error: "" });
+  const [state, action] = useActionState(verifyMfaLoginAction, null);
   const [useRecovery, setUseRecovery] = useState(false);
 
   return (
@@ -32,7 +32,7 @@ export function MfaVerifyForm() {
           placeholder="000000"
         />
       )}
-      {state.error ? <Alert tone="danger">{state.error}</Alert> : null}
+      {state?.error ? <Alert tone="danger">{state.error}</Alert> : null}
       <SubmitButton size="lg" variant="secondary">
         {useRecovery ? "Usar codigo de recuperacion" : "Verificar"}
       </SubmitButton>

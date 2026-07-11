@@ -36,7 +36,7 @@ const recoverySchema = z.object({
   code: z.string().min(10),
 });
 
-export async function verifyMfaLoginAction(_: unknown, formData: FormData) {
+export async function verifyMfaLoginAction(_: { error: string } | null, formData: FormData) {
   const session = await getPartialSession();
   if (!session) redirect("/login");
   if (session.authLevel !== "PARTIAL_MFA_PENDING") redirect("/login");
@@ -138,7 +138,7 @@ export async function setupMfaAction() {
   return { secret: result.secret, uri: result.uri };
 }
 
-export async function activateMfaAction(_: unknown, formData: FormData) {
+export async function activateMfaAction(_: { error: string } | { recoveryCodes: string[] } | null, formData: FormData) {
   const user = await requireAuthenticatedUser();
 
   const parsed = totpSchema.safeParse({ code: formData.get("code") });
@@ -154,7 +154,7 @@ export async function activateMfaAction(_: unknown, formData: FormData) {
   return { recoveryCodes: result.recoveryCodes };
 }
 
-export async function deactivateMfaAction(_: unknown, formData: FormData) {
+export async function deactivateMfaAction(_: { error: string } | { ok: boolean } | null, formData: FormData) {
   const user = await requireAuthenticatedUser();
 
   const password = formData.get("password");
@@ -178,7 +178,7 @@ export async function deactivateMfaAction(_: unknown, formData: FormData) {
   return { ok: true };
 }
 
-export async function regenerateCodesAction(_: unknown, formData: FormData) {
+export async function regenerateCodesAction(_: { error: string } | { recoveryCodes: string[] } | null, formData: FormData) {
   const user = await requireAuthenticatedUser();
 
   const password = formData.get("password");
