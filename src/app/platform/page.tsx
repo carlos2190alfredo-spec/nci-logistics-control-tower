@@ -1,5 +1,6 @@
 import Link from "next/link";
 import {
+  Activity,
   ArrowRight,
   Building2,
   CheckCircle2,
@@ -64,6 +65,12 @@ export default async function PlatformPage() {
             { label: "Tenants", href: "/platform#tenants", icon: <Building2 /> },
             { label: "Crear tenant", href: "/platform#crear-tenant", icon: <PlusCircle /> },
             { label: "Soporte auditado", href: "/platform#soporte", icon: <LifeBuoy /> },
+          ],
+        },
+        {
+          title: "Operaciones",
+          items: [
+            { label: "Estado del sistema", href: "/platform/system-status", icon: <Activity /> },
           ],
         },
       ]}

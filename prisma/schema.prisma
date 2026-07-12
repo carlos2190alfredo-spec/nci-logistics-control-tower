@@ -831,3 +831,96 @@ model AttachmentReceipt {
   @@unique([tenantId, userId, idempotencyKey])
   @@map("attachment_receipts")
 }
+
+enum CheckStatus {
+  HEALTHY
+  DEGRADED
+  UNHEALTHY
+  UNKNOWN
+}
+
+enum AlertSeverity {
+  P0
+  P1
+  P2
+}
+
+enum AlertStatus {
+  ACTIVE
+  RESOLVED
+  ACKNOWLEDGED
+}
+
+enum JobStatus {
+  RUNNING
+  SUCCESS
+  FAILED
+  PARTIAL
+}
+
+model OperationalCheck {
+  id          String      @id @default(uuid()) @db.Uuid
+  name        String
+  status      CheckStatus
+  severity    String
+  message     String?
+  checkedAt   DateTime    @map("checked_at")
+  durationMs  Int         @map("duration_ms")
+  metadataJson Json?      @map("metadata_json")
+  createdAt   DateTime    @default(now()) @map("created_at")
+
+  @@index([name, checkedAt])
+  @@map("operational_checks")
+}
+
+model OperationalAlert {
+  id              String        @id @default(uuid()) @db.Uuid
+  severity        AlertSeverity
+  source          String
+  title           String
+  description     String
+  status          AlertStatus   @default(ACTIVE)
+  dedupeKey       String        @map("dedupe_key")
+  tenantId        String?       @map("tenant_id") @db.Uuid
+  firstSeenAt     DateTime      @map("first_seen_at")
+  lastSeenAt      DateTime      @map("last_seen_at")
+  resolvedAt      DateTime?     @map("resolved_at")
+  occurrenceCount Int           @default(1) @map("occurrence_count")
+  metadataJson    Json?         @map("metadata_json")
+  createdAt       DateTime      @default(now()) @map("created_at")
+  updatedAt       DateTime      @updatedAt @map("updated_at")
+
+  @@unique([dedupeKey])
+  @@index([status, severity])
+  @@index([source, status])
+  @@map("operational_alerts")
+}
+
+model JobRun {
+  id                String    @id @default(uuid()) @db.Uuid
+  jobName           String    @map("job_name")
+  status            JobStatus
+  startedAt         DateTime  @map("started_at")
+  finishedAt        DateTime? @map("finished_at")
+  durationMs        Int?      @map("duration_ms")
+  triggeredBy       String?   @map("triggered_by")
+  requestId         String?   @map("request_id")
+  summaryJson       Json?     @map("summary_json")
+  errorCode         String?   @map("error_code")
+  safeErrorMessage  String?   @map("safe_error_message")
+  createdAt         DateTime  @default(now()) @map("created_at")
+
+  @@index([jobName, startedAt])
+  @@index([status])
+  @@map("job_runs")
+}
+
+model SystemMetricsSnapshot {
+  id          String   @id @default(uuid()) @db.Uuid
+  capturedAt  DateTime @map("captured_at")
+  metricsJson Json     @map("metrics_json")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  @@index([capturedAt])
+  @@map("system_metrics_snapshots")
+}
