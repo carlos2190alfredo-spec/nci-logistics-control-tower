@@ -86,10 +86,12 @@ export async function POST(request: Request, context: { params: Promise<{ tenant
     results,
   };
 
+  const requestId = request.headers.get("x-request-id") ?? "";
   return NextResponse.json(response, {
     headers: {
       "Cache-Control": "no-store",
       "X-Content-Type-Options": "nosniff",
+      ...(requestId ? { "X-Request-ID": requestId } : {}),
     },
   });
 }
