@@ -134,4 +134,17 @@ Metodología: STRIDE adaptado + análisis por flujo. Escala impacto/probabilidad
 | P2 | Redacción de logs | Implementado |
 | P2 | Service worker: no cachear API autenticada ni MinIO | Implementado |
 | P3 | Update nodemailer 7 → 7.0.11+ patched | Nota: la versión instalada 7.0.11 es la última publicada; no hay parche aún |
-| P3 | Recuperación de contraseña con Mailpit | Diferido |
+| P3 | Recuperación de contraseña con Mailpit | Implementado |
+
+## Observabilidad y monitoreo (2026-07-12)
+
+| Control | Estado |
+|---|---|
+| Request ID por request (X-Request-ID) | Implementado |
+| Logger estructurado con 30+ keys redactadas | Implementado |
+| Health checks (PostgreSQL, MinIO, ClamAV, Mailpit) | Implementado |
+| Alertas con deduplicacion y cooldown | Implementado |
+| Metricas operativas bajo demanda | Implementado |
+| Dashboard de estado restringido por rol + MFA | Implementado |
+| PWA telemetry con allowlist estricta | Implementado |
+| Endpoints publicos no exponen detalles internos | Implementado |

@@ -18,13 +18,13 @@ Evolución de controles por etapa. Cada casilla exige evidencia verificable, no 
 
 ## Antes de piloto externo
 
-- [ ] Recuperación de contraseña con Mailpit/SMTP externo, tokens hasheados, un solo uso, expiración corta.
-- [ ] Rotación de token de sesión post-login (defensa adicional contra fijación).
-- [ ] "Cerrar todas las sesiones" desde la UI del usuario.
+- [x] Recuperación de contraseña con Mailpit/SMTP externo, tokens hasheados, un solo uso, expiración corta.
+- [x] Rotación de token de sesión post-login (defensa adicional contra fijación).
+- [x] "Cerrar todas las sesiones" desde la UI del usuario.
 - [ ] Bloqueo temporal progresivo por usuario (además del rate limit por IP+email).
-- [ ] Cola offline: fotografías como blobs con expiración y límites.
-- [ ] Firma persistida en MinIO además de en DB.
-- [ ] Escaneo AV local (ClamAV) con estado `PENDING_SCAN → CLEAN/REJECTED`.
+- [x] Cola offline: fotografías como blobs con expiración y límites.
+- [x] Firma persistida en MinIO además de en DB.
+- [x] Escaneo AV local (ClamAV) con estado `PENDING_SCAN → CLEAN/REJECTED`.
 - [ ] Pruebas de intrusión asistidas (checklist OWASP ASVS L1 pasado).
 
 ## Antes de nube
@@ -39,7 +39,7 @@ Evolución de controles por etapa. Cada casilla exige evidencia verificable, no 
 
 ## Producción
 
-- [ ] Monitoreo de errores + alertas.
+- [x] Monitoreo de errores + alertas (health checks, metricas, alertas con deduplicacion y cooldown).
 - [ ] SLO/SLA definidos.
 - [ ] Playbook de incidentes ejecutado en simulacro.
 - [ ] Revisión de dependencias mensual con `pnpm audit`.

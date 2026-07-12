@@ -1,110 +1,113 @@
 # HANDOFF LATEST
 
 Fecha: 2026-07-12
-Agente: Claude Opus 4.6 (Backups cifrados + DR drill)
+Agente: Claude Opus 4.6 (Observabilidad y monitoreo operativo)
 
 ## Objetivo de la sesion
 
-1. Crear informe de estado del proyecto (`docs/PROJECT_STATUS_REPORT.md`)
-2. Implementar backups cifrados con restauracion comprobada para PostgreSQL, MinIO y configuracion
+Implementar observabilidad local, health checks, alertas, metricas y dashboard de estado del sistema para NCI Logistics Control Tower.
 
 ## Fases completadas
 
 | Fase | Commit | Descripcion |
 | --- | --- | --- |
-| Status report | 4a40d33 | Informe de estado del proyecto (20 areas, baseline completo) |
-| Backups cifrados | (actual) | Sistema de backup AES-256-GCM + DR drill con evidencia de restore |
+| Auditoria | 15a1049 | Auditoria de 20 gaps de observabilidad (OBS-001 a OBS-020) |
+| Request IDs + logging | 39c7e4e | Middleware X-Request-ID, logger estructurado con 30+ keys redactadas |
+| Health + metricas + alertas | dc0423c | 5 health checks, metricas, alertas con deduplicacion, job runner, PWA telemetry, dashboard, migration |
+| Scripts + E2E + security | aab0028 | 6 ops scripts, 20 E2E tests, 12 security checks nuevos |
+| Documentacion | (actual) | ADR-021/022, 4 docs arquitectura, actualizaciones docs existentes |
 
 ## Arquitectura implementada
 
-### Backup cifrado (ADR-020)
+### Observabilidad (ADR-021)
 
-- `scripts/backup/crypto.ts`: AES-256-GCM con magic header `NCIBAK01`, IV aleatorio, AuthTag. SHA-256 checksums.
-- Formato: `[NCIBAK01][IV 16B][ciphertext][AuthTag 16B]`
-- Clave: `BACKUP_ENCRYPTION_KEY` (64 hex chars = 32 bytes)
-- Dumps sin cifrar eliminados automaticamente tras cifrar
+- **Request context**: `sanitizeRequestId()`, `getRequestId()`, `createRequestContext()`, `safeClientIp()`, `safeUserAgent()`, `safeHeadersSummary()` — en `src/lib/observability/request-context.ts`
+- **Logger**: 8 niveles, salida JSON, 30+ keys sensibles redactadas, depth limit 4, array limit 10, string limit 240 — en `src/lib/observability/logger.ts`
+- **Errors**: `AppError` con 7 categorias, `toSafeError()`, `safeSerializeError()` — en `src/lib/observability/errors.ts`
+- **Middleware**: Next.js middleware genera/valida X-Request-ID — en `src/middleware.ts`
 
-### PostgreSQL backup/restore
-- `pg_dump` via Docker → SHA-256 → AES-256-GCM → manifiesto
-- Restore a DB aislada `nci_logistics_restore_test`
-- Verificacion automatica de tablas criticas (users, tenants, sessions, trips, service_requests, audit_logs)
+### Health y metricas (ADR-022)
 
-### MinIO backup/restore
-- Lista y descarga todos los objetos → tar → SHA-256 → AES-256-GCM → manifiesto
-- Restore a bucket aislado `nci-logistics-restore-test`
-- Verificacion de conteo de objetos
+- **Health checks**: PostgreSQL, Prisma, MinIO, ClamAV, Mailpit — en `src/lib/observability/health.ts`
+- **Metricas**: 19 queries paralelas — en `src/lib/observability/metrics.ts`
+- **Alertas**: dedupeKey, cooldown, Mailpit — en `src/lib/observability/alerts.ts`
+- **Job runner**: `runObservedJob()` — en `src/lib/observability/job-runner.ts`
 
-### Config backup
-- Bundle JSON de 8 archivos de configuracion
-- Excluye `.env.local`, `.env.production`, archivos con "credentials"/"secret"
+### Endpoints
 
-### Manifiesto
-- Version, timestamp, hostname, entradas con checksums dobles (original + cifrado), tamanos, metadatos
+| Endpoint | Acceso | Archivo |
+| --- | --- | --- |
+| GET /api/internal/health | Publico | `src/app/api/internal/health/route.ts` |
+| GET /api/internal/liveness | Publico | `src/app/api/internal/liveness/route.ts` |
+| GET /api/internal/readiness | Plataforma | `src/app/api/internal/readiness/route.ts` |
+| GET /api/internal/metrics | Plataforma | `src/app/api/internal/metrics/route.ts` |
+| POST /api/t/:slug/driver/pwa-telemetry | DRIVER | `src/app/api/t/[tenantSlug]/driver/pwa-telemetry/route.ts` |
 
-### DR Drill
-- Ciclo completo: backup → verify → restore PostgreSQL → restore MinIO → cleanup
-- Reporte JSON automatico
-- Ultimo drill: PASS (37 tablas, 68 objetos, 3.0 MB, 7.4s)
+### Dashboard
+
+- `/platform/system-status` — `src/app/platform/system-status/page.tsx`
+- Server-side rendering, 14 secciones, role-gated
 
 ## Archivos nuevos/modificados clave
 
 | Archivo | Descripcion |
 | --- | --- |
-| `docs/PROJECT_STATUS_REPORT.md` | Informe de estado completo del proyecto |
-| `scripts/backup/crypto.ts` | Cifrado/descifrado AES-256-GCM + checksums SHA-256 |
-| `scripts/backup/manifest.ts` | Sistema de manifiestos con metadatos |
-| `scripts/backup/postgres-backup.ts` | pg_dump + cifrado + manifiesto |
-| `scripts/backup/postgres-restore.ts` | Descifrado + checksum + restore aislado |
-| `scripts/backup/minio-backup.ts` | Descarga objetos + tar + cifrado |
-| `scripts/backup/minio-restore.ts` | Descifrado + checksum + restore aislado |
-| `scripts/backup/config-backup.ts` | Bundle JSON de configuracion + cifrado |
-| `scripts/backup/verify-backup.ts` | Verificacion de integridad sin restaurar |
-| `scripts/backup/backup-all.ts` | Punto de entrada para backups selectivos |
-| `scripts/backup/disaster-recovery-drill.ts` | Drill completo con reporte |
-| `scripts/backup/backup.test.ts` | 21 tests unitarios + invariantes de seguridad |
-| `scripts/security-check.ts` | 5 verificaciones de backup nuevas (37 total) |
-| `vitest.config.ts` | Incluye `scripts/**/*.test.ts` |
-| `package.json` | 6 scripts nuevos (backup:all, backup:postgres, backup:minio, backup:config, backup:verify, backup:drill) |
-| `.gitignore` | Excluye `/backups/` |
-| `docs/decisions/ADR-020-encrypted-backups-and-restore-drills.md` | Decision de backups cifrados |
-| `docs/BACKUP_ARCHITECTURE.md` | Arquitectura del sistema de backups |
-| `docs/BACKUP_RETENTION_POLICY.md` | Politica de retencion |
-| `docs/DISASTER_RECOVERY_RUNBOOK.md` | Runbook de recuperacion ante desastres |
-| `docs/BACKUP_RESTORE_DRILL_LATEST.md` | Evidencia del ultimo drill |
-
-## Variables de entorno nuevas
-
-| Variable | Descripcion | Ejemplo |
-| --- | --- | --- |
-| `BACKUP_ENCRYPTION_KEY` | Clave AES-256-GCM para cifrar backups (64 chars hex = 32 bytes) | `openssl rand -hex 32` |
+| `src/lib/observability/request-context.ts` | Contexto de request y sanitizacion |
+| `src/lib/observability/logger.ts` | Logger estructurado con redaccion |
+| `src/lib/observability/errors.ts` | AppError y serializacion segura |
+| `src/lib/observability/health.ts` | Health checks de 5 servicios |
+| `src/lib/observability/metrics.ts` | Recoleccion de metricas |
+| `src/lib/observability/alerts.ts` | Sistema de alertas con deduplicacion |
+| `src/lib/observability/job-runner.ts` | Wrapper de jobs observados |
+| `src/lib/observability/index.ts` | Re-exports |
+| `src/middleware.ts` | Inyeccion de X-Request-ID |
+| `src/app/platform/system-status/page.tsx` | Dashboard de estado |
+| `src/app/api/internal/*/route.ts` | 4 endpoints internos |
+| `src/app/api/t/[tenantSlug]/driver/pwa-telemetry/route.ts` | Telemetria PWA |
+| `prisma/schema.prisma` | 4 modelos + 4 enums nuevos |
+| `scripts/ops-*.ts` | 6 scripts operativos |
+| `scripts/security-check.ts` | 12 verificaciones nuevas |
+| `tests/e2e/system-status.spec.ts` | 10 E2E tests de dashboard |
+| `tests/e2e/observability-security.spec.ts` | 10 E2E tests de seguridad |
 
 ## Conteos de verificacion
 
 | Tipo | Antes | Despues |
 | --- | --- | --- |
-| Unit tests (Vitest) | 83 | 104 |
-| E2E tests (Playwright) | 46 | 46 |
-| Security checks | 32 | 37 |
+| Unit tests (Vitest) | 104 | 142 |
+| E2E tests (Playwright) | 46 | 66 |
+| Security checks | 37 | 48 |
 
 ## Scripts nuevos en package.json
 
 | Script | Proposito |
 | --- | --- |
-| `pnpm backup:all` | Backup completo (PostgreSQL + MinIO + config) |
-| `pnpm backup:postgres` | Solo PostgreSQL |
-| `pnpm backup:minio` | Solo MinIO |
-| `pnpm backup:config` | Solo configuracion |
-| `pnpm backup:verify` | Verificar integridad de un backup |
-| `pnpm backup:drill` | DR drill completo |
+| `pnpm ops:health` | Chequeo rapido de salud |
+| `pnpm ops:readiness` | Chequeo completo con remediacion |
+| `pnpm ops:metrics` | Dump de metricas en JSON |
+| `pnpm ops:alerts:test` | Prueba de alertas con Mailpit |
+| `pnpm ops:jobs:list` | Ultimos 25 jobs |
+| `pnpm ops:status-report` | Genera OPERABILITY_STATUS_LATEST.md |
+
+## Documentacion nueva
+
+| Documento | Proposito |
+| --- | --- |
+| `docs/decisions/ADR-021-observability-and-structured-logging.md` | Observabilidad y logging |
+| `docs/decisions/ADR-022-alerting-and-operational-monitoring.md` | Alertas y monitoreo |
+| `docs/OBSERVABILITY_ARCHITECTURE.md` | Arquitectura completa |
+| `docs/HEALTH_CHECKS.md` | Detalle de cada health check |
+| `docs/ALERTING_POLICY.md` | Politica de alertas |
+| `docs/OPERATIONAL_RUNBOOK.md` | Runbook operativo |
+| `docs/OPERABILITY_AUDIT.md` | Auditoria de 20 gaps |
 
 ## Backlog / riesgos residuales
 
-- Automatizacion de backups periodicos (cron) — candidato para fase de piloto
-- WAL streaming para point-in-time recovery — candidato para produccion
-- Backup a almacenamiento externo (S3 remoto, NFS) — candidato para produccion
-- Rotacion automatica de backups — manual en fase actual
-- Perdida de `BACKUP_ENCRYPTION_KEY` impide restaurar
+- Integracion con OpenTelemetry/Prometheus — candidato para produccion
+- Alertas via canales adicionales (Slack, webhook) — candidato para piloto
+- Metricas historicas con retention policy — candidato para produccion
+- Dashboard con refresh automatico (actualmente es page reload) — mejora futura
 
 ## Dependencias nuevas
 
-Ninguna. Los scripts usan solo modulos de Node.js (`crypto`, `child_process`, `fs`, `stream`) y la dependencia existente `@aws-sdk/client-s3`.
+Ninguna. Todo usa modulos existentes (Next.js, Prisma, nodemailer, node:net, node:crypto).

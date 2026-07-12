@@ -17,12 +17,11 @@ El producto se encuentra en estado de **prototipo funcional avanzado** con flujo
 - Aislamiento multitenant server-side verificado con pruebas negativas
 - Seguridad enterprise: Argon2id, sesiones opacas, MFA TOTP, rate limiting, ClamAV, headers CSP
 - PWA instalable con soporte offline completo para conductores
-- 83 tests unitarios, 46 E2E, 32 verificaciones de seguridad estaticas — todos en verde
+- Observabilidad local: health checks, metricas, alertas, logging estructurado, dashboard de estado
+- 142 tests unitarios, 66 E2E, 48 verificaciones de seguridad estaticas — todos en verde
 
 **Brechas criticas para produccion:**
-- Sin backups cifrados ni plan de recuperacion ante desastres
 - Sin TLS/HTTPS (prototipo local)
-- Sin monitoreo, alertas ni observabilidad
 - Sin cobro real de suscripciones
 - Sin integraciones externas (WhatsApp, email productivo, telemetria)
 

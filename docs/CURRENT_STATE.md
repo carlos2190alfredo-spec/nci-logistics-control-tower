@@ -4,19 +4,24 @@ Fecha: 2026-07-12
 
 ## Fase actual
 
-Backups cifrados con restauracion verificada completados. Sistema de backup AES-256-GCM para PostgreSQL, MinIO y configuracion con DR drill que prueba el ciclo completo de backup → verificacion → restauracion → limpieza.
+Observabilidad local, health checks, alertas y dashboard de estado del sistema implementados. Request IDs, logger estructurado con redaccion de secretos, health checks para 5 servicios, metricas operativas, sistema de alertas con deduplicacion, y dashboard de estado accesible solo para roles de plataforma con MFA.
 
-## Implementado (fase actual — Backups cifrados)
+## Implementado (fase actual — Observabilidad)
 
-- **Modulo criptografico** (`scripts/backup/crypto.ts`): AES-256-GCM con magic header `NCIBAK01`, IV aleatorio, AuthTag. SHA-256 para checksums. Dumps sin cifrar eliminados automaticamente.
-- **Backup PostgreSQL**: `pg_dump` via Docker, SHA-256, cifrado, manifiesto. Restore a DB aislada `nci_logistics_restore_test` con verificacion de tablas criticas.
-- **Backup MinIO**: descarga de todos los objetos, tar, SHA-256, cifrado. Restore a bucket aislado `nci-logistics-restore-test` con verificacion de conteo.
-- **Backup configuracion**: bundle JSON (docker-compose, package.json, schema, tsconfig, next.config, playwright.config, .env.example). Excluye `.env.local` y archivos con secretos.
-- **Sistema de manifiestos**: version, timestamp, hostname, entradas con checksums originales y cifrados, tamanos.
-- **Verificacion de integridad**: `pnpm backup:verify` valida checksums sin restaurar.
-- **DR drill**: `pnpm backup:drill` ejecuta backup + verify + restore + cleanup completo. Ultimo drill: PASS (37 tablas, 68 objetos, 3.0 MB cifrados, 7.4s).
-- **Tests**: 21 tests unitarios nuevos (104 total). 5 verificaciones de seguridad nuevas (37 total).
-- **Documentacion**: ADR-020, BACKUP_ARCHITECTURE.md, BACKUP_RETENTION_POLICY.md, DISASTER_RECOVERY_RUNBOOK.md, BACKUP_RESTORE_DRILL_LATEST.md.
+- **Request ID**: Middleware de Next.js genera/valida UUID por request, propaga en headers X-Request-ID.
+- **Logger estructurado**: 8 niveles (debug, info, warn, error, security, audit, job, metric). Salida JSON con contexto. 30+ claves sensibles redactadas automaticamente.
+- **Error handling**: `AppError` con categorias y codigos seguros. `error.tsx` muestra digest sin detalles internos.
+- **Health checks**: PostgreSQL (raw SQL), Prisma, MinIO (HTTP), ClamAV (TCP PING/PONG), Mailpit (HTTP). Timeout 5s por check.
+- **Metricas**: 19 queries paralelas (tenants, usuarios, sesiones, MFA, viajes, audits, archivos, offline, backups, alertas).
+- **Alertas**: Deduplicacion con `dedupeKey` unico, cooldown P0/P1/P2, notificacion via Mailpit/SMTP.
+- **Job runner**: `runObservedJob()` persiste inicio/fin/duracion/estado en tabla `JobRun`.
+- **PWA telemetry**: Endpoint para conductores con allowlist estricta (9 keys), rejeccion de base64/data URLs, rate limit 10/min.
+- **Dashboard**: `/platform/system-status` — 14 secciones, solo PLATFORM_SUPER_ADMIN/SUPPORT con MFA.
+- **API endpoints**: health (publico), liveness (publico), readiness (autenticado), metrics (autenticado).
+- **Scripts operativos**: 6 nuevos (`ops:health`, `ops:readiness`, `ops:metrics`, `ops:alerts:test`, `ops:jobs:list`, `ops:status-report`).
+- **Prisma migration**: 4 tablas nuevas (OperationalCheck, OperationalAlert, JobRun, SystemMetricsSnapshot), 4 enums nuevos.
+- **Tests**: 38 unit tests de observabilidad, 20 E2E tests nuevos, 48 security checks (12 nuevos).
+- **Documentacion**: ADR-021, ADR-022, OBSERVABILITY_ARCHITECTURE, HEALTH_CHECKS, ALERTING_POLICY, OPERATIONAL_RUNBOOK.
 
 ## Base preservada
 
@@ -32,7 +37,8 @@ Backups cifrados con restauracion verificada completados. Sistema de backup AES-
 - Aislamiento multitenant server-side (guards y filtros por `tenantId`).
 - Recuperacion de contrasena con Mailpit.
 - Gestion de sesiones activas.
-- 46 E2E tests.
+- Backups cifrados AES-256-GCM con DR drill verificado.
+- 66 E2E tests, 48 security checks.
 
 ## Riesgos residuales documentados
 

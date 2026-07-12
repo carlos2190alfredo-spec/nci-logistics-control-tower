@@ -82,3 +82,23 @@
 - 5 comprobaciones estáticas nuevas en pnpm security:check (15/15).
 - 28/28 unit tests + 23/23 E2E (incluye 4 SEC-AUTH nuevos).
 - ADR-009 (rotación/revocación) + ADR-010 (recuperación).
+
+## 2026-07-12 Observabilidad y monitoreo operativo
+
+- Auditoria de 20 gaps de observabilidad (OBS-001 a OBS-020) documentados en OPERABILITY_AUDIT.md.
+- Request ID por request via middleware de Next.js (X-Request-ID).
+- Logger estructurado con 8 niveles, salida JSON, 30+ claves sensibles redactadas automaticamente.
+- AppError con categorias y codigos seguros. error.tsx muestra digest sin detalles internos.
+- Health checks para PostgreSQL, Prisma, MinIO, ClamAV, Mailpit con timeout de 5s.
+- Metricas operativas: 19 queries paralelas (tenants, usuarios, sesiones, MFA, viajes, archivos, offline, backups, alertas).
+- Alertas con deduplicacion (dedupeKey), cooldown por severidad, notificacion via Mailpit.
+- Job runner con runObservedJob() que persiste en tabla JobRun.
+- PWA telemetry endpoint con allowlist estricta, rechazo de base64/data URLs, rate limit 10/min.
+- Dashboard de estado en /platform/system-status (14 secciones, role-gated + MFA).
+- 4 API endpoints internos (health, liveness, readiness, metrics).
+- Prisma migration con 4 tablas y 4 enums nuevos.
+- 6 scripts operativos (ops:health, ops:readiness, ops:metrics, ops:alerts:test, ops:jobs:list, ops:status-report).
+- 12 security checks nuevos (48 total).
+- 20 E2E tests nuevos (66 total).
+- 38 unit tests de observabilidad.
+- Documentacion: ADR-021, ADR-022, OBSERVABILITY_ARCHITECTURE, HEALTH_CHECKS, ALERTING_POLICY, OPERATIONAL_RUNBOOK.

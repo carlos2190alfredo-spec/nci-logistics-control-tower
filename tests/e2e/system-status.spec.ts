@@ -51,9 +51,9 @@ test.beforeAll(async () => {
       update: { active: true, passwordHash: await hashPassword(driverPass) },
       create: { email: driverEmail, name: "Obs Driver", passwordHash: await hashPassword(driverPass) },
     });
-    await db.membership.upsert({
-      where: { userId_tenantId: { userId: driverUser.id, tenantId: tenant.id } },
-      update: { role: "DRIVER" },
+    await db.tenantMembership.upsert({
+      where: { tenantId_userId_role: { tenantId: tenant.id, userId: driverUser.id, role: "DRIVER" } },
+      update: {},
       create: { userId: driverUser.id, tenantId: tenant.id, role: "DRIVER" },
     });
   }
@@ -64,7 +64,7 @@ test.afterAll(async () => {
   await db.userMfaSecret.deleteMany({ where: { user: { email: adminEmail } } });
   const tenant = await db.tenant.findFirst();
   if (tenant) {
-    await db.membership.deleteMany({ where: { user: { email: driverEmail }, tenantId: tenant.id } });
+    await db.tenantMembership.deleteMany({ where: { user: { email: driverEmail }, tenantId: tenant.id } });
   }
   await db.user.deleteMany({ where: { email: { in: [adminEmail, driverEmail] } } });
   await db.$disconnect();
