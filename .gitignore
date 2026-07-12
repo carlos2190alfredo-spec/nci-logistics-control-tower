@@ -43,3 +43,6 @@ yarn-error.log*
 next-env.d.ts
 
 /src/generated/prisma
+
+# backups (encrypted dumps, drill outputs — never commit real data)
+/backups/

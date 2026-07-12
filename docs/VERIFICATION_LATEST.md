@@ -1,6 +1,6 @@
 # VERIFICATION LATEST
 
-Fecha: 2026-07-11 (MFA TOTP + enforcement)
+Fecha: 2026-07-12 (Backups cifrados + DR drill)
 
 | Comando / Verificacion | Resultado |
 | --- | --- |
@@ -8,153 +8,90 @@ Fecha: 2026-07-11 (MFA TOTP + enforcement)
 | `git remote -v` | Sin remotes |
 | `docker compose ps` | PostgreSQL 5433 / MinIO / Mailpit / ClamAV 3310 saludables |
 | `pnpm typecheck` | Paso |
-| `pnpm test` (Vitest) | **Paso: 12 archivos, 83 tests** (53 previos + 30 nuevos MFA) |
+| `pnpm test` (Vitest) | **Paso: 13 archivos, 104 tests** (83 previos + 21 nuevos backup) |
 | `pnpm build` | Paso |
 | `pnpm test:e2e` | **Paso: 46/46** (sin cambios E2E en esta fase) |
-| `pnpm security:check` | Paso: 32/32 verificaciones estaticas (25 previas + 7 nuevas MFA) |
+| `pnpm security:check` | Paso: 37/37 verificaciones estaticas (32 previas + 5 nuevas backup) |
 | `pnpm files:health` | PASS (ClamAV + PostgreSQL + MinIO) |
+| `pnpm backup:drill` | **PASS: 7/7 pasos** (backup + verify + restore PostgreSQL + restore MinIO) |
 
-## Pruebas unitarias MFA (30 nuevas)
+## DR Drill (evidencia real)
 
-### TOTP secret generation (2)
-- Genera string base32 de 32 caracteres
-- Genera secretos unicos
+| Paso | Resultado | Duracion | Detalle |
+| --- | --- | --- | --- |
+| Backup PostgreSQL | PASS | 1.2s | 2205.8 KB dump, SHA-256, AES-256-GCM |
+| Backup MinIO | PASS | 0.7s | 68 objetos, 617.5 KB tar, cifrado |
+| Backup config | PASS | 0.0s | 8 archivos, 272.6 KB, cifrado |
+| Save manifest | PASS | 0.0s | 3 entradas |
+| Verify integrity | PASS | 0.0s | 3 archivos, checksums verificados |
+| Restore PostgreSQL | PASS | 4.4s | 37 tablas, DB aislada verificada |
+| Restore MinIO | PASS | 1.0s | 68 objetos, bucket aislado verificado |
 
-### TOTP URI generation (1)
-- Produce URI otpauth con parametros correctos
+### Tablas restauradas y verificadas
 
-### TOTP code verification (3)
-- Valida codigo generado por el mismo secreto
-- Rechaza codigo invalido
-- Rechaza codigos no numericos
+| Tabla | Filas |
+| --- | --- |
+| users | 34 |
+| tenants | 2 |
+| sessions | 1002 |
+| trips | 182 |
+| service_requests | 64 |
+| audit_logs | 2090 |
 
-### Recovery codes (6)
-- Genera exactamente 10 codigos
-- Cada codigo tiene formato dash-separated correcto
-- Todos los codigos son unicos
-- Hashing es determinista
-- Hashing normaliza guiones y mayusculas
-- Diferentes codigos producen diferentes hashes
+## Pruebas unitarias backup (21 nuevas)
 
-### MFA source security invariants (7)
-- Cifrado AES-256-GCM, no texto plano
-- Recovery codes hasheados con SHA-256
-- Usa randomBytes para generacion criptografica
-- Challenges tienen TTL y max attempts
-- Recovery codes marcados como usados en consumo
-- Desactivacion elimina secretos, codigos y challenges en transaccion
-- Audita activacion, desactivacion y uso de codigos
+### Backup crypto (7)
+- Cifra y descifra archivo correctamente
+- Archivo cifrado empieza con magic header NCIBAK01
+- Rechaza archivo cifrado manipulado (tampered)
+- Rechaza archivo sin magic header valido
+- SHA-256 de archivo produce hash consistente
+- SHA-256 de buffer coincide con SHA-256 de archivo
+- Rechaza BACKUP_ENCRYPTION_KEY faltante
 
-### MFA auth integration security invariants (6)
-- Crea sesiones PARTIAL_MFA_PENDING para usuarios MFA
-- Sesiones parciales tienen TTL corto (15 min)
-- requireAuthenticatedUser redirige sesiones parciales a MFA verify
-- Enforcement para platform roles privilegiados
-- Enforcement para tenant roles privilegiados
-- Promueve sesion a MFA_VERIFIED con TTL de 7 dias
+### Backup manifest (5)
+- Crea manifiesto con estructura correcta
+- Agrega entradas y actualiza totales
+- Guarda y carga manifiesto
+- Rechaza manifiesto sin entradas
+- Rechaza manifiesto con version incorrecta
 
-### MFA actions security invariants (5)
-- Rate limit en verificacion MFA (10/15min)
-- Desactivacion requiere password Y TOTP
-- Regeneracion requiere password Y TOTP
-- Verify page tiene noindex y force-dynamic
-- Login MFA audita exito y fallo
+### Format size (3)
+- Formatea bytes, KB y MB correctamente
 
-## Pruebas E2E desglosadas (46 total)
+### Backup security invariants (6)
+- Modulo crypto usa AES-256-GCM
+- Modulo crypto usa SHA-256 para checksums
+- Backup de config excluye archivos .env
+- Dumps sin cifrar se eliminan despues de cifrar
+- Restore valida checksums antes de restaurar
+- gitignore excluye directorio de backups
+- Drill restaura a DB aislada, no produccion
+- Drill restaura a bucket aislado, no produccion
 
-### FILE-SEC (10)
-- `FILE-SEC-E2E-001` EICAR detectado como INFECTED por ClamAV
-- `FILE-SEC-E2E-002` archivo limpio pasa escaneo ClamAV
-- `FILE-SEC-E2E-003` archivo en QUARANTINE no se puede descargar (403)
-- `FILE-SEC-E2E-004` aislamiento de tenant impide acceso cross-tenant
-- `FILE-SEC-E2E-005` archivo PENDING_SCAN bloqueado (403)
-- `FILE-SEC-E2E-006` archivo INFECTED bloqueado (403)
-- `FILE-SEC-E2E-007` solo archivos AVAILABLE se sirven (303 redirect)
-- `FILE-SEC-E2E-008` FileAttachment registra eventos de escaneo
-- `FILE-SEC-E2E-009` pipeline crea FileAttachment para evidence upload
-- `FILE-SEC-E2E-010` documento legado de usuario sin FileAttachment bloqueado (403)
+## Pruebas unitarias previas (83)
 
-### E2E-FLOW (4)
-- `E2E-FLOW-001` flujo completo request → POD closure
-- `E2E-FLOW-002` usuario TransLogistica no accede POD de Panatruck
-- `E2E-FLOW-003` otro customer de Panatruck no accede POD creado
-- `E2E-FLOW-004` conductor no asignado no ve el viaje
+### MFA (30)
+- TOTP generation/verification, recovery codes, security invariants
 
-### SEC-AUTH (4)
-- `SEC-AUTH-001` login revoca la sesion previa del mismo navegador
-- `SEC-AUTH-002` recuperar contrasena responde igual exista o no el correo
-- `SEC-AUTH-003` reset con token valido invalida todas las sesiones
-- `SEC-AUTH-004` gestion de sesiones lista y permite cerrar todas las demas
+### Storage, PDF, EXIF, antivirus, file pipeline (42)
+- Magic bytes, MIME, POD PDF, EXIF stripping, ClamAV, cuarentena
 
-### PWA-PHOTO (13)
-- Manifest servido con content-type correcto
-- SW registrado y activo
-- Offline fallback page accesible
-- Photo capture y store en IndexedDB
-- EXIF stripping de JPEG
-- Attachment upload idempotente
-- Photo sync engine upload
-- Duplicate upload retorna DUPLICATE
-- Status check de attachment
-- Origin validation en attachment endpoint
-- Rate limit en attachment endpoint
-- Cross-tenant isolation en attachment
-- Unauthorized driver rejection
+### Auth, sessions, offline, domain (11)
+- Password reset, session management, offline protocol, GPS, state machine
 
-### OFFLINE-E2E (7)
-- `OFFLINE-E2E-001` sincroniza transicion y es idempotente
-- `OFFLINE-E2E-002` acepta orden por localSequence
-- `OFFLINE-E2E-004` rechaza payload alterado con misma idempotencyKey
-- `OFFLINE-E2E-005` rechaza Origin no permitido
-- `OFFLINE-E2E-006` rechaza payload invalido
-- `OFFLINE-E2E-007` conductor no puede sincronizar viaje de otro conductor
-- `OFFLINE-E2E-008` usuario de otro tenant no accede al sync
+## Pruebas E2E (46 total)
 
-### Security headers (2)
-- home responde con CSP y X-Content-Type-Options
-- sync exige Origin permitido
+### FILE-SEC (10), E2E-FLOW (4), SEC-AUTH (4), PWA-PHOTO (13), OFFLINE-E2E (7), Security headers (2), Auth isolation (5), Login (1)
+(Sin cambios en esta fase)
 
-### Auth isolation (5)
-- platform user can access platform dashboard and logout
-- tenant users are isolated by tenant membership
-- customer users are routed to their portal and cannot cross tenants
-- driver sees assigned trips only
-- operations dashboard, customer portal, and navigation load
+## Verificaciones de seguridad (37)
 
-### Login (1)
-- home page exposes local product and login
-
-## Verificaciones de seguridad (32)
-
-1. sin queryRawUnsafe / $executeRawUnsafe
-2. sin dangerouslySetInnerHTML (excepto QR SVG controlado)
-3. sin .env versionados
-4. sin secretos aparentes en codigo versionado
-5. next.config.ts define headers de seguridad
-6. cookies de sesion configuran httpOnly y sameSite
-7. SW no cachea rutas privadas
-8. endpoints mutables validan Origin
-9. storage valida magic bytes
-10. auth revoca sesion previa en login
-11. auth expone revokeAllUserSessions
-12. password-reset persiste solo hash del token
-13. recuperar/[token] tiene noindex y no-cache
-14. actions de reset con rate limit por email e IP
-15. file pipeline usa quarantine prefix
-16. file pipeline fails closed when AV unavailable
-17. antivirus provider strips EXIF from JPEG
-18. submitProofAction uses quarantine pipeline
-19. shells link to /account/security
-20. document download gates on FileAttachment by objectKey
-21. proof download gates on FileAttachment status
-22. POD filters evidence by AVAILABLE FileAttachment
-23. approveProofAction includes fileAttachments in query
-24. ClamAV port bound to localhost only
-25. MFA secrets encrypted with AES-256-GCM, not plaintext
-26. MFA recovery codes hashed with SHA-256
-27. MFA deactivation requires password + TOTP
-28. MFA verify rate limited (10/15min)
-29. partial MFA sessions have short TTL
-30. privileged roles require MFA
-31. MFA verify page has noindex
-32. TS: sin errores de tipos
+1-24: Controles base (SQL injection, XSS, .env, secretos, headers, cookies, SW, Origin, magic bytes, session rotation, password reset, file pipeline, ClamAV)
+25-31: MFA (cifrado AES-256-GCM, recovery SHA-256, deactivation segura, rate limit, TTL parcial, enforcement roles, noindex)
+32: TypeScript sin errores
+33: Backup crypto usa AES-256-GCM
+34: Backup elimina dumps sin cifrar despues de cifrar
+35: Backup restore valida checksums antes de restaurar
+36: Backup restore usa DB aislada, no produccion
+37: Directorio backups excluido de git

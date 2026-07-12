@@ -299,6 +299,48 @@ const checks: Check[] = [
     },
   },
   {
+    name: "backup crypto uses AES-256-GCM",
+    run: () => {
+      const source = readFileSync("scripts/backup/crypto.ts", "utf8");
+      const ok = source.includes("aes-256-gcm") && source.includes("createCipheriv") && source.includes("getAuthTag");
+      return { ok, detail: ok ? "" : "backup/crypto.ts no usa AES-256-GCM." };
+    },
+  },
+  {
+    name: "backup deletes unencrypted dumps after encryption",
+    run: () => {
+      const pg = readFileSync("scripts/backup/postgres-backup.ts", "utf8");
+      const minio = readFileSync("scripts/backup/minio-backup.ts", "utf8");
+      const config = readFileSync("scripts/backup/config-backup.ts", "utf8");
+      const ok = pg.includes("unlink(dumpFile)") && minio.includes("unlink(tarFile)") && config.includes("unlink(jsonFile)");
+      return { ok, detail: ok ? "" : "backup scripts no eliminan dumps sin cifrar." };
+    },
+  },
+  {
+    name: "backup restore validates checksums before restoring",
+    run: () => {
+      const pg = readFileSync("scripts/backup/postgres-restore.ts", "utf8");
+      const ok = pg.includes("checksum mismatch") && pg.includes("sha256File");
+      return { ok, detail: ok ? "" : "postgres-restore no valida checksums." };
+    },
+  },
+  {
+    name: "backup restore uses isolated database, not production",
+    run: () => {
+      const pg = readFileSync("scripts/backup/postgres-restore.ts", "utf8");
+      const ok = pg.includes("nci_logistics_restore_test") && !pg.includes('targetDb || "nci_logistics"');
+      return { ok, detail: ok ? "" : "restore apunta a DB de produccion." };
+    },
+  },
+  {
+    name: "backups directory excluded from git",
+    run: () => {
+      const gitignore = readFileSync(".gitignore", "utf8");
+      const ok = gitignore.includes("/backups/");
+      return { ok, detail: ok ? "" : ".gitignore no excluye /backups/." };
+    },
+  },
+  {
     name: "TS: sin errores de tipos",
     run: () => {
       try {

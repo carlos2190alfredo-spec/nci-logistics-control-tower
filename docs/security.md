@@ -57,10 +57,20 @@ pnpm security:test     # suite Playwright de idempotencia + Origin + IDOR
 pnpm security:audit    # pnpm audit --prod (no-fail; documenta)
 ```
 
+### Backups cifrados
+
+- Backup de PostgreSQL (`pg_dump`), MinIO (objetos) y configuracion cifrado con AES-256-GCM.
+- Clave: `BACKUP_ENCRYPTION_KEY` (64 hex chars = 32 bytes, variable de entorno).
+- Formato: `[NCIBAK01][IV 16B][ciphertext][AuthTag 16B]`.
+- Checksums SHA-256 dobles (original + cifrado) en manifiesto.
+- Dumps sin cifrar eliminados automaticamente tras cifrar.
+- Restauracion a destinos aislados (DB `nci_logistics_restore_test`, bucket `nci-logistics-restore-test`).
+- `/backups/` en `.gitignore`.
+- DR drill (`pnpm backup:drill`) ejecuta ciclo completo con evidencia.
+
 ## Pendientes documentados
 
-- Recuperación de contraseña con tokens hasheados de un solo uso.
-- Rotación de sesión post-login.
-- Fotografías offline con blobs limitados.
-- Escaneo AV local (ClamAV) para uploads.
 - Actualización de dependencias transitivas cuando parcheen upstream.
+- TLS/HTTPS para produccion.
+- Rate limiting distribuido (Redis).
+- Auditoria externa (OWASP ASVS L1).

@@ -34,7 +34,7 @@ Evolución de controles por etapa. Cada casilla exige evidencia verificable, no 
 - [ ] Bucket MinIO ⇒ S3 con políticas privadas por prefijo por tenant.
 - [ ] Rate limit compartido (Redis) — el contrato `RateLimitProvider` ya existe.
 - [ ] Rotación de credenciales de DB/MinIO por proyecto.
-- [ ] Backups verificados y restaurables.
+- [x] Backups cifrados (AES-256-GCM) con restauracion verificada y DR drill.
 - [ ] Bitácora centralizada con retención.
 
 ## Producción
