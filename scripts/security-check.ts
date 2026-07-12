@@ -341,6 +341,104 @@ const checks: Check[] = [
     },
   },
   {
+    name: "logger redacts 30+ sensitive keys",
+    run: () => {
+      const source = readFileSync("src/lib/observability/logger.ts", "utf8");
+      const required = ["password", "token", "cookie", "otp", "mfa", "recoveryCode", "backupEncryptionKey", "databaseUrl", "objectKey", "session"];
+      const missing = required.filter((k) => !source.includes(`"${k}"`));
+      return { ok: missing.length === 0, detail: missing.length ? `Faltan keys: ${missing.join(", ")}` : "" };
+    },
+  },
+  {
+    name: "logger redacts data:image and signedUrl",
+    run: () => {
+      const source = readFileSync("src/lib/observability/logger.ts", "utf8");
+      const ok = source.includes("data:image") && source.includes('"signedUrl"');
+      return { ok, detail: ok ? "" : "logger.ts no redacta data:image o signedUrl." };
+    },
+  },
+  {
+    name: "middleware injects X-Request-ID",
+    run: () => {
+      const source = readFileSync("src/middleware.ts", "utf8");
+      const ok = source.includes("x-request-id") && source.includes("getRequestId");
+      return { ok, detail: ok ? "" : "middleware.ts no inyecta X-Request-ID." };
+    },
+  },
+  {
+    name: "health endpoint returns only status (no secrets)",
+    run: () => {
+      const source = readFileSync("src/app/api/internal/health/route.ts", "utf8");
+      const ok = source.includes("status:") && !source.includes("checks") && !source.includes("durationMs");
+      return { ok, detail: ok ? "" : "health/route.ts expone detalles internos." };
+    },
+  },
+  {
+    name: "readiness endpoint requires platform role",
+    run: () => {
+      const source = readFileSync("src/app/api/internal/readiness/route.ts", "utf8");
+      const ok = source.includes("requirePlatformRole") && source.includes("PLATFORM_SUPER_ADMIN");
+      return { ok, detail: ok ? "" : "readiness/route.ts no requiere rol de plataforma." };
+    },
+  },
+  {
+    name: "metrics endpoint requires platform role",
+    run: () => {
+      const source = readFileSync("src/app/api/internal/metrics/route.ts", "utf8");
+      const ok = source.includes("requirePlatformRole") && source.includes("PLATFORM_SUPER_ADMIN");
+      return { ok, detail: ok ? "" : "metrics/route.ts no requiere rol de plataforma." };
+    },
+  },
+  {
+    name: "system-status page requires platform role with MFA",
+    run: () => {
+      const source = readFileSync("src/app/platform/system-status/page.tsx", "utf8");
+      const ok = source.includes("requirePlatformRole") && source.includes("PLATFORM_SUPER_ADMIN");
+      return { ok, detail: ok ? "" : "system-status page no requiere rol de plataforma." };
+    },
+  },
+  {
+    name: "PWA telemetry validates allowlist and rejects base64",
+    run: () => {
+      const source = readFileSync("src/app/api/t/[tenantSlug]/driver/pwa-telemetry/route.ts", "utf8");
+      const ok = source.includes("ALLOWED_KEYS") && source.includes('startsWith("data:")') && source.includes("base64");
+      return { ok, detail: ok ? "" : "pwa-telemetry no valida allowlist o no rechaza base64." };
+    },
+  },
+  {
+    name: "PWA telemetry has rate limit and Origin check",
+    run: () => {
+      const source = readFileSync("src/app/api/t/[tenantSlug]/driver/pwa-telemetry/route.ts", "utf8");
+      const ok = source.includes("enforceRateLimit") && source.includes("verifyMutationOrigin");
+      return { ok, detail: ok ? "" : "pwa-telemetry sin rate limit o sin Origin check." };
+    },
+  },
+  {
+    name: "alerts use dedupeKey for deduplication",
+    run: () => {
+      const source = readFileSync("src/lib/observability/alerts.ts", "utf8");
+      const ok = source.includes("dedupeKey") && source.includes("COOLDOWN_MINUTES");
+      return { ok, detail: ok ? "" : "alerts.ts sin deduplicacion o cooldown." };
+    },
+  },
+  {
+    name: "error.tsx shows digest ref but not internal details",
+    run: () => {
+      const source = readFileSync("src/app/error.tsx", "utf8");
+      const ok = source.includes("digest") && !source.includes("stack") && !source.includes("cause");
+      return { ok, detail: ok ? "" : "error.tsx expone stack o causa interna." };
+    },
+  },
+  {
+    name: "internal API endpoints set Cache-Control: no-store",
+    run: () => {
+      const readiness = readFileSync("src/app/api/internal/readiness/route.ts", "utf8");
+      const metrics = readFileSync("src/app/api/internal/metrics/route.ts", "utf8");
+      const ok = readiness.includes("no-store") && metrics.includes("no-store");
+      return { ok, detail: ok ? "" : "endpoints internos sin Cache-Control: no-store." };
+    },
+  },
+  {
     name: "TS: sin errores de tipos",
     run: () => {
       try {
