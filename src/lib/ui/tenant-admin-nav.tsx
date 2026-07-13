@@ -28,7 +28,7 @@ export function getTenantAdminNavGroups(tenantSlug: string) {
       title: "Configuracion",
       items: [
         { label: "Integraciones", href: `${base}/integrations`, icon: <Link2 /> },
-        { label: "Seguridad", href: `${base}#seguridad`, icon: <Shield /> },
+        { label: "Seguridad", href: `${base}/security`, icon: <Shield /> },
       ],
     },
     {
