@@ -1,19 +1,15 @@
 import {
-  Activity,
   AlertTriangle,
-  Building2,
   CheckCircle2,
   Database,
   HardDrive,
   Heart,
-  LayoutDashboard,
-  LifeBuoy,
-  PlusCircle,
   Shield,
   ShieldAlert,
   Wifi,
 } from "lucide-react";
 import { AppShell } from "@/components/shell/app-shell";
+import { getPlatformNavGroups, platformRoleLabel } from "@/lib/ui/platform-nav";
 import {
   Card,
   CardHeader,
@@ -47,11 +43,6 @@ const statusLabel: Record<ServiceStatus, string> = {
   UNKNOWN: "Desconocido",
 };
 
-const platformRoleLabel = {
-  PLATFORM_SUPER_ADMIN: "Super administrador",
-  PLATFORM_SUPPORT: "Soporte de plataforma",
-} as const;
-
 export default async function SystemStatusPage() {
   const user = await requirePlatformRole(["PLATFORM_SUPER_ADMIN", "PLATFORM_SUPPORT"]);
   const [health, metrics, alerts] = await Promise.all([
@@ -64,25 +55,7 @@ export default async function SystemStatusPage() {
     <AppShell
       brandContext="Panel de plataforma"
       brandName="NCI Automation"
-      navGroups={[
-        {
-          items: [{ label: "Resumen", href: "/platform", icon: <LayoutDashboard /> }],
-        },
-        {
-          title: "Gestion",
-          items: [
-            { label: "Tenants", href: "/platform#tenants", icon: <Building2 /> },
-            { label: "Crear tenant", href: "/platform#crear-tenant", icon: <PlusCircle /> },
-            { label: "Soporte auditado", href: "/platform#soporte", icon: <LifeBuoy /> },
-          ],
-        },
-        {
-          title: "Operaciones",
-          items: [
-            { label: "Estado del sistema", href: "/platform/system-status", icon: <Activity />, exact: true },
-          ],
-        },
-      ]}
+      navGroups={getPlatformNavGroups()}
       user={{ name: user.name, role: user.platformRole ? platformRoleLabel[user.platformRole] : "Plataforma" }}
     >
       <div className="anim-page grid gap-6">
