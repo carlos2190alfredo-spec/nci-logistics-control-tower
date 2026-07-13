@@ -107,7 +107,7 @@ const tenantSchema = z.object({
   name: z.string().min(2),
   legalName: z.string().min(2),
   slug: z.string().min(3).regex(/^[a-z0-9-]+$/),
-  planCode: z.enum(["STARTER", "PROFESSIONAL", "ENTERPRISE"]),
+  planCode: z.enum(["DEMO", "STARTER", "PROFESSIONAL", "ENTERPRISE"]),
 });
 
 export async function createTenantAction(formData: FormData) {

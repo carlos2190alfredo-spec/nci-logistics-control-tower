@@ -25,7 +25,7 @@ export function getPlatformNavGroups() {
       title: "Gestion",
       items: [
         { label: "Tenants", href: "/platform/tenants", icon: <Building2 /> },
-        { label: "Crear tenant", href: "/platform#crear-tenant", icon: <PlusCircle /> },
+        { label: "Crear tenant", href: "/platform/tenants/new", icon: <PlusCircle /> },
         { label: "Planes", href: "/platform/plans", icon: <Settings /> },
         { label: "Soporte auditado", href: "/platform#soporte", icon: <LifeBuoy /> },
       ],

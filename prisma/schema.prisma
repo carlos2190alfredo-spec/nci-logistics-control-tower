@@ -35,6 +35,7 @@ enum TenantStatus {
 }
 
 enum TenantPlanCode {
+  DEMO
   STARTER
   PROFESSIONAL
   ENTERPRISE
@@ -142,6 +143,7 @@ model User {
   mfaRecoveryCodes    MfaRecoveryCode[]
   mfaChallenges       MfaChallenge[]
   feedbackSubmitted   TenantFeedback[]
+  feedbackComments    FeedbackComment[]
   invitationsSent     UserInvitation[] @relation("InvitationsSent")
 
   @@map("users")
@@ -210,6 +212,13 @@ model Tenant {
   subscriptionStatus SubscriptionStatus     @default(TRIAL) @map("subscription_status")
   planId             String                 @map("plan_id") @db.Uuid
   isDemo             Boolean                @default(false) @map("is_demo")
+  country            String                 @default("PA")
+  currency           String                 @default("USD")
+  contactName        String?                @map("contact_name")
+  contactEmail       String?                @map("contact_email")
+  contactPhone       String?                @map("contact_phone")
+  taxId              String?                @map("tax_id")
+  internalNotes      String?                @map("internal_notes")
   activatedAt        DateTime?              @map("activated_at")
   trialEndsAt        DateTime?              @map("trial_ends_at")
   archivedAt         DateTime?              @map("archived_at")
@@ -1168,10 +1177,25 @@ model TenantFeedback {
   updatedAt     DateTime        @updatedAt @map("updated_at")
   tenant        Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   user          User            @relation(fields: [userId], references: [id])
+  comments      FeedbackComment[]
 
   @@index([tenantId, status])
   @@index([tenantId, type])
   @@map("tenant_feedback")
+}
+
+model FeedbackComment {
+  id          String   @id @default(uuid()) @db.Uuid
+  feedbackId  String   @map("feedback_id") @db.Uuid
+  authorId    String   @map("author_id") @db.Uuid
+  body        String
+  isInternal  Boolean  @default(false) @map("is_internal")
+  createdAt   DateTime @default(now()) @map("created_at")
+  feedback    TenantFeedback @relation(fields: [feedbackId], references: [id], onDelete: Cascade)
+  author      User           @relation(fields: [authorId], references: [id])
+
+  @@index([feedbackId, createdAt])
+  @@map("feedback_comments")
 }
 
 // ─── Product Evolution: Invitations ──────────────────────────

@@ -37,6 +37,11 @@ async function user(email: string, password: string, name: string, platformRole?
 }
 
 async function main() {
+  await prisma.tenantPlan.upsert({
+    where: { code: "DEMO" },
+    update: {},
+    create: { code: "DEMO", name: "Demo", maxUsers: 5, maxDrivers: 5, maxVehicles: 5, maxCustomers: 3, maxDocuments: 50 },
+  });
   const starter = await prisma.tenantPlan.upsert({
     where: { code: "STARTER" },
     update: {},

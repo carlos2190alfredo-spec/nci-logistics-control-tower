@@ -1,11 +1,13 @@
 import Link from "next/link";
-import { ArrowRight, Building2 } from "lucide-react";
+import { ArrowRight, Building2, PlusCircle } from "lucide-react";
 import { AppShell } from "@/components/shell/app-shell";
 import {
   Card,
   CardHeader,
   DataTable,
   PageHeader,
+  Pagination,
+  SearchToolbar,
   StatusBadge,
   TableBody,
   TableCell,
@@ -13,25 +15,64 @@ import {
   TableHeaderCell,
   TableRow,
 } from "@/components/ui";
+import { buttonStyles } from "@/components/ui/button-styles";
 import { requirePlatformRole } from "@/lib/server/auth";
 import { getDb } from "@/lib/server/db";
+import { parsePagination, paginatedResult, buildPageUrl } from "@/lib/pagination/parse";
 import { getPlatformNavGroups, platformRoleLabel } from "@/lib/ui/platform-nav";
 import { tenantStatusLabel, tenantStatusTone } from "@/lib/ui/status";
+import type { Prisma, SubscriptionStatus, TenantPlanCode, TenantStatus } from "@/generated/prisma";
 
 export const dynamic = "force-dynamic";
 export const metadata = { robots: { index: false } };
 
-export default async function TenantsPage() {
+export default async function TenantsPage({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}) {
   const user = await requirePlatformRole(["PLATFORM_SUPER_ADMIN", "PLATFORM_SUPPORT"]);
-  const db = getDb();
-  const tenants = await db.tenant.findMany({
-    include: {
-      plan: true,
-      settings: true,
-      _count: { select: { trips: true, customers: true, memberships: true, feedback: true } },
-    },
-    orderBy: { createdAt: "desc" },
+  const params = parsePagination(await searchParams, {
+    defaultPageSize: 20,
+    filterKeys: ["status", "plan", "subscription"],
   });
+
+  const db = getDb();
+
+  const where: Prisma.TenantWhereInput = {};
+  if (params.search) {
+    where.OR = [
+      { name: { contains: params.search, mode: "insensitive" } },
+      { legalName: { contains: params.search, mode: "insensitive" } },
+      { slug: { contains: params.search, mode: "insensitive" } },
+      { contactEmail: { contains: params.search, mode: "insensitive" } },
+    ];
+  }
+  if (params.filters.status) {
+    where.status = params.filters.status as TenantStatus;
+  }
+  if (params.filters.plan) {
+    where.plan = { code: params.filters.plan as TenantPlanCode };
+  }
+  if (params.filters.subscription) {
+    where.subscriptionStatus = params.filters.subscription as SubscriptionStatus;
+  }
+
+  const [tenants, total] = await Promise.all([
+    db.tenant.findMany({
+      where,
+      include: {
+        plan: true,
+        _count: { select: { trips: true, customers: true, memberships: true, feedback: true } },
+      },
+      orderBy: { createdAt: "desc" },
+      skip: params.skip,
+      take: params.take,
+    }),
+    db.tenant.count({ where }),
+  ]);
+
+  const result = paginatedResult(tenants, total, params);
 
   return (
     <AppShell
@@ -43,9 +84,51 @@ export default async function TenantsPage() {
       <div className="anim-page grid gap-6">
         <PageHeader
           breadcrumbs={[{ label: "Plataforma", href: "/platform" }, { label: "Tenants" }]}
-          description={`${tenants.length} tenant(s) registrados en la plataforma.`}
+          description={`${total} tenant(s) registrados en la plataforma.`}
           title="Gestion de Tenants"
         />
+
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <SearchToolbar
+            filters={[
+              {
+                key: "status",
+                label: "Estado",
+                options: [
+                  { value: "ACTIVE", label: "Activo" },
+                  { value: "SUSPENDED", label: "Suspendido" },
+                  { value: "ARCHIVED", label: "Archivado" },
+                  { value: "CANCELLED", label: "Cancelado" },
+                ],
+              },
+              {
+                key: "plan",
+                label: "Plan",
+                options: [
+                  { value: "DEMO", label: "Demo" },
+                  { value: "STARTER", label: "Starter" },
+                  { value: "PROFESSIONAL", label: "Professional" },
+                  { value: "ENTERPRISE", label: "Enterprise" },
+                ],
+              },
+              {
+                key: "subscription",
+                label: "Suscripcion",
+                options: [
+                  { value: "TRIAL", label: "Prueba" },
+                  { value: "ACTIVE", label: "Activa" },
+                  { value: "SUSPENDED", label: "Suspendida" },
+                  { value: "CANCELLED", label: "Cancelada" },
+                ],
+              },
+            ]}
+            placeholder="Buscar por nombre, slug o correo..."
+          />
+          <Link className={buttonStyles({ variant: "primary" })} href="/platform/tenants/new">
+            <PlusCircle aria-hidden className="size-4" />
+            Crear tenant
+          </Link>
+        </div>
 
         <Card>
           <CardHeader
@@ -54,7 +137,7 @@ export default async function TenantsPage() {
             title="Tenants registrados"
           />
           <div className="mt-4">
-            <DataTable caption="Lista completa de tenants">
+            <DataTable caption="Lista de tenants con paginacion">
               <TableHead>
                 <tr>
                   <TableHeaderCell>Tenant</TableHeaderCell>
@@ -73,7 +156,9 @@ export default async function TenantsPage() {
                 {tenants.map((tenant) => (
                   <TableRow key={tenant.id}>
                     <TableCell>
-                      <p className="font-semibold text-foreground">{tenant.name}</p>
+                      <Link className="font-semibold text-foreground hover:text-primary transition-colors" href={`/platform/tenants/${tenant.id}`}>
+                        {tenant.name}
+                      </Link>
                       <p className="text-xs text-faint-foreground">{tenant.legalName}</p>
                     </TableCell>
                     <TableCell><code className="text-xs">/{tenant.slug}</code></TableCell>
@@ -94,15 +179,26 @@ export default async function TenantsPage() {
                     <TableCell>
                       <Link
                         className="inline-flex items-center gap-1 font-semibold text-primary transition-colors hover:text-primary-hover"
-                        href={`/t/${tenant.slug}`}
+                        href={`/platform/tenants/${tenant.id}`}
                       >
-                        Abrir <ArrowRight aria-hidden className="size-3.5" />
+                        Ver <ArrowRight aria-hidden className="size-3.5" />
                       </Link>
                     </TableCell>
                   </TableRow>
                 ))}
               </TableBody>
             </DataTable>
+          </div>
+          <div className="mt-4">
+            <Pagination
+              buildUrl={(p) => buildPageUrl("/platform/tenants", params, p)}
+              hasNext={result.hasNext}
+              hasPrev={result.hasPrev}
+              page={result.page}
+              pageSize={result.pageSize}
+              total={result.total}
+              totalPages={result.totalPages}
+            />
           </div>
         </Card>
       </div>

@@ -15,7 +15,6 @@ import {
   Card,
   CardHeader,
   DataTable,
-  Field,
   MetricCard,
   PageHeader,
   SelectField,
@@ -28,7 +27,8 @@ import {
   TableRow,
   TextArea,
 } from "@/components/ui";
-import { createTenantAction, startSupportModeAction } from "@/lib/server/actions";
+import { buttonStyles } from "@/components/ui/button-styles";
+import { startSupportModeAction } from "@/lib/server/actions";
 import { requirePlatformRole } from "@/lib/server/auth";
 import { getDb } from "@/lib/server/db";
 import { tenantStatusLabel, tenantStatusTone } from "@/lib/ui/status";
@@ -39,9 +39,11 @@ export default async function PlatformPage() {
   const tenants = await db.tenant.findMany({
     include: { plan: true, _count: { select: { trips: true, customers: true, memberships: true } } },
     orderBy: { createdAt: "asc" },
+    take: 10,
   });
-  const active = tenants.filter((tenant) => tenant.status === "ACTIVE").length;
-  const suspended = tenants.length - active;
+  const totalTenants = await db.tenant.count();
+  const active = await db.tenant.count({ where: { status: "ACTIVE" } });
+  const suspended = totalTenants - active;
   const trips = tenants.reduce((sum, tenant) => sum + tenant._count.trips, 0);
   const members = tenants.reduce((sum, tenant) => sum + tenant._count.memberships, 0);
 
@@ -60,7 +62,7 @@ export default async function PlatformPage() {
         />
 
         <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-          <MetricCard hint="Empresas logisticas registradas" icon={<Building2 />} label="Tenants" tone="primary" value={tenants.length} />
+          <MetricCard hint="Empresas logisticas registradas" icon={<Building2 />} label="Tenants" tone="primary" value={totalTenants} />
           <MetricCard
             hint={suspended > 0 ? `${suspended} fuera de servicio` : "Toda la base operativa"}
             icon={<CheckCircle2 />}
@@ -77,7 +79,7 @@ export default async function PlatformPage() {
             <CardHeader
               description="Estado, plan y volumen operativo por empresa."
               icon={<Building2 />}
-              title="Tenants registrados"
+              title="Tenants recientes"
             />
             <div className="mt-4">
               <DataTable caption="Listado de tenants registrados en la plataforma">
@@ -98,7 +100,9 @@ export default async function PlatformPage() {
                   {tenants.map((tenant) => (
                     <TableRow key={tenant.id}>
                       <TableCell>
-                        <p className="font-semibold text-foreground">{tenant.name}</p>
+                        <Link className="font-semibold text-foreground hover:text-primary transition-colors" href={`/platform/tenants/${tenant.id}`}>
+                          {tenant.name}
+                        </Link>
                         <p className="text-xs text-faint-foreground">/{tenant.slug}</p>
                       </TableCell>
                       <TableCell>
@@ -117,9 +121,9 @@ export default async function PlatformPage() {
                       <TableCell>
                         <Link
                           className="inline-flex items-center gap-1 font-semibold text-primary transition-colors hover:text-primary-hover"
-                          href={`/t/${tenant.slug}`}
+                          href={`/platform/tenants/${tenant.id}`}
                         >
-                          Abrir
+                          Ver
                           <ArrowRight aria-hidden className="size-3.5" />
                         </Link>
                       </TableCell>
@@ -127,32 +131,29 @@ export default async function PlatformPage() {
                   ))}
                 </TableBody>
               </DataTable>
+              {totalTenants > 10 && (
+                <div className="mt-3 text-right">
+                  <Link className="text-sm font-semibold text-primary hover:text-primary-hover" href="/platform/tenants">
+                    Ver todos los tenants ({totalTenants})
+                  </Link>
+                </div>
+              )}
             </div>
           </Card>
 
           <div className="grid gap-6">
-            <Card className="scroll-mt-20" id="crear-tenant">
+            <Card>
               <CardHeader
                 description="Alta de una nueva empresa logistica con su plan."
                 icon={<PlusCircle />}
                 title="Crear tenant"
               />
-              <form action={createTenantAction} className="mt-4 grid gap-3.5">
-                <Field label="Nombre comercial" name="name" placeholder="Transportes Istmo" />
-                <Field label="Nombre legal" name="legalName" placeholder="Transportes Istmo S.A." />
-                <Field
-                  help="Identificador de la URL: minusculas, numeros y guiones."
-                  label="Slug"
-                  name="slug"
-                  placeholder="transportes-istmo"
-                />
-                <SelectField label="Plan" name="planCode">
-                  <option>STARTER</option>
-                  <option>PROFESSIONAL</option>
-                  <option>ENTERPRISE</option>
-                </SelectField>
-                <SubmitButton>Crear tenant</SubmitButton>
-              </form>
+              <div className="mt-4">
+                <Link className={buttonStyles({ variant: "primary" })} href="/platform/tenants/new">
+                  <PlusCircle aria-hidden className="size-4" />
+                  Crear nuevo tenant
+                </Link>
+              </div>
             </Card>
 
             <Card className="scroll-mt-20" id="soporte">

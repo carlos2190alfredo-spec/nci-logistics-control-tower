@@ -14,3 +14,5 @@ export { PageHeader, type Breadcrumb } from "@/components/ui/page-header";
 export { Collapsible } from "@/components/ui/collapsible";
 export { DocumentCard } from "@/components/ui/document-card";
 export { TenantBrandingProvider, BrandMark } from "@/components/ui/brand";
+export { Pagination } from "@/components/ui/pagination";
+export { SearchToolbar } from "@/components/ui/search-toolbar";
