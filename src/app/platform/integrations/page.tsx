@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { Link2 } from "lucide-react";
 import { AppShell } from "@/components/shell/app-shell";
 import {
@@ -27,8 +28,9 @@ export default async function PlatformIntegrationsPage() {
 
   const tenantIntegrations = await db.tenantIntegration.findMany({
     include: {
-      tenant: { select: { name: true } },
+      tenant: { select: { name: true, slug: true } },
       connector: { select: { type: true, name: true } },
+      _count: { select: { events: true, credentials: true } },
     },
     orderBy: { createdAt: "desc" },
   });
@@ -104,13 +106,19 @@ export default async function PlatformIntegrationsPage() {
                     <TableHeaderCell>Conector</TableHeaderCell>
                     <TableHeaderCell>Estado</TableHeaderCell>
                     <TableHeaderCell>Habilitado</TableHeaderCell>
+                    <TableHeaderCell>Credenciales</TableHeaderCell>
+                    <TableHeaderCell>Eventos</TableHeaderCell>
                     <TableHeaderCell>Ultima sincronizacion</TableHeaderCell>
                   </tr>
                 </TableHead>
                 <TableBody>
                   {tenantIntegrations.map((ti) => (
                     <TableRow key={ti.id}>
-                      <TableCell className="font-semibold">{ti.tenant.name}</TableCell>
+                      <TableCell>
+                        <Link className="font-semibold text-primary hover:text-primary-hover" href={`/platform/tenants/${ti.tenantId}`}>
+                          {ti.tenant.name}
+                        </Link>
+                      </TableCell>
                       <TableCell>{ti.connector.name}</TableCell>
                       <TableCell>
                         <StatusBadge
@@ -118,7 +126,11 @@ export default async function PlatformIntegrationsPage() {
                           tone={ti.status === "ENABLED" ? "success" : ti.status === "ERROR" ? "danger" : "neutral"}
                         />
                       </TableCell>
-                      <TableCell>{ti.enabled ? "Si" : "No"}</TableCell>
+                      <TableCell>
+                        <StatusBadge label={ti.enabled ? "Si" : "No"} tone={ti.enabled ? "success" : "neutral"} />
+                      </TableCell>
+                      <TableCell className="text-sm" numeric>{ti._count.credentials}</TableCell>
+                      <TableCell className="text-sm" numeric>{ti._count.events}</TableCell>
                       <TableCell className="text-xs text-faint-foreground">
                         {ti.lastSyncAt ? ti.lastSyncAt.toLocaleString("es") : "—"}
                       </TableCell>

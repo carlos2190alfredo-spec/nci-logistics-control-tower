@@ -1,9 +1,11 @@
-import { Link2 } from "lucide-react";
+import Link from "next/link";
+import { Link2, Settings } from "lucide-react";
 import { AppShell } from "@/components/shell/app-shell";
 import {
   Card,
   CardHeader,
   DataTable,
+  MetricCard,
   PageHeader,
   StatusBadge,
   TableBody,
@@ -16,6 +18,7 @@ import { requireTenantRole } from "@/lib/server/auth";
 import { getDb } from "@/lib/server/db";
 import { getTenantAdminNavGroups } from "@/lib/ui/tenant-admin-nav";
 import { CONNECTOR_CATALOG } from "@/lib/integrations/registry";
+import { toggleIntegrationAction, testIntegrationAction } from "@/lib/server/integration-actions";
 import type { StatusTone } from "@/lib/ui/status";
 
 export const dynamic = "force-dynamic";
@@ -48,13 +51,27 @@ export default async function TenantIntegrationsPage({
 
   const tenantIntegrations = await db.tenantIntegration.findMany({
     where: { tenantId: tenant.id },
-    include: { connector: true },
+    include: {
+      connector: true,
+      credentials: { select: { key: true } },
+      _count: { select: { events: true } },
+    },
     orderBy: { createdAt: "desc" },
   });
 
   const connectorMap = new Map(
     tenantIntegrations.map((ti) => [ti.connector.type, ti]),
   );
+
+  const enabledCount = tenantIntegrations.filter((ti) => ti.enabled).length;
+  const configuredCount = tenantIntegrations.length;
+
+  const events = await db.integrationEvent.findMany({
+    where: { tenantIntegration: { tenantId: tenant.id } },
+    include: { tenantIntegration: { include: { connector: { select: { name: true } } } } },
+    orderBy: { createdAt: "desc" },
+    take: 10,
+  });
 
   return (
     <AppShell
@@ -70,15 +87,21 @@ export default async function TenantIntegrationsPage({
             { label: "Admin", href: `/t/${tenantSlug}/admin` },
             { label: "Integraciones" },
           ]}
-          description="Estado de los conectores disponibles para este tenant."
+          description="Configura y gestiona los conectores de integracion del tenant."
           title="Integraciones"
         />
 
+        <div className="grid gap-4 sm:grid-cols-3">
+          <MetricCard icon={<Link2 />} label="Disponibles" value={CONNECTOR_CATALOG.length} />
+          <MetricCard icon={<Link2 />} label="Configuradas" value={configuredCount} />
+          <MetricCard icon={<Link2 />} label="Activas" tone="success" value={enabledCount} />
+        </div>
+
         <Card>
           <CardHeader
-            description="Conectores del catalogo y su estado de activacion en este tenant."
+            description="Conectores disponibles. Configura credenciales y activa segun necesidad."
             icon={<Link2 />}
-            title="Conectores"
+            title="Catalogo de conectores"
           />
           <div className="mt-4">
             <DataTable caption="Conectores de integracion">
@@ -86,24 +109,70 @@ export default async function TenantIntegrationsPage({
                 <tr>
                   <TableHeaderCell>Conector</TableHeaderCell>
                   <TableHeaderCell>Descripcion</TableHeaderCell>
-                  <TableHeaderCell>Version</TableHeaderCell>
                   <TableHeaderCell>Estado</TableHeaderCell>
+                  <TableHeaderCell>Credenciales</TableHeaderCell>
+                  <TableHeaderCell>Eventos</TableHeaderCell>
+                  <TableHeaderCell><span className="sr-only">Acciones</span></TableHeaderCell>
                 </tr>
               </TableHead>
               <TableBody>
                 {CONNECTOR_CATALOG.map((c) => {
                   const ti = connectorMap.get(c.type);
                   const status = ti?.status ?? "DISABLED";
+                  const credCount = ti?.credentials?.length ?? 0;
+                  const eventCount = ti?._count?.events ?? 0;
                   return (
                     <TableRow key={c.type}>
-                      <TableCell className="font-semibold">{c.name}</TableCell>
-                      <TableCell className="text-sm text-faint-foreground">{c.description}</TableCell>
-                      <TableCell><code className="text-xs">{c.version}</code></TableCell>
+                      <TableCell>
+                        <p className="font-semibold text-foreground">{c.name}</p>
+                        <p className="text-xs text-faint-foreground">v{c.version}</p>
+                      </TableCell>
+                      <TableCell className="text-sm text-faint-foreground max-w-xs">{c.description}</TableCell>
                       <TableCell>
                         <StatusBadge
                           label={statusLabel[status] ?? status}
                           tone={statusTone[status] ?? "neutral"}
                         />
+                      </TableCell>
+                      <TableCell className="text-sm">
+                        {credCount > 0 ? `${credCount} clave(s)` : "—"}
+                      </TableCell>
+                      <TableCell className="text-sm" numeric>
+                        {eventCount}
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex items-center gap-2">
+                          <Link
+                            className="text-sm font-semibold text-primary hover:text-primary-hover"
+                            href={`/t/${tenantSlug}/admin/integrations/${c.type.toLowerCase()}`}
+                          >
+                            Configurar
+                          </Link>
+                          {ti && (
+                            <>
+                              <form action={toggleIntegrationAction}>
+                                <input type="hidden" name="tenantSlug" value={tenantSlug} />
+                                <input type="hidden" name="integrationId" value={ti.id} />
+                                <button
+                                  className={`text-xs font-semibold px-2 py-1 rounded ${ti.enabled ? "text-danger hover:text-danger/80" : "text-success hover:text-success/80"}`}
+                                  type="submit"
+                                >
+                                  {ti.enabled ? "Desactivar" : "Activar"}
+                                </button>
+                              </form>
+                              <form action={testIntegrationAction}>
+                                <input type="hidden" name="tenantSlug" value={tenantSlug} />
+                                <input type="hidden" name="integrationId" value={ti.id} />
+                                <button
+                                  className="text-xs font-semibold text-info hover:text-info/80 px-2 py-1"
+                                  type="submit"
+                                >
+                                  Probar
+                                </button>
+                              </form>
+                            </>
+                          )}
+                        </div>
                       </TableCell>
                     </TableRow>
                   );
@@ -113,41 +182,38 @@ export default async function TenantIntegrationsPage({
           </div>
         </Card>
 
-        {tenantIntegrations.length > 0 && (
+        {events.length > 0 && (
           <Card>
             <CardHeader
-              description="Integraciones activadas con detalles de configuracion."
+              description="Historial reciente de eventos de integracion."
               icon={<Link2 />}
-              title="Integraciones activas"
+              title="Eventos recientes"
             />
             <div className="mt-4">
-              <DataTable caption="Integraciones activas del tenant">
+              <DataTable caption="Eventos de integracion">
                 <TableHead>
                   <tr>
                     <TableHeaderCell>Conector</TableHeaderCell>
+                    <TableHeaderCell>Tipo</TableHeaderCell>
+                    <TableHeaderCell>Direccion</TableHeaderCell>
                     <TableHeaderCell>Estado</TableHeaderCell>
-                    <TableHeaderCell>Habilitado</TableHeaderCell>
-                    <TableHeaderCell>Ultima actualizacion</TableHeaderCell>
+                    <TableHeaderCell>Fecha</TableHeaderCell>
                   </tr>
                 </TableHead>
                 <TableBody>
-                  {tenantIntegrations.map((ti) => (
-                    <TableRow key={ti.id}>
-                      <TableCell className="font-semibold">{ti.connector.name}</TableCell>
+                  {events.map((e) => (
+                    <TableRow key={e.id}>
+                      <TableCell className="font-semibold">{e.tenantIntegration.connector.name}</TableCell>
+                      <TableCell><code className="text-xs">{e.eventType}</code></TableCell>
+                      <TableCell className="text-xs">{e.direction}</TableCell>
                       <TableCell>
                         <StatusBadge
-                          label={statusLabel[ti.status] ?? ti.status}
-                          tone={statusTone[ti.status] ?? "neutral"}
-                        />
-                      </TableCell>
-                      <TableCell>
-                        <StatusBadge
-                          label={ti.enabled ? "Si" : "No"}
-                          tone={ti.enabled ? "success" : "neutral"}
+                          label={e.status}
+                          tone={e.status === "COMPLETED" ? "success" : e.status === "FAILED" ? "danger" : "neutral"}
                         />
                       </TableCell>
                       <TableCell className="text-xs text-faint-foreground">
-                        {ti.updatedAt.toLocaleDateString("es")}
+                        {e.createdAt.toLocaleString("es")}
                       </TableCell>
                     </TableRow>
                   ))}
