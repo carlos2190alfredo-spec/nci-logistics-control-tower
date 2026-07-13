@@ -1,4 +1,5 @@
-import { randomUUID } from "node:crypto";
+// Use Web Crypto API (available in Edge Runtime) instead of node:crypto
+const randomUUID = (): string => crypto.randomUUID();
 
 const REQUEST_ID_MAX_LENGTH = 64;
 const REQUEST_ID_PATTERN = /^[a-zA-Z0-9\-_.]{1,64}$/;

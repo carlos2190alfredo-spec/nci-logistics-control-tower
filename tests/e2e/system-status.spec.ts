@@ -16,15 +16,18 @@ const driverPass = "ObsDriver2026!";
 
 async function loginWithMfa(page: Page, email: string, password: string) {
   await page.goto("/login");
+  await page.waitForLoadState("networkidle");
   await page.getByLabel("Correo").fill(email);
   await page.getByLabel("Contrasena").fill(password);
   await page.getByRole("button", { name: "Entrar" }).click();
+  await page.waitForURL((url) => !url.pathname.endsWith("/login"), { timeout: 15000 });
   await page.waitForLoadState("networkidle");
 
   if (page.url().includes("/mfa/verify")) {
     const totp = new TOTP({ secret: SEED_TOTP_SECRET, algorithm: "SHA1", digits: 6, period: 30 });
     await page.getByLabel("Codigo de verificacion").fill(totp.generate());
     await page.getByRole("button", { name: "Verificar" }).click();
+    await page.waitForURL((url) => !url.pathname.includes("/mfa/"), { timeout: 15000 });
     await page.waitForLoadState("networkidle");
   }
 }
@@ -107,7 +110,7 @@ test("OBS-E2E-006: system-status page accessible by PLATFORM_SUPER_ADMIN", async
   await page.goto("/platform/system-status");
   await page.waitForLoadState("networkidle");
   expect(page.url()).toContain("/platform/system-status");
-  await expect(page.getByText("Estado del Sistema")).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Estado del Sistema" })).toBeVisible();
   await expect(page.getByText("Estado general")).toBeVisible();
 });
 
@@ -115,7 +118,7 @@ test("OBS-E2E-007: system-status page shows service health table", async ({ page
   await loginWithMfa(page, adminEmail, adminPass);
   await page.goto("/platform/system-status");
   await page.waitForLoadState("networkidle");
-  await expect(page.getByText("Servicios")).toBeVisible();
+  await expect(page.locator("h2").filter({ hasText: "Servicios" })).toBeVisible();
   await expect(page.getByText("postgresql")).toBeVisible();
 });
 

@@ -439,6 +439,109 @@ const checks: Check[] = [
     },
   },
   {
+    name: "integration credentials encrypted with AES-256-GCM",
+    run: () => {
+      const source = readFileSync("src/lib/integrations/credential-crypto.ts", "utf8");
+      const ok = source.includes("aes-256-gcm") && source.includes("createCipheriv") && source.includes("getAuthTag");
+      return { ok, detail: ok ? "" : "credential-crypto.ts no cifra con AES-256-GCM." };
+    },
+  },
+  {
+    name: "integration providers are disabled by default",
+    run: () => {
+      const files = ["gps", "whatsapp", "crm", "billing", "ai"];
+      const results: string[] = [];
+      for (const f of files) {
+        const source = readFileSync(`src/lib/integrations/disabled/${f}.ts`, "utf8");
+        if (!source.includes("return false")) results.push(`${f}.ts: isEnabled() no retorna false`);
+      }
+      return { ok: results.length === 0, detail: results.join("\n") };
+    },
+  },
+  {
+    name: "disabled providers do not make HTTP calls",
+    run: () => {
+      const hits = grepMissing(["fetch(", "axios", "node-fetch", "got(", "http.request"]).filter(
+        (line) => line.includes("src/lib/integrations/disabled/"),
+      );
+      return { ok: hits.length === 0, detail: hits.join("\n") };
+    },
+  },
+  {
+    name: "AI provider is disabled and does not call external APIs",
+    run: () => {
+      const source = readFileSync("src/lib/integrations/disabled/ai.ts", "utf8");
+      const ok = source.includes("return false") && !source.includes("fetch(") && !source.includes("openai") && !source.includes("anthropic");
+      return { ok, detail: ok ? "" : "ai.ts enabled or calls external API." };
+    },
+  },
+  {
+    name: "AI context builder isolates by tenantId",
+    run: () => {
+      const source = readFileSync("src/lib/ai/context-builder.ts", "utf8");
+      const tenantFilters = source.match(/tenantId/g) ?? [];
+      const ok = tenantFilters.length >= 15 && source.includes("buildTenantContext(tenantId");
+      return { ok, detail: ok ? "" : `Solo ${tenantFilters.length} filtros tenantId (esperado >= 15).` };
+    },
+  },
+  {
+    name: "AI safety filters prevent cross-tenant and sensitive data",
+    run: () => {
+      const source = readFileSync("src/lib/ai/safety.ts", "utf8");
+      const ok = source.includes("validateTenantIsolation") && source.includes("filterSensitiveFields") && source.includes("assertNoCriticalAction");
+      return { ok, detail: ok ? "" : "safety.ts sin filtros de aislamiento o datos sensibles." };
+    },
+  },
+  {
+    name: "feedback isolated by tenant in server-side queries",
+    run: () => {
+      const source = readFileSync("src/app/t/[tenantSlug]/admin/feedback/page.tsx", "utf8");
+      const ok = source.includes("tenantId: tenant.id") && source.includes("requireTenantRole");
+      return { ok, detail: ok ? "" : "feedback page no filtra por tenantId o no requiere rol." };
+    },
+  },
+  {
+    name: "platform routes require platform role",
+    run: () => {
+      const pages = ["tenants", "plans", "feedback", "recommendations", "errors", "integrations"];
+      const missing: string[] = [];
+      for (const p of pages) {
+        const source = readFileSync(`src/app/platform/${p}/page.tsx`, "utf8");
+        if (!source.includes("requirePlatformRole")) missing.push(p);
+      }
+      return { ok: missing.length === 0, detail: missing.length ? `Sin proteccion: ${missing.join(", ")}` : "" };
+    },
+  },
+  {
+    name: "tenant admin routes require tenant role",
+    run: () => {
+      const pages = ["users", "drivers", "invitations", "feedback", "integrations", "recommendations", "activity"];
+      const missing: string[] = [];
+      for (const p of pages) {
+        const source = readFileSync(`src/app/t/[tenantSlug]/admin/${p}/page.tsx`, "utf8");
+        if (!source.includes("requireTenantRole")) missing.push(p);
+      }
+      return { ok: missing.length === 0, detail: missing.length ? `Sin proteccion: ${missing.join(", ")}` : "" };
+    },
+  },
+  {
+    name: "no API keys in plaintext in integration code",
+    run: () => {
+      const hits = grepMissing(["sk-", "sk_live_", "sk_test_", "Bearer "]).filter(
+        (line) => line.includes("src/lib/integrations/") && !line.includes("credentialKeys"),
+      );
+      return { ok: hits.length === 0, detail: hits.join("\n") };
+    },
+  },
+  {
+    name: "invitation tokens hashed before storage",
+    run: () => {
+      const source = readFileSync("src/lib/server/invitation-actions.ts", "utf8");
+      const ok = source.includes("hashToken") && source.includes("tokenHash");
+      return { ok, detail: ok ? "" : "invitation-actions.ts no hashea tokens." };
+    },
+  },
+  {
     name: "TS: sin errores de tipos",
     run: () => {
       try {
