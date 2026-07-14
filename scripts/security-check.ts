@@ -542,6 +542,63 @@ const checks: Check[] = [
     },
   },
   {
+    name: "Google API key never logged or exposed in route providers",
+    run: () => {
+      const source = readFileSync("src/lib/routes/providers/google-routes-provider.ts", "utf8");
+      const ok = source.includes("sanitizeErrorMessage") && !source.includes("console.log") && source.includes("NO_API_KEY");
+      return { ok, detail: ok ? "" : "google-routes-provider.ts expone API key o no sanitiza errores." };
+    },
+  },
+  {
+    name: "route providers: disabled and waze make no HTTP calls",
+    run: () => {
+      const disabled = readFileSync("src/lib/routes/providers/disabled-route-provider.ts", "utf8");
+      const waze = readFileSync("src/lib/routes/providers/waze-future-provider.ts", "utf8");
+      const ok = !disabled.includes("fetch(") && !waze.includes("fetch(");
+      return { ok, detail: ok ? "" : "disabled/waze providers hacen llamadas HTTP." };
+    },
+  },
+  {
+    name: "route estimation actions require tenant role",
+    run: () => {
+      const source = readFileSync("src/lib/server/route-actions.ts", "utf8");
+      const ok = source.includes("requireTenantRole") && source.includes("tenantId: tenant.id");
+      return { ok, detail: ok ? "" : "route-actions.ts sin requireTenantRole o sin tenant isolation." };
+    },
+  },
+  {
+    name: "driver recommendation filters by tenantId",
+    run: () => {
+      const source = readFileSync("src/lib/ai/driver-recommendation.ts", "utf8");
+      const ok = source.includes("d.tenantId === tenantId");
+      return { ok, detail: ok ? "" : "driver-recommendation.ts no filtra por tenantId." };
+    },
+  },
+  {
+    name: "driver recommendation actions require tenant role and audit",
+    run: () => {
+      const source = readFileSync("src/lib/server/driver-recommendation-actions.ts", "utf8");
+      const ok = source.includes("requireTenantRole") && source.includes("audit(") && source.includes("tenantId: tenant.id");
+      return { ok, detail: ok ? "" : "driver-recommendation-actions.ts sin auth o audit." };
+    },
+  },
+  {
+    name: "driver recommendation override requires reason",
+    run: () => {
+      const source = readFileSync("src/lib/server/driver-recommendation-actions.ts", "utf8");
+      const ok = source.includes("overrideReason") && source.includes("if (!overrideReason)");
+      return { ok, detail: ok ? "" : "overrideDriverRecommendation no exige razon." };
+    },
+  },
+  {
+    name: "driver schedule actions require tenant role",
+    run: () => {
+      const source = readFileSync("src/lib/server/driver-schedule-actions.ts", "utf8");
+      const ok = source.includes("requireTenantRole") && source.includes("tenantId: tenant.id");
+      return { ok, detail: ok ? "" : "driver-schedule-actions.ts sin requireTenantRole." };
+    },
+  },
+  {
     name: "TS: sin errores de tipos",
     run: () => {
       try {
