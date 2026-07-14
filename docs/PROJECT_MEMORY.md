@@ -45,6 +45,16 @@ Roles de cliente: `CUSTOMER_ADMIN`, `CUSTOMER_VIEWER`.
 
 Monolito modular con Next.js App Router, Prisma y servicios centralizados de autorizacion multitenant.
 
+## Operaciones IA (fase 11)
+
+- Estimacion de rutas: disabled (default) / simulated (Haversine) / google (Routes API v2).
+- Motor de recomendacion de conductores: reglas deterministas, 12 criterios, sin IA externa.
+- Horarios de conductores: semanal + excepciones de disponibilidad.
+- Dashboard de insights operativos para tenant admin.
+- Google API key sanitizada en errores, nunca logueada.
+- Override de recomendacion exige razon obligatoria.
+- Waze preparado como stub, sin codigo muerto.
+
 ## Funciones excluidas por ahora
 
 - Cobro real de suscripciones.
@@ -52,3 +62,5 @@ Monolito modular con Next.js App Router, Prisma y servicios centralizados de aut
 - Facturacion automatica.
 - Integraciones reales con WhatsApp, email externo o telemetria.
 - Sensores, valvulas o automatizacion fisica de carga/descarga.
+- IA externa generativa (OpenAI, Anthropic, etc.).
+- GPS real, Waze real.

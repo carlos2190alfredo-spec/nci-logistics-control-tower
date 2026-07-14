@@ -1,10 +1,10 @@
 # CURRENT STATE
 
-Fecha: 2026-07-12
+Fecha: 2026-07-13
 
 ## Fase actual
 
-Observabilidad local, health checks, alertas y dashboard de estado del sistema implementados. Request IDs, logger estructurado con redaccion de secretos, health checks para 5 servicios, metricas operativas, sistema de alertas con deduplicacion, y dashboard de estado accesible solo para roles de plataforma con MFA.
+Operaciones IA: estimacion de ruta (disabled/simulated/Google Routes API), horarios de conductores, motor de recomendacion de conductores por reglas, dashboard de insights operativos. Todo sin IA externa, sin WhatsApp/GPS/Waze real.
 
 ## Implementado (fase actual — Observabilidad)
 
@@ -22,6 +22,17 @@ Observabilidad local, health checks, alertas y dashboard de estado del sistema i
 - **Prisma migration**: 4 tablas nuevas (OperationalCheck, OperationalAlert, JobRun, SystemMetricsSnapshot), 4 enums nuevos.
 - **Tests**: 38 unit tests de observabilidad, 20 E2E tests nuevos, 48 security checks (12 nuevos).
 - **Documentacion**: ADR-021, ADR-022, OBSERVABILITY_ARCHITECTURE, HEALTH_CHECKS, ALERTING_POLICY, OPERATIONAL_RUNBOOK.
+
+## Implementado (fase actual — Operaciones IA)
+
+- **Proveedores de ruta**: 4 proveedores (disabled/simulated/google/waze-stub) con factory pattern. Google sanitiza API key.
+- **Motor de recomendacion**: 12 criterios de puntuacion, descalificacion, nivel de riesgo, aislamiento multi-tenant.
+- **Horarios de conductores**: horario semanal + excepciones (vacaciones, dia libre, incapacidad, turno extra).
+- **Modelo de datos**: 6 modelos nuevos (TripStop, TripRouteEstimate, TripStopEstimate, DriverWorkSchedule, DriverAvailabilityException, DriverAssignmentRecommendation).
+- **UI**: secciones de estimacion y recomendacion en tarjeta de viaje, pagina de horarios, dashboard de insights operativos, nav "Operaciones IA".
+- **Server actions**: 8 acciones con requireTenantRole + audit + revalidatePath. Override requiere razon.
+- **Tests**: 28 unit tests nuevos (14 rutas + 14 recomendacion), 7 E2E tests, 7 security checks nuevos.
+- **Documentacion**: ADR-026/027/028, guias de arquitectura, setup Google Maps, motor de recomendacion.
 
 ## Base preservada
 

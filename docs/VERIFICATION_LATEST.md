@@ -1,37 +1,38 @@
 # VERIFICATION LATEST
 
-Fecha: 2026-07-12 (Observabilidad y monitoreo operativo)
+Fecha: 2026-07-13 (Operaciones IA + Route ETA + Driver Recommendation)
 
 | Comando / Verificacion | Resultado |
 | --- | --- |
-| `git status` | Working tree limpio (tras commit) |
+| `git status` | Working tree limpio (tras commit docs) |
 | `git remote -v` | Sin remotes |
 | `docker compose ps` | PostgreSQL 5433 / MinIO / Mailpit / ClamAV 3310 saludables |
 | `pnpm typecheck` | Paso |
-| `pnpm test` (Vitest) | **Paso: 14 archivos, 142 tests** (104 previos + 38 nuevos observabilidad) |
+| `pnpm test` (Vitest) | **Paso: 16 archivos, 170 tests** (142 previos + 14 rutas + 14 recomendacion) |
 | `pnpm build` | Paso |
-| `pnpm security:check` | **Paso: 48/48 verificaciones** (37 previas + 12 nuevas observabilidad, excepto TS ya contada) |
+| `pnpm security:check` | **Paso: 55/55 verificaciones** (48 previas + 7 nuevas operaciones IA) |
 
 ## Rutas generadas en build
 
 Nuevas rutas en esta fase:
-- `ƒ /api/internal/health` (dynamic)
-- `ƒ /api/internal/liveness` (dynamic)
-- `ƒ /api/internal/metrics` (dynamic)
-- `ƒ /api/internal/readiness` (dynamic)
-- `ƒ /api/t/[tenantSlug]/driver/pwa-telemetry` (dynamic)
-- `ƒ /platform/system-status` (dynamic)
+- `f /t/[tenantSlug]/admin/operations-insights` (dynamic)
+- `f /t/[tenantSlug]/admin/drivers/[driverId]/schedule` (dynamic)
 
 ## Conteos acumulados
 
 | Tipo | Cantidad |
 | --- | --- |
-| Unit tests (Vitest) | 142 |
-| E2E tests (Playwright) | 66 (46 previos + 20 nuevos) |
-| Security checks | 48 |
-| Prisma models | +4 (OperationalCheck, OperationalAlert, JobRun, SystemMetricsSnapshot) |
-| Prisma enums | +4 (CheckStatus, AlertSeverity, AlertStatus, JobStatus) |
-| API endpoints | +5 (health, liveness, readiness, metrics, pwa-telemetry) |
-| Scripts operativos | +6 (ops:health, ops:readiness, ops:metrics, ops:alerts:test, ops:jobs:list, ops:status-report) |
-| ADRs | ADR-021, ADR-022 |
-| Docs nuevos | OBSERVABILITY_ARCHITECTURE, HEALTH_CHECKS, ALERTING_POLICY, OPERATIONAL_RUNBOOK |
+| Unit tests (Vitest) | 170 |
+| E2E tests (Playwright) | 73 (66 previos + 7 nuevos) |
+| Security checks | 55 |
+| Prisma models | ~30+ |
+| Prisma migrations | 16 |
+| ADRs | 28 (ADR-001 a ADR-028) |
+
+## Lint
+
+3 errores preexistentes (no de esta fase):
+- `scripts/backup/manifest.ts`: require() import
+- Componente: setState in effect
+- `src/lib/server/mfa.test.ts`: require() import
+28 warnings preexistentes (unused vars en E2E tests).

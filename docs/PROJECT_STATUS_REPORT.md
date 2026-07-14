@@ -1,8 +1,8 @@
 # PROJECT STATUS REPORT — NCI Logistics Control Tower
 
-Fecha: 2026-07-12
+Fecha: 2026-07-13
 Autor: Claude Opus 4.6 (equipo multidisciplinario senior)
-Commit base: `d03989b` (branch `main`)
+Commit base: `aeb666d` (branch `main`)
 
 ---
 
@@ -18,7 +18,8 @@ El producto se encuentra en estado de **prototipo funcional avanzado** con flujo
 - Seguridad enterprise: Argon2id, sesiones opacas, MFA TOTP, rate limiting, ClamAV, headers CSP
 - PWA instalable con soporte offline completo para conductores
 - Observabilidad local: health checks, metricas, alertas, logging estructurado, dashboard de estado
-- 142 tests unitarios, 66 E2E, 48 verificaciones de seguridad estaticas — todos en verde
+- Operaciones IA: estimacion de rutas, recomendacion de conductores, horarios, insights
+- 170 tests unitarios, 73 E2E, 55 verificaciones de seguridad estaticas — todos en verde
 
 **Brechas criticas para produccion:**
 - Sin TLS/HTTPS (prototipo local)
@@ -116,6 +117,32 @@ El producto se encuentra en estado de **prototipo funcional avanzado** con flujo
 - Rate limiting: 10 intentos / 15 min
 - ADR-018, ADR-019
 
+### Fase 8 — Backups cifrados y DR
+- Backups cifrados AES-256-GCM para PostgreSQL, MinIO y configuracion
+- Restore con validacion de checksums SHA-256
+- Database restaurado en DB aislada (nci_logistics_restore_test)
+- ADR-020
+
+### Fase 9 — Observabilidad y monitoreo operativo
+- Request IDs, logger estructurado con redaccion de 30+ keys
+- Health checks para 5 servicios, metricas operativas (19 queries)
+- Alertas con deduplicacion y cooldown, job runner
+- PWA telemetry con allowlist, dashboard de estado del sistema
+- ADR-021, ADR-022
+
+### Fase 10 — Integraciones y administracion
+- Conectores de integracion disabled-first (GPS, WhatsApp, CRM, Billing, AI)
+- Credenciales cifradas AES-256-GCM
+- Paneles de administracion plataforma y tenant
+- ADR-023, ADR-024, ADR-025
+
+### Fase 11 — Operaciones IA
+- 4 proveedores de ruta (disabled/simulated/google/waze-stub) con factory pattern
+- Motor de recomendacion de conductores por reglas (12 criterios, descalificacion, risk levels)
+- Horarios semanales de conductores + excepciones de disponibilidad
+- Dashboard de insights operativos
+- ADR-026, ADR-027, ADR-028
+
 ---
 
 ## 4. Arquitectura
@@ -210,10 +237,10 @@ STRIDE completo documentado en `docs/THREAT_MODEL.md`. 6 categorias, 18 amenazas
 
 | Tipo | Cantidad | Estado |
 |---|---|---|
-| Unit tests (Vitest) | 83 | PASS |
-| E2E tests (Playwright) | 46 | PASS |
-| Security checks (estaticas) | 32 | PASS |
-| **Total verificaciones** | **161** | **PASS** |
+| Unit tests (Vitest) | 170 | PASS |
+| E2E tests (Playwright) | 73 | PASS |
+| Security checks (estaticas) | 55 | PASS |
+| **Total verificaciones** | **298** | **PASS** |
 
 ### Desglose de tests unitarios (83)
 

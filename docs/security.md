@@ -68,6 +68,15 @@ pnpm security:audit    # pnpm audit --prod (no-fail; documenta)
 - `/backups/` en `.gitignore`.
 - DR drill (`pnpm backup:drill`) ejecuta ciclo completo con evidencia.
 
+### Operaciones IA
+
+- Motor de recomendacion de conductores determinista (reglas, no IA externa).
+- Conductores filtrados por tenantId antes de evaluacion — sin fuga cross-tenant.
+- Google API key nunca logueada ni expuesta en mensajes de error (`sanitizeErrorMessage`).
+- Proveedores disabled/simulated/waze no hacen llamadas HTTP.
+- Override de recomendacion exige razon obligatoria y se audita.
+- Todas las server actions de ruta/recomendacion/horarios validan `requireTenantRole` y auditan.
+
 ## Pendientes documentados
 
 - Actualización de dependencias transitivas cuando parcheen upstream.

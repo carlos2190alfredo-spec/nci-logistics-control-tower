@@ -148,3 +148,15 @@ Metodología: STRIDE adaptado + análisis por flujo. Escala impacto/probabilidad
 | Dashboard de estado restringido por rol + MFA | Implementado |
 | PWA telemetry con allowlist estricta | Implementado |
 | Endpoints publicos no exponen detalles internos | Implementado |
+
+## Operaciones IA (2026-07-13)
+
+| Amenaza | Mitigacion | Estado |
+|---|---|---|
+| API key de Google en logs/errores | sanitizeErrorMessage() strip AIza... y key=... | Implementado |
+| Cross-tenant en recomendaciones | Filtro d.tenantId === tenantId antes de scoring | Implementado |
+| Llamadas HTTP no autorizadas | Providers disabled/simulated/waze no hacen fetch | Implementado |
+| Override sin razon (accountability) | overrideReason obligatorio, return si vacio | Implementado |
+| Acceso no autorizado a insights | requireTenantRole en todas las actions | Implementado |
+| Manipulacion de scores | Motor server-side, scores no provienen del cliente | Implementado |
+| Coordenadas de otro tenant | TripStop.tenantId = tenant.id en todas las queries | Implementado |

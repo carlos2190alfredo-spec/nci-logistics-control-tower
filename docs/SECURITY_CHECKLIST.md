@@ -15,6 +15,11 @@ Evolución de controles por etapa. Cada casilla exige evidencia verificable, no 
 - [x] Idempotencia persistente para acciones offline.
 - [x] Logger con redacción; audit_logs no modificables desde UI.
 - [x] `pnpm security:check` y `pnpm test:e2e` en verde.
+- [x] Google API key sanitizada en errores (no logueada, no expuesta).
+- [x] Proveedores de ruta disabled/simulated/waze sin llamadas HTTP.
+- [x] Motor de recomendacion aislado por tenantId.
+- [x] Override de recomendacion exige razon obligatoria.
+- [x] Server actions de operaciones IA con requireTenantRole + audit.
 
 ## Antes de piloto externo
 
