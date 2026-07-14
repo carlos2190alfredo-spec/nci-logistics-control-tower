@@ -1,4 +1,5 @@
 import {
+  Bot,
   Brain,
   ClipboardList,
   Gauge,
@@ -35,6 +36,7 @@ export function getTenantAdminNavGroups(tenantSlug: string) {
     {
       title: "Inteligencia",
       items: [
+        { label: "Copiloto IA", href: `${base}/operations-copilot`, icon: <Bot /> },
         { label: "Operaciones IA", href: `${base}/operations-insights`, icon: <Gauge /> },
         { label: "Feedback", href: `${base}/feedback`, icon: <MessageSquare /> },
         { label: "Recomendaciones", href: `${base}/recommendations`, icon: <Brain /> },
