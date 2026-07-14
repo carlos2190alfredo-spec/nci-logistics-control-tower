@@ -1,4 +1,5 @@
 import { readFile, writeFile } from "node:fs/promises";
+import { hostname } from "node:os";
 
 export interface BackupEntry {
   filename: string;
@@ -26,7 +27,7 @@ export function createManifest(): BackupManifest {
   return {
     version: "1.0",
     createdAt: new Date().toISOString(),
-    hostname: require("node:os").hostname(),
+    hostname: hostname(),
     entries: [],
     totalOriginalSize: 0,
     totalEncryptedSize: 0,

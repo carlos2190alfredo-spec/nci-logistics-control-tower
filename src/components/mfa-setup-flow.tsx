@@ -10,12 +10,13 @@ import { Card } from "@/components/ui/card";
 
 type SetupData = { secret: string; uri: string } | null;
 
-export function MfaSetupFlow({ userEmail }: { userEmail: string }) {
+export function MfaSetupFlow({ userEmail: _userEmail }: { userEmail: string }) {
   const [setupData, setSetupData] = useState<SetupData>(null);
   const [qrSvg, setQrSvg] = useState<string>("");
   const [copied, setCopied] = useState(false);
-  const [recoveryCodes, setRecoveryCodes] = useState<string[] | null>(null);
   const [activateState, activateAction] = useActionState(activateMfaAction, null);
+
+  const recoveryCodes = activateState && "recoveryCodes" in activateState ? (activateState.recoveryCodes as string[] | null) : null;
 
   useEffect(() => {
     let cancelled = false;
@@ -37,12 +38,6 @@ export function MfaSetupFlow({ userEmail }: { userEmail: string }) {
     });
     return () => { cancelled = true; };
   }, [setupData?.uri]);
-
-  useEffect(() => {
-    if (activateState && "recoveryCodes" in activateState && activateState.recoveryCodes) {
-      setRecoveryCodes(activateState.recoveryCodes);
-    }
-  }, [activateState]);
 
   function handleCopySecret() {
     if (!setupData?.secret) return;
