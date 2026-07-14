@@ -599,6 +599,93 @@ const checks: Check[] = [
     },
   },
   {
+    name: "DeepSeek: prompt injection detection covers EN+ES patterns",
+    run: () => {
+      const source = readFileSync("src/lib/ai/prompt-safety.ts", "utf8");
+      const en = source.includes("ignore") && source.includes("reveal") && source.includes("bypass");
+      const es = source.includes("ignora") && source.includes("revela") && source.includes("cambia");
+      const ok = en && es;
+      return { ok, detail: ok ? "" : "prompt-safety.ts no cubre patrones EN+ES de inyeccion." };
+    },
+  },
+  {
+    name: "DeepSeek: API key never logged or exposed in provider code",
+    run: () => {
+      const provider = readFileSync("src/lib/ai/providers/deepseek-provider.ts", "utf8");
+      const config = readFileSync("src/lib/ai/deepseek-config.ts", "utf8");
+      const noLog = !provider.includes("console.log") && !config.includes("console.log");
+      const sanitizes = provider.includes("sanitizeError") && provider.includes("API_KEY_PATTERN");
+      const ok = noLog && sanitizes;
+      return { ok, detail: ok ? "" : "deepseek-provider o config expone API key en logs." };
+    },
+  },
+  {
+    name: "DeepSeek: secrets stripped from AI input",
+    run: () => {
+      const source = readFileSync("src/lib/ai/prompt-safety.ts", "utf8");
+      const ok = source.includes("stripSecrets") && source.includes("stripSignedUrls") && source.includes("stripBase64") && source.includes("stripPhones");
+      return { ok, detail: ok ? "" : "prompt-safety.ts no elimina secretos de input IA." };
+    },
+  },
+  {
+    name: "DeepSeek: model output sanitized before use",
+    run: () => {
+      const source = readFileSync("src/lib/ai/copilot-actions.ts", "utf8");
+      const ok = source.includes("sanitizeModelOutput");
+      return { ok, detail: ok ? "" : "copilot-actions.ts no sanitiza output del modelo." };
+    },
+  },
+  {
+    name: "DeepSeek: untrusted content marked in context",
+    run: () => {
+      const source = readFileSync("src/lib/ai/tenant-context.ts", "utf8");
+      const ok = source.includes("markUntrustedContent");
+      return { ok, detail: ok ? "" : "tenant-context.ts no marca contenido no confiable." };
+    },
+  },
+  {
+    name: "DeepSeek: cross-tenant prevention in context",
+    run: () => {
+      const source = readFileSync("src/lib/ai/tenant-context.ts", "utf8");
+      const tenantFilters = source.match(/tenantId/g) ?? [];
+      const ok = tenantFilters.length >= 5;
+      return { ok, detail: ok ? "" : `Solo ${tenantFilters.length} filtros tenantId en tenant-context.ts (esperado >= 5).` };
+    },
+  },
+  {
+    name: "DeepSeek: tests never call real API",
+    run: () => {
+      const source = readFileSync("src/lib/ai/providers/provider-factory.ts", "utf8");
+      const ok = source.includes('NODE_ENV === "test"') && source.includes("RulesBasedAiProvider");
+      return { ok, detail: ok ? "" : "provider-factory.ts no fuerza rules en tests." };
+    },
+  },
+  {
+    name: "DeepSeek: server actions require auth and audit",
+    run: () => {
+      const source = readFileSync("src/lib/server/copilot-actions.ts", "utf8");
+      const ok = source.includes("requireTenantRole") && source.includes("audit(");
+      return { ok, detail: ok ? "" : "copilot-actions.ts server sin auth o audit." };
+    },
+  },
+  {
+    name: "DeepSeek: reasoning_content never persisted",
+    run: () => {
+      const hits = grepMissing(["reasoning_content"]).filter(
+        (line) => !line.includes("security-check.ts"),
+      );
+      return { ok: hits.length === 0, detail: hits.slice(0, 5).join("\n") };
+    },
+  },
+  {
+    name: "DeepSeek: Zod validates LLM output schemas",
+    run: () => {
+      const source = readFileSync("src/lib/ai/copilot-actions.ts", "utf8");
+      const ok = source.includes("schema.parse") && source.includes("z.object");
+      return { ok, detail: ok ? "" : "copilot-actions.ts sin validacion Zod de output." };
+    },
+  },
+  {
     name: "TS: sin errores de tipos",
     run: () => {
       try {

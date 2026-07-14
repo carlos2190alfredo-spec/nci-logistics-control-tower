@@ -47,6 +47,11 @@
     "ops:alerts:test": "tsx scripts/ops-alerts-test.ts",
     "ops:jobs:list": "tsx scripts/ops-jobs-list.ts",
     "ops:status-report": "tsx scripts/ops-status-report.ts",
+    "demo:seed": "tsx scripts/demo-seed.ts",
+    "demo:reset": "tsx scripts/demo-reset.ts",
+    "demo:status": "tsx scripts/demo-status.ts",
+    "app:doctor": "tsx scripts/app-doctor.ts",
+    "readiness:check": "tsx scripts/readiness-check.ts",
     "postinstall": "prisma generate"
   },
   "dependencies": {
