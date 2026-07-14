@@ -26,6 +26,8 @@ async function main() {
       prisma.driverAssignmentRecommendation.deleteMany({ where: { tenantId: tenant.id } }),
       prisma.tripRouteEstimate.deleteMany({ where: { tenantId: tenant.id } }),
       prisma.driverWorkSchedule.deleteMany({ where: { tenantId: tenant.id } }),
+      prisma.driverAvailabilityException.deleteMany({ where: { tenantId: tenant.id } }),
+      prisma.tripStop.deleteMany({ where: { tenantId: tenant.id } }),
       prisma.operationalAlert.deleteMany({ where: { tenantId: tenant.id } }),
       prisma.tenantFeedback.deleteMany({ where: { tenantId: tenant.id } }),
       prisma.tenantAiSetting.deleteMany({ where: { tenantId: tenant.id } }),
@@ -33,7 +35,8 @@ async function main() {
 
     const labels = [
       "AI invocations", "AI usage daily", "recommendations",
-      "route estimates", "work schedules", "alerts", "feedback", "AI settings",
+      "route estimates", "work schedules", "availability exceptions",
+      "trip stops", "alerts", "feedback", "AI settings",
     ];
     deleted.forEach((r, i) => {
       if (r.count > 0) console.log(`  - ${r.count} ${labels[i]} eliminados`);

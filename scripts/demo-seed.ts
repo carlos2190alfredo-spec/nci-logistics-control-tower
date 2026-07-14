@@ -99,6 +99,88 @@ async function main() {
     }
     console.log(`  - ${recsCreated} recomendaciones de conductor creadas`);
 
+    // Trip stops (at least one trip with multiple stops)
+    let stopsCreated = 0;
+    if (trips.length > 0) {
+      const firstTrip = trips[0];
+      const existingStops = await prisma.tripStop.count({ where: { tripId: firstTrip.id } });
+      if (existingStops === 0) {
+        const stops = [
+          { type: "START" as const, seq: 1, label: "Terminal de origen", addr: firstTrip.origin },
+          { type: "PICKUP" as const, seq: 2, label: "Recogida en almacen", addr: "Almacen Central, Panama" },
+          { type: "DELIVERY" as const, seq: 3, label: "Entrega parcial", addr: "Centro Logistico Norte" },
+          { type: "DELIVERY" as const, seq: 4, label: "Entrega final", addr: firstTrip.destination },
+        ];
+        for (const s of stops) {
+          await prisma.tripStop.create({
+            data: {
+              tenantId: tenant.id,
+              tripId: firstTrip.id,
+              type: s.type,
+              sequence: s.seq,
+              label: s.label,
+              addressText: s.addr,
+            },
+          });
+          stopsCreated++;
+        }
+      }
+    }
+    console.log(`  - ${stopsCreated} paradas de viaje creadas`);
+
+    // Availability exceptions
+    let exceptionsCreated = 0;
+    if (drivers.length >= 2) {
+      const tomorrow = new Date();
+      tomorrow.setDate(tomorrow.getDate() + 1);
+      tomorrow.setHours(0, 0, 0, 0);
+      const nextWeek = new Date();
+      nextWeek.setDate(nextWeek.getDate() + 7);
+      nextWeek.setHours(0, 0, 0, 0);
+
+      const existingExceptions = await prisma.driverAvailabilityException.count({
+        where: { tenantId: tenant.id },
+      });
+      if (existingExceptions === 0) {
+        await prisma.driverAvailabilityException.create({
+          data: {
+            tenantId: tenant.id,
+            driverId: drivers[0].id,
+            date: tomorrow,
+            type: "DAY_OFF",
+            reason: "Dia libre programado demo",
+          },
+        });
+        await prisma.driverAvailabilityException.create({
+          data: {
+            tenantId: tenant.id,
+            driverId: drivers[1].id,
+            date: nextWeek,
+            type: "VACATION",
+            reason: "Vacaciones demo",
+          },
+        });
+        exceptionsCreated = 2;
+      }
+    }
+    console.log(`  - ${exceptionsCreated} excepciones de disponibilidad creadas`);
+
+    // Integration connectors (global, not per tenant — only seed once)
+    const existingConnectors = await prisma.integrationConnector.count();
+    if (existingConnectors === 0) {
+      const connectors = [
+        { type: "GPS" as const, name: "GPS Disabled", description: "Proveedor GPS desactivado por diseno", enabled: false },
+        { type: "WHATSAPP" as const, name: "WhatsApp Disabled", description: "Notificaciones WhatsApp desactivadas", enabled: false },
+        { type: "CRM" as const, name: "CRM Disabled", description: "Integracion CRM desactivada", enabled: false },
+        { type: "BILLING" as const, name: "Billing Disabled", description: "Facturacion electronica desactivada", enabled: false },
+        { type: "AI" as const, name: "AI Rules Engine", description: "Motor de reglas determinista local", enabled: true },
+      ];
+      for (const c of connectors) {
+        await prisma.integrationConnector.create({ data: c });
+      }
+      console.log(`  - ${connectors.length} conectores de integracion creados`);
+    }
+
     await prisma.tenantAiSetting.upsert({
       where: { tenantId: tenant.id },
       update: {},

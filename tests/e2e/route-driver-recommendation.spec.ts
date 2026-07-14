@@ -32,30 +32,30 @@ async function login(page: Page, email: string, password: string) {
 test.describe.serial("Route Estimation & Driver Recommendation", () => {
   test("operations insights page loads for admin", async ({ page }) => {
     await login(page, ...users.operations);
-    await page.goto("/t/panatruck/admin/operations-insights");
-    await expect(page.getByText("Operaciones IA")).toBeVisible({ timeout: 10_000 });
-    await expect(page.getByText("Sin conductor")).toBeVisible();
+    await page.goto("/t/panatruck-demo/admin/operations-insights");
+    await expect(page.getByRole("heading", { name: "Operaciones e Inteligencia" })).toBeVisible({ timeout: 10_000 });
+    await expect(page.getByText("Sin conductor", { exact: true })).toBeVisible();
   });
 
   test("driver schedule page loads with weekly grid", async ({ page }) => {
     await login(page, ...users.operations);
     const driver = await db.driver.findFirst({
-      where: { tenant: { slug: "panatruck" } },
+      where: { tenant: { slug: "panatruck-demo" } },
     });
     expect(driver).toBeTruthy();
-    await page.goto(`/t/panatruck/admin/drivers/${driver!.id}/schedule`);
+    await page.goto(`/t/panatruck-demo/admin/drivers/${driver!.id}/schedule`);
     await expect(page.getByText("Horario Semanal")).toBeVisible({ timeout: 10_000 });
   });
 
   test("driver list shows schedule link", async ({ page }) => {
     await login(page, ...users.operations);
-    await page.goto("/t/panatruck/admin/drivers");
+    await page.goto("/t/panatruck-demo/admin/drivers");
     await expect(page.getByRole("link", { name: "Horario" }).first()).toBeVisible({ timeout: 10_000 });
   });
 
   test("trip card shows route estimation section", async ({ page }) => {
     await login(page, ...users.operations);
-    await page.goto("/t/panatruck");
+    await page.goto("/t/panatruck-demo");
     const estimateSection = page.getByText("Estimacion de Ruta");
     if (await estimateSection.isVisible().catch(() => false)) {
       await expect(estimateSection).toBeVisible();
@@ -64,7 +64,7 @@ test.describe.serial("Route Estimation & Driver Recommendation", () => {
 
   test("trip card shows driver recommendation section", async ({ page }) => {
     await login(page, ...users.operations);
-    await page.goto("/t/panatruck");
+    await page.goto("/t/panatruck-demo");
     const recSection = page.getByText("Recomendacion de Conductor");
     if (await recSection.isVisible().catch(() => false)) {
       await expect(recSection).toBeVisible();
@@ -73,15 +73,16 @@ test.describe.serial("Route Estimation & Driver Recommendation", () => {
 
   test("cross-tenant: translogistica cannot see panatruck operations", async ({ page }) => {
     await login(page, ...users.transOwner);
-    const response = await page.goto("/t/panatruck/admin/operations-insights");
-    expect(response?.status()).not.toBe(200);
+    await page.goto("/t/panatruck-demo/admin/operations-insights");
+    await page.waitForLoadState("networkidle");
+    expect(page.url()).not.toContain("/panatruck-demo/admin/operations-insights");
   });
 
   test("operations insights shows metrics cards", async ({ page }) => {
     await login(page, ...users.operations);
-    await page.goto("/t/panatruck/admin/operations-insights");
-    await expect(page.getByText("Sin conductor")).toBeVisible({ timeout: 10_000 });
-    await expect(page.getByText("Sin ETA")).toBeVisible();
-    await expect(page.getByText("Sin horario")).toBeVisible();
+    await page.goto("/t/panatruck-demo/admin/operations-insights");
+    await expect(page.getByText("Sin conductor", { exact: true })).toBeVisible({ timeout: 10_000 });
+    await expect(page.getByText("Sin ETA", { exact: true })).toBeVisible();
+    await expect(page.getByText("Viajes activos", { exact: true })).toBeVisible();
   });
 });

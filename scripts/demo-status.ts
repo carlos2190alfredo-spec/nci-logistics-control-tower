@@ -22,9 +22,9 @@ async function main() {
 
     const [
       users, drivers, trips, vehicles, customers,
-      schedules, estimates, recommendations,
-      incidents, feedback, alerts,
-      aiSetting, aiInvocations, aiUsage,
+      schedules, exceptions, stops, estimates, recommendations,
+      incidents, feedback, alerts, pods, fileAttachments,
+      aiSetting, aiInvocations, aiUsage, connectors,
     ] = await Promise.all([
       prisma.tenantMembership.count({ where: { tenantId: tenant.id } }),
       prisma.driver.count({ where: { tenantId: tenant.id } }),
@@ -32,14 +32,19 @@ async function main() {
       prisma.vehicle.count({ where: { tenantId: tenant.id } }),
       prisma.customerAccount.count({ where: { tenantId: tenant.id } }),
       prisma.driverWorkSchedule.count({ where: { tenantId: tenant.id } }),
+      prisma.driverAvailabilityException.count({ where: { tenantId: tenant.id } }),
+      prisma.tripStop.count({ where: { tenantId: tenant.id } }),
       prisma.tripRouteEstimate.count({ where: { tenantId: tenant.id } }),
       prisma.driverAssignmentRecommendation.count({ where: { tenantId: tenant.id } }),
       prisma.incident.count({ where: { tenantId: tenant.id } }),
       prisma.tenantFeedback.count({ where: { tenantId: tenant.id } }),
       prisma.operationalAlert.count({ where: { tenantId: tenant.id } }),
+      prisma.proofOfDelivery.count({ where: { tenantId: tenant.id } }),
+      prisma.fileAttachment.count({ where: { tenantId: tenant.id } }),
       prisma.tenantAiSetting.findUnique({ where: { tenantId: tenant.id } }),
       prisma.aiInvocation.count({ where: { tenantId: tenant.id } }),
       prisma.aiUsageDaily.findFirst({ where: { tenantId: tenant.id }, orderBy: { date: "desc" } }),
+      prisma.integrationConnector.count(),
     ]);
 
     console.log(`  Usuarios:          ${users}`);
@@ -48,11 +53,16 @@ async function main() {
     console.log(`  Clientes:          ${customers}`);
     console.log(`  Viajes:            ${trips}`);
     console.log(`  Horarios:          ${schedules}`);
+    console.log(`  Excepciones disp:  ${exceptions}`);
+    console.log(`  Paradas de viaje:  ${stops}`);
     console.log(`  Estimaciones ruta: ${estimates}`);
     console.log(`  Recomendaciones:   ${recommendations}`);
     console.log(`  Incidencias:       ${incidents}`);
+    console.log(`  PODs:              ${pods}`);
+    console.log(`  Archivos:          ${fileAttachments}`);
     console.log(`  Feedback:          ${feedback}`);
     console.log(`  Alertas:           ${alerts}`);
+    console.log(`  Conectores integ:  ${connectors}`);
     console.log(`  IA habilitada:     ${aiSetting?.enabled ?? false}`);
     console.log(`  Invocaciones IA:   ${aiInvocations}`);
     if (aiUsage) {
