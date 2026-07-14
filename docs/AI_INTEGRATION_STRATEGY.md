@@ -1,13 +1,13 @@
 # Estrategia de Integracion de IA — NCI Logistics Control Tower
 
-Fecha: 2026-07-12
-Version: 1.0
+Fecha: 2026-07-12 (actualizada 2026-07-14)
+Version: 2.0
 Agente: Claude Opus 4.6
-Referencia: ADR-024 (por crear)
+Referencia: ADR-024, ADR-028, ADR-029
 
 ## Principio fundamental
 
-**No se usan APIs externas de IA.** El motor de recomendaciones es determinista, basado en reglas, ejecutado localmente, y aislado por tenant. Esto garantiza:
+**El motor de reglas es la autoridad para decisiones operativas.** DeepSeek (opcional) solo explica y prioriza — nunca ejecuta acciones. Sin API key, la plataforma funciona igual con el motor de reglas determinista. Esto garantiza:
 
 - Predecibilidad: mismos datos → mismas recomendaciones
 - Privacidad: ningun dato sale del sistema
