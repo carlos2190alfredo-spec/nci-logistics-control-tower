@@ -252,6 +252,12 @@ model Tenant {
   aiInsightEvents    AiInsightEvent[]
   feedback           TenantFeedback[]
   invitations        UserInvitation[]
+  tripStops          TripStop[]
+  tripRouteEstimates TripRouteEstimate[]
+  tripStopEstimates  TripStopEstimate[]
+  driverWorkSchedules DriverWorkSchedule[]
+  driverAvailabilityExceptions DriverAvailabilityException[]
+  driverRecommendations DriverAssignmentRecommendation[]
 
   @@map("tenants")
 }
@@ -419,6 +425,9 @@ model Driver {
   user           User?            @relation(fields: [userId], references: [id])
   trips          Trip[]
   assignments    TripAssignment[]
+  workSchedules  DriverWorkSchedule[]
+  availabilityExceptions DriverAvailabilityException[]
+  assignmentRecommendations DriverAssignmentRecommendation[]
 
   @@unique([tenantId, code])
   @@index([tenantId, userId])
@@ -508,6 +517,10 @@ model Trip {
   proof                 ProofOfDelivery?
   assignments           TripAssignment[]
   fileAttachments       FileAttachment[]
+  stops                 TripStop[]
+  routeEstimates        TripRouteEstimate[]
+  stopEstimates         TripStopEstimate[]
+  driverRecommendations DriverAssignmentRecommendation[]
 
   @@unique([tenantId, reference])
   @@index([tenantId, customerAccountId, status])
@@ -1196,6 +1209,216 @@ model FeedbackComment {
 
   @@index([feedbackId, createdAt])
   @@map("feedback_comments")
+}
+
+// ─── Route Estimation + Trip Stops ──────────────────────────
+
+enum TripStopType {
+  START
+  PICKUP
+  DELIVERY
+  RETURN
+  OTHER
+}
+
+enum RouteProvider {
+  DISABLED
+  SIMULATED
+  GOOGLE_ROUTES
+  WAZE_FUTURE
+}
+
+enum RouteEstimateStatus {
+  NOT_REQUESTED
+  PENDING
+  ESTIMATED
+  FAILED
+  STALE
+}
+
+model TripStop {
+  id                  String       @id @default(uuid()) @db.Uuid
+  tenantId            String       @map("tenant_id") @db.Uuid
+  tripId              String       @map("trip_id") @db.Uuid
+  type                TripStopType
+  sequence            Int
+  label               String?
+  addressText         String       @map("address_text")
+  placeId             String?      @map("place_id")
+  latitude            Float?
+  longitude           Float?
+  plannedArrivalAt    DateTime?    @map("planned_arrival_at")
+  plannedDepartureAt  DateTime?    @map("planned_departure_at")
+  timeWindowStart     DateTime?    @map("time_window_start")
+  timeWindowEnd       DateTime?    @map("time_window_end")
+  contactName         String?      @map("contact_name")
+  contactPhone        String?      @map("contact_phone")
+  instructions        String?
+  createdAt           DateTime     @default(now()) @map("created_at")
+  updatedAt           DateTime     @updatedAt @map("updated_at")
+  tenant              Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  trip                Trip         @relation(fields: [tripId], references: [id], onDelete: Cascade)
+  stopEstimates       TripStopEstimate[]
+
+  @@index([tenantId, tripId, sequence])
+  @@map("trip_stops")
+}
+
+model TripRouteEstimate {
+  id                      String              @id @default(uuid()) @db.Uuid
+  tenantId                String              @map("tenant_id") @db.Uuid
+  tripId                  String              @map("trip_id") @db.Uuid
+  provider                RouteProvider
+  status                  RouteEstimateStatus @default(NOT_REQUESTED)
+  distanceMeters          Int?                @map("distance_meters")
+  durationSeconds         Int?                @map("duration_seconds")
+  trafficDurationSeconds  Int?                @map("traffic_duration_seconds")
+  staticDurationSeconds   Int?                @map("static_duration_seconds")
+  estimatedStartAt        DateTime?           @map("estimated_start_at")
+  estimatedEndAt          DateTime?           @map("estimated_end_at")
+  calculatedAt            DateTime?           @map("calculated_at")
+  expiresAt               DateTime?           @map("expires_at")
+  routeSummary            String?             @map("route_summary")
+  polylineEncoded         String?             @map("polyline_encoded")
+  providerRequestHash     String?             @map("provider_request_hash")
+  safeProviderSummaryJson Json?               @map("safe_provider_summary_json")
+  errorCode               String?             @map("error_code")
+  safeErrorMessage        String?             @map("safe_error_message")
+  createdAt               DateTime            @default(now()) @map("created_at")
+  updatedAt               DateTime            @updatedAt @map("updated_at")
+  tenant                  Tenant              @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  trip                    Trip                @relation(fields: [tripId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, tripId])
+  @@index([providerRequestHash])
+  @@map("trip_route_estimates")
+}
+
+model TripStopEstimate {
+  id                        String    @id @default(uuid()) @db.Uuid
+  tenantId                  String    @map("tenant_id") @db.Uuid
+  tripId                    String    @map("trip_id") @db.Uuid
+  stopId                    String    @map("stop_id") @db.Uuid
+  estimatedArrivalAt        DateTime? @map("estimated_arrival_at")
+  estimatedDepartureAt      DateTime? @map("estimated_departure_at")
+  legDistanceMeters         Int?      @map("leg_distance_meters")
+  legDurationSeconds        Int?      @map("leg_duration_seconds")
+  legTrafficDurationSeconds Int?      @map("leg_traffic_duration_seconds")
+  sequence                  Int
+  createdAt                 DateTime  @default(now()) @map("created_at")
+  tenant                    Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  trip                      Trip      @relation(fields: [tripId], references: [id], onDelete: Cascade)
+  stop                      TripStop  @relation(fields: [stopId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, tripId])
+  @@map("trip_stop_estimates")
+}
+
+// ─── Driver Schedules + Availability ────────────────────────
+
+enum DayOfWeek {
+  MONDAY
+  TUESDAY
+  WEDNESDAY
+  THURSDAY
+  FRIDAY
+  SATURDAY
+  SUNDAY
+}
+
+enum AvailabilityExceptionType {
+  DAY_OFF
+  VACATION
+  SICK_LEAVE
+  EXTRA_SHIFT
+  CUSTOM_UNAVAILABLE
+}
+
+model DriverWorkSchedule {
+  id              String    @id @default(uuid()) @db.Uuid
+  tenantId        String    @map("tenant_id") @db.Uuid
+  driverId        String    @map("driver_id") @db.Uuid
+  dayOfWeek       DayOfWeek @map("day_of_week")
+  startTimeLocal  String    @map("start_time_local")
+  endTimeLocal    String    @map("end_time_local")
+  breakStartLocal String?   @map("break_start_local")
+  breakEndLocal   String?   @map("break_end_local")
+  timezone        String    @default("America/Panama")
+  isActive        Boolean   @default(true) @map("is_active")
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
+  tenant          Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  driver          Driver    @relation(fields: [driverId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, driverId, dayOfWeek])
+  @@index([tenantId, driverId])
+  @@map("driver_work_schedules")
+}
+
+model DriverAvailabilityException {
+  id              String                     @id @default(uuid()) @db.Uuid
+  tenantId        String                     @map("tenant_id") @db.Uuid
+  driverId        String                     @map("driver_id") @db.Uuid
+  date            DateTime                   @db.Date
+  type            AvailabilityExceptionType
+  startTimeLocal  String?                    @map("start_time_local")
+  endTimeLocal    String?                    @map("end_time_local")
+  reason          String?
+  createdAt       DateTime                   @default(now()) @map("created_at")
+  tenant          Tenant                     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  driver          Driver                     @relation(fields: [driverId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, driverId, date])
+  @@map("driver_availability_exceptions")
+}
+
+// ─── Driver Assignment Recommendations ──────────────────────
+
+enum RecommendationStatus {
+  GENERATED
+  ACCEPTED
+  DISMISSED
+  OVERRIDDEN
+}
+
+enum RiskLevel {
+  LOW
+  MEDIUM
+  HIGH
+}
+
+enum RecommendationGeneratedBy {
+  RULES_ENGINE
+  AI_DISABLED_PROVIDER
+  AI_PROVIDER_FUTURE
+}
+
+model DriverAssignmentRecommendation {
+  id                  String                     @id @default(uuid()) @db.Uuid
+  tenantId            String                     @map("tenant_id") @db.Uuid
+  tripId              String                     @map("trip_id") @db.Uuid
+  driverId            String?                    @map("driver_id") @db.Uuid
+  status              RecommendationStatus       @default(GENERATED)
+  score               Float
+  rank                Int
+  recommendationTitle String                     @map("recommendation_title")
+  explanation         String
+  riskLevel           RiskLevel                  @map("risk_level")
+  reasonsJson         Json                       @default("[]") @map("reasons_json")
+  warningsJson        Json                       @default("[]") @map("warnings_json")
+  generatedBy         RecommendationGeneratedBy  @map("generated_by")
+  overrideReason      String?                    @map("override_reason")
+  acceptedAt          DateTime?                  @map("accepted_at")
+  dismissedAt         DateTime?                  @map("dismissed_at")
+  createdAt           DateTime                   @default(now()) @map("created_at")
+  updatedAt           DateTime                   @updatedAt @map("updated_at")
+  tenant              Tenant                     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  trip                Trip                       @relation(fields: [tripId], references: [id], onDelete: Cascade)
+  driver              Driver?                    @relation(fields: [driverId], references: [id])
+
+  @@index([tenantId, tripId])
+  @@index([tenantId, driverId])
+  @@map("driver_assignment_recommendations")
 }
 
 // ─── Product Evolution: Invitations ──────────────────────────
