@@ -1,4 +1,4 @@
-import { ArrowRight, CircleAlert, ClipboardCheck, FileCheck2, MapPin, TriangleAlert, Truck, User } from "lucide-react";
+import { ArrowRight, Brain, CircleAlert, ClipboardCheck, FileCheck2, MapPin, Route, TriangleAlert, Truck, User } from "lucide-react";
 import type { Prisma, TenantRole } from "@/generated/prisma";
 import { nextStatuses } from "@/lib/domain/state-machine";
 import {
@@ -8,6 +8,8 @@ import {
   reportIncidentAction,
   transitionTripAction,
 } from "@/lib/server/actions";
+import { calculateRouteEstimateAction } from "@/lib/server/route-actions";
+import { generateDriverRecommendationAction } from "@/lib/server/driver-recommendation-actions";
 import { proofStatusLabel, proofStatusTone, tripStatusLabel, tripStatusTone } from "@/lib/ui/status";
 import { formatDate, formatDateShort } from "@/lib/utils";
 import { StatusBadge } from "@/components/ui/badge";
@@ -25,6 +27,9 @@ export type OperationsTrip = Prisma.TripGetPayload<{
     proof: true;
     documents: true;
     events: true;
+    stops: true;
+    routeEstimates: true;
+    driverRecommendations: true;
   };
 }>;
 
@@ -174,6 +179,114 @@ export function TripOperationsCard({
             </div>
           </form>
         ) : null}
+
+        {/* Estimacion de ruta */}
+        <Collapsible icon={<Route />} summary="Estimacion de ruta">
+          {trip.routeEstimates && trip.routeEstimates.length > 0 ? (
+            <div className="grid gap-2 text-sm">
+              {(() => {
+                const latest = trip.routeEstimates[trip.routeEstimates.length - 1];
+                return (
+                  <>
+                    <div className="flex items-center justify-between">
+                      <span className="text-muted-foreground">Estado</span>
+                      <StatusBadge
+                        label={latest.status === "ESTIMATED" ? "Estimado" : latest.status === "FAILED" ? "Error" : "No solicitado"}
+                        tone={latest.status === "ESTIMATED" ? "success" : latest.status === "FAILED" ? "danger" : "neutral"}
+                      />
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-muted-foreground">Proveedor</span>
+                      <span className="font-medium text-foreground">{latest.provider}</span>
+                    </div>
+                    {latest.distanceMeters != null ? (
+                      <div className="flex items-center justify-between">
+                        <span className="text-muted-foreground">Distancia</span>
+                        <span className="font-mono font-medium text-foreground">
+                          {(latest.distanceMeters / 1000).toFixed(1)} km
+                        </span>
+                      </div>
+                    ) : null}
+                    {latest.durationSeconds != null ? (
+                      <div className="flex items-center justify-between">
+                        <span className="text-muted-foreground">Duracion estimada</span>
+                        <span className="font-mono font-medium text-foreground">
+                          {Math.ceil(latest.durationSeconds / 60)} min
+                        </span>
+                      </div>
+                    ) : null}
+                    {latest.trafficDurationSeconds != null ? (
+                      <div className="flex items-center justify-between">
+                        <span className="text-muted-foreground">Con trafico</span>
+                        <span className="font-mono font-medium text-foreground">
+                          {Math.ceil(latest.trafficDurationSeconds / 60)} min
+                        </span>
+                      </div>
+                    ) : null}
+                    {latest.routeSummary ? (
+                      <p className="mt-1 text-xs text-faint-foreground">{latest.routeSummary}</p>
+                    ) : null}
+                    {latest.safeErrorMessage ? (
+                      <p className="mt-1 text-xs text-danger-strong">{latest.safeErrorMessage}</p>
+                    ) : null}
+                  </>
+                );
+              })()}
+            </div>
+          ) : (
+            <p className="text-sm text-muted-foreground">Sin estimacion de ruta. Agregue paradas con coordenadas para calcular.</p>
+          )}
+          {trip.stops && trip.stops.length >= 2 ? (
+            <form action={calculateRouteEstimateAction} className="mt-3">
+              <input name="tenantSlug" type="hidden" value={tenantSlug} />
+              <input name="tripId" type="hidden" value={trip.id} />
+              <SubmitButton variant="secondary">
+                {trip.routeEstimates && trip.routeEstimates.length > 0 ? "Recalcular ruta" : "Calcular estimacion"}
+              </SubmitButton>
+            </form>
+          ) : null}
+        </Collapsible>
+
+        {/* Recomendacion de conductor */}
+        <Collapsible icon={<Brain />} summary="Recomendacion de conductor">
+          {trip.driverRecommendations && trip.driverRecommendations.length > 0 ? (
+            <div className="grid gap-2 text-sm">
+              {trip.driverRecommendations
+                .filter((r) => r.rank === 1)
+                .map((rec) => (
+                  <div key={rec.id} className="rounded-lg border border-border bg-surface-sunken/50 p-3">
+                    <div className="flex items-center justify-between">
+                      <span className="font-medium text-foreground">{rec.recommendationTitle}</span>
+                      <StatusBadge
+                        label={rec.riskLevel === "LOW" ? "Bajo" : rec.riskLevel === "MEDIUM" ? "Medio" : "Alto"}
+                        tone={rec.riskLevel === "LOW" ? "success" : rec.riskLevel === "MEDIUM" ? "warning" : "danger"}
+                      />
+                    </div>
+                    <p className="mt-1 text-xs text-muted-foreground">{rec.explanation}</p>
+                    <div className="mt-1.5 flex items-center gap-2 text-xs text-faint-foreground">
+                      <span className="font-mono">Score: {rec.score}</span>
+                      <StatusBadge
+                        label={
+                          rec.status === "GENERATED" ? "Pendiente"
+                            : rec.status === "ACCEPTED" ? "Aceptada"
+                            : rec.status === "OVERRIDDEN" ? "Anulada"
+                            : "Descartada"
+                        }
+                        tone={rec.status === "ACCEPTED" ? "success" : rec.status === "OVERRIDDEN" ? "warning" : "info"}
+                      />
+                    </div>
+                  </div>
+                ))}
+            </div>
+          ) : (
+            <p className="text-sm text-muted-foreground">Genere una recomendacion para asistir en la asignacion de conductor.</p>
+          )}
+          <form action={generateDriverRecommendationAction} className="mt-3">
+            <input name="tenantSlug" type="hidden" value={tenantSlug} />
+            <input name="tripId" type="hidden" value={trip.id} />
+            <SubmitButton variant="secondary">Generar recomendacion</SubmitButton>
+          </form>
+        </Collapsible>
 
         <Collapsible icon={<TriangleAlert />} summary="Registrar incidencia" tone="warning">
           <form action={reportIncidentAction.bind(null, tenantSlug)} className="grid gap-2.5">

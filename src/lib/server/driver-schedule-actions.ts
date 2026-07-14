@@ -36,19 +36,19 @@ export async function saveDriverScheduleAction(formData: FormData) {
   try {
     schedules = JSON.parse(schedulesJson);
   } catch {
-    return { error: "Formato de horarios invalido." };
+    return;
   }
 
   if (!Array.isArray(schedules)) {
-    return { error: "Formato de horarios invalido." };
+    return;
   }
 
   for (const s of schedules) {
-    if (!VALID_DAYS.includes(s.dayOfWeek)) return { error: `Dia invalido: ${s.dayOfWeek}` };
-    if (!TIME_REGEX.test(s.startTimeLocal)) return { error: `Hora de inicio invalida: ${s.startTimeLocal}` };
-    if (!TIME_REGEX.test(s.endTimeLocal)) return { error: `Hora de fin invalida: ${s.endTimeLocal}` };
-    if (s.breakStartLocal && !TIME_REGEX.test(s.breakStartLocal)) return { error: `Hora de inicio de descanso invalida.` };
-    if (s.breakEndLocal && !TIME_REGEX.test(s.breakEndLocal)) return { error: `Hora de fin de descanso invalida.` };
+    if (!VALID_DAYS.includes(s.dayOfWeek)) return;
+    if (!TIME_REGEX.test(s.startTimeLocal)) return;
+    if (!TIME_REGEX.test(s.endTimeLocal)) return;
+    if (s.breakStartLocal && !TIME_REGEX.test(s.breakStartLocal)) return;
+    if (s.breakEndLocal && !TIME_REGEX.test(s.breakEndLocal)) return;
   }
 
   await db.driverWorkSchedule.deleteMany({
@@ -81,7 +81,7 @@ export async function saveDriverScheduleAction(formData: FormData) {
   });
 
   revalidatePath(`/t/${tenantSlug}/admin/drivers/${driverId}/schedule`);
-  return { success: true };
+  return;
 }
 
 export async function addAvailabilityExceptionAction(formData: FormData) {
@@ -98,11 +98,11 @@ export async function addAvailabilityExceptionAction(formData: FormData) {
   ]);
 
   if (!VALID_EXCEPTION_TYPES.includes(type)) {
-    return { error: "Tipo de excepcion invalido." };
+    return;
   }
 
   if (!dateStr) {
-    return { error: "Fecha requerida." };
+    return;
   }
 
   const db = getDb();
@@ -134,7 +134,7 @@ export async function addAvailabilityExceptionAction(formData: FormData) {
   });
 
   revalidatePath(`/t/${tenantSlug}/admin/drivers/${driverId}/schedule`);
-  return { success: true };
+  return;
 }
 
 export async function deleteAvailabilityExceptionAction(formData: FormData) {
@@ -163,5 +163,5 @@ export async function deleteAvailabilityExceptionAction(formData: FormData) {
   });
 
   revalidatePath(`/t/${tenantSlug}/admin/drivers`);
-  return { success: true };
+  return;
 }

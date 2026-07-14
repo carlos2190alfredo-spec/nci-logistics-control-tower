@@ -22,12 +22,12 @@ export async function calculateRouteEstimateAction(formData: FormData) {
   });
 
   if (trip.stops.length < 2) {
-    return { error: "Se necesitan al menos 2 paradas para calcular ruta." };
+    return;
   }
 
   const stopsWithCoords = trip.stops.filter((s) => s.latitude != null && s.longitude != null);
   if (stopsWithCoords.length < 2) {
-    return { error: "Se necesitan al menos 2 paradas con coordenadas." };
+    return;
   }
 
   const origin: RoutePoint = {
@@ -62,7 +62,7 @@ export async function calculateRouteEstimateAction(formData: FormData) {
   });
 
   if (existing && existing.status === "ESTIMATED") {
-    return { success: true, cached: true };
+    return;
   }
 
   const estimate = await db.tripRouteEstimate.create({
@@ -111,7 +111,7 @@ export async function calculateRouteEstimateAction(formData: FormData) {
   });
 
   revalidatePath(`/t/${tenantSlug}`);
-  return { success: true, cached: false };
+  return;
 }
 
 export async function getRouteStatusAction(formData: FormData) {
@@ -121,7 +121,7 @@ export async function getRouteStatusAction(formData: FormData) {
   ]);
 
   const status = getRouteProviderStatus();
-  return { provider: status.provider, available: status.available, reason: status.reason };
+  return;
 }
 
 export async function saveTripStopsAction(formData: FormData) {
@@ -156,19 +156,19 @@ export async function saveTripStopsAction(formData: FormData) {
   try {
     stops = JSON.parse(stopsJson);
   } catch {
-    return { error: "Formato de paradas invalido." };
+    return;
   }
 
   if (!Array.isArray(stops) || stops.length === 0) {
-    return { error: "Se requiere al menos una parada." };
+    return;
   }
 
   const validTypes = ["START", "PICKUP", "DELIVERY", "RETURN", "OTHER"];
   for (const s of stops) {
-    if (!validTypes.includes(s.type)) return { error: `Tipo de parada invalido: ${s.type}` };
-    if (!s.addressText) return { error: "Cada parada requiere direccion." };
-    if (s.latitude != null && (s.latitude < -90 || s.latitude > 90)) return { error: "Latitud fuera de rango." };
-    if (s.longitude != null && (s.longitude < -180 || s.longitude > 180)) return { error: "Longitud fuera de rango." };
+    if (!validTypes.includes(s.type)) return;
+    if (!s.addressText) return;
+    if (s.latitude != null && (s.latitude < -90 || s.latitude > 90)) return;
+    if (s.longitude != null && (s.longitude < -180 || s.longitude > 180)) return;
   }
 
   await db.tripStop.deleteMany({ where: { tenantId: tenant.id, tripId: trip.id } });
@@ -203,5 +203,4 @@ export async function saveTripStopsAction(formData: FormData) {
   });
 
   revalidatePath(`/t/${tenantSlug}`);
-  return { success: true };
 }

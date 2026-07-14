@@ -1,6 +1,7 @@
 import {
   Brain,
   ClipboardList,
+  Gauge,
   LayoutDashboard,
   Link2,
   Mail,
@@ -34,6 +35,7 @@ export function getTenantAdminNavGroups(tenantSlug: string) {
     {
       title: "Inteligencia",
       items: [
+        { label: "Operaciones IA", href: `${base}/operations-insights`, icon: <Gauge /> },
         { label: "Feedback", href: `${base}/feedback`, icon: <MessageSquare /> },
         { label: "Recomendaciones", href: `${base}/recommendations`, icon: <Brain /> },
         { label: "Actividad", href: `${base}/activity`, icon: <ClipboardList /> },

@@ -200,16 +200,6 @@ export async function generateDriverRecommendationAction(formData: FormData) {
   });
 
   revalidatePath(`/t/${tenantSlug}`);
-  return {
-    success: true,
-    result: {
-      recommended: result.recommended,
-      alternatives: result.alternatives.slice(0, 5),
-      disqualified: result.disqualified.slice(0, 5),
-      explanation: result.explanation,
-      riskLevel: result.riskLevel,
-    },
-  };
 }
 
 export async function acceptDriverRecommendationAction(formData: FormData) {
@@ -226,7 +216,7 @@ export async function acceptDriverRecommendationAction(formData: FormData) {
   });
 
   if (!rec.driverId) {
-    return { error: "No hay conductor asociado a esta recomendacion." };
+    return;
   }
 
   await db.driverAssignmentRecommendation.update({
@@ -250,7 +240,7 @@ export async function acceptDriverRecommendationAction(formData: FormData) {
   });
 
   revalidatePath(`/t/${tenantSlug}`);
-  return { success: true };
+  return;
 }
 
 export async function overrideDriverRecommendationAction(formData: FormData) {
@@ -263,7 +253,7 @@ export async function overrideDriverRecommendationAction(formData: FormData) {
   ]);
 
   if (!overrideReason) {
-    return { error: "Debe proporcionar una razon para ignorar la recomendacion." };
+    return;
   }
 
   const db = getDb();
@@ -297,5 +287,5 @@ export async function overrideDriverRecommendationAction(formData: FormData) {
   });
 
   revalidatePath(`/t/${tenantSlug}`);
-  return { success: true };
+  return;
 }

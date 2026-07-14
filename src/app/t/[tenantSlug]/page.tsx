@@ -81,6 +81,9 @@ export default async function TenantControlTowerPage({ params }: { params: Promi
           proof: true,
           documents: { orderBy: { createdAt: "desc" } },
           events: { orderBy: { createdAt: "desc" }, take: 4 },
+          stops: { orderBy: { sequence: "asc" } },
+          routeEstimates: { orderBy: { createdAt: "desc" }, take: 1 },
+          driverRecommendations: { orderBy: { rank: "asc" }, take: 3 },
         },
         // Priorizar viajes recién confirmados/creados sobre los más antiguos;
         // un viaje nuevo debe aparecer en el centro de control aun cuando

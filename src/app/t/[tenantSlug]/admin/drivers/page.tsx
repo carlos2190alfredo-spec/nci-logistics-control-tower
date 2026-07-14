@@ -139,9 +139,14 @@ export default async function TenantDriversPage({
                     <TableCell>{d.user ? d.user.email : "—"}</TableCell>
                     <TableCell className="text-right" numeric>{d._count.trips}</TableCell>
                     <TableCell>
-                      <Link className="text-sm font-semibold text-primary hover:text-primary-hover" href={`${basePath}/${d.id}/edit`}>
-                        Editar
-                      </Link>
+                      <div className="flex items-center gap-3">
+                        <Link className="text-sm font-semibold text-primary hover:text-primary-hover" href={`${basePath}/${d.id}/edit`}>
+                          Editar
+                        </Link>
+                        <Link className="text-sm font-semibold text-primary hover:text-primary-hover" href={`${basePath}/${d.id}/schedule`}>
+                          Horario
+                        </Link>
+                      </div>
                     </TableCell>
                   </TableRow>
                 ))}
