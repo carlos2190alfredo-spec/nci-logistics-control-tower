@@ -163,9 +163,9 @@ check("public/sw.js exists (PWA)", () => ({
   detail: existsSync("public/sw.js") ? "present" : "Service worker missing",
 }));
 
-check("public/manifest.json exists (PWA)", () => ({
-  name: "public/manifest.json exists (PWA)",
-  status: existsSync("public/manifest.json") ? "ok" : "warn",
+check("public/manifest.webmanifest exists (PWA)", () => ({
+  name: "public/manifest.webmanifest exists (PWA)",
+  status: existsSync("public/manifest.webmanifest") ? "ok" : "warn",
 }));
 
 check("Backup scripts present", () => ({
