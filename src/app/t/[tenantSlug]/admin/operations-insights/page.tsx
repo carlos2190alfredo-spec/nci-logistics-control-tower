@@ -1,10 +1,8 @@
 import {
   AlertTriangle,
   Calendar,
-  Clock,
   MapPin,
   Route,
-  Smartphone,
   Truck,
   Users,
 } from "lucide-react";

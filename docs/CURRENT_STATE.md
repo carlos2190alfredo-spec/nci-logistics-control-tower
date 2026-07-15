@@ -1,29 +1,38 @@
 # CURRENT STATE
 
-Fecha: 2026-07-13
+Fecha: 2026-07-15
 
-## Fase actual
+## Fase actual — Production Readiness
 
-Operaciones IA: estimacion de ruta (disabled/simulated/Google Routes API), horarios de conductores, motor de recomendacion de conductores por reglas, dashboard de insights operativos. Todo sin IA externa, sin WhatsApp/GPS/Waze real.
+Toda la funcionalidad de producto está lista. La fase actual completa el paquete de despliegue: verificación automática de correo al alta de tenants y usuarios, CI/CD, `.env.example`, guía de despliegue, y limpieza de lint. El único trabajo restante es de infraestructura (proveedor SMTP real, DB managed, dominio TLS, vault de secretos) — no de código.
 
-## Implementado (fase actual — Observabilidad)
+## Implementado (fase actual — Email Verification y Production Readiness)
 
-- **Request ID**: Middleware de Next.js genera/valida UUID por request, propaga en headers X-Request-ID.
-- **Logger estructurado**: 8 niveles (debug, info, warn, error, security, audit, job, metric). Salida JSON con contexto. 30+ claves sensibles redactadas automaticamente.
-- **Error handling**: `AppError` con categorias y codigos seguros. `error.tsx` muestra digest sin detalles internos.
-- **Health checks**: PostgreSQL (raw SQL), Prisma, MinIO (HTTP), ClamAV (TCP PING/PONG), Mailpit (HTTP). Timeout 5s por check.
-- **Metricas**: 19 queries paralelas (tenants, usuarios, sesiones, MFA, viajes, audits, archivos, offline, backups, alertas).
-- **Alertas**: Deduplicacion con `dedupeKey` unico, cooldown P0/P1/P2, notificacion via Mailpit/SMTP.
-- **Job runner**: `runObservedJob()` persiste inicio/fin/duracion/estado en tabla `JobRun`.
-- **PWA telemetry**: Endpoint para conductores con allowlist estricta (9 keys), rejeccion de base64/data URLs, rate limit 10/min.
-- **Dashboard**: `/platform/system-status` — 14 secciones, solo PLATFORM_SUPER_ADMIN/SUPPORT con MFA.
-- **API endpoints**: health (publico), liveness (publico), readiness (autenticado), metrics (autenticado).
-- **Scripts operativos**: 6 nuevos (`ops:health`, `ops:readiness`, `ops:metrics`, `ops:alerts:test`, `ops:jobs:list`, `ops:status-report`).
-- **Prisma migration**: 4 tablas nuevas (OperationalCheck, OperationalAlert, JobRun, SystemMetricsSnapshot), 4 enums nuevos.
-- **Tests**: 38 unit tests de observabilidad, 20 E2E tests nuevos, 48 security checks (12 nuevos).
-- **Documentacion**: ADR-021, ADR-022, OBSERVABILITY_ARCHITECTURE, HEALTH_CHECKS, ALERTING_POLICY, OPERATIONAL_RUNBOOK.
+- **Verificacion de correo**:
+  - Nuevos campos `emailVerifyToken` (String, unique) y `emailVerifyTokenExpiresAt` (DateTime) en el modelo `User`.
+  - `email-verification.ts`: `generateEmailVerifyToken()`, `sendVerificationEmail()`, `verifyEmailToken()` (idempotente para tolerar React Strict Mode double-render).
+  - Pagina `/verificar-email/[token]` — server-rendered, mensajes en español, instrucciones de MFA post-verificacion.
+  - TTL 48h.
+- **Plantillas de correo profesionales** (`email-templates.ts`):
+  - `welcomeTenantOwnerEmail()` — bienvenida al owner con verificacion + contraseña temporal + instrucciones MFA.
+  - `welcomeUserEmail()` — bienvenida a nuevo miembro (invitado por, rol, contraseña temporal).
+  - `emailVerificationEmail()` — reenvio de verificacion.
+  - `invitationEmail()` — invitacion con enlace y expiracion.
+  - HTML inline CSS, header `NCI Logistics Control Tower`, boton CTA `#2563eb`, aviso de expiracion.
+- **Envio automatizado**:
+  - `createTenantFullAction` genera token y envia welcome al owner.
+  - `createTenantUserAction` genera token y envia welcome al usuario.
+  - `createInvitation` usa la plantilla profesional.
+- **SMTP con auth para produccion**: `mail.ts` acepta `MAIL_USER`, `MAIL_PASSWORD`, `MAIL_SECURE` para SES/SendGrid/Postmark/Resend.
+- **`.env.example` completo**: documenta 40+ variables agrupadas por categoria.
+- **CI/CD**:
+  - `.github/workflows/ci.yml` — lint + typecheck + tests + security check + build en Postgres 17.
+  - `.github/workflows/e2e.yml` — Playwright E2E con Postgres/MinIO/Mailpit.
+- **Guia de despliegue** (`docs/DEPLOYMENT.md`): arquitectura de referencia, checklist de secretos, pasos de DB/S3/SMTP/ClamAV, headers HTTP, rate-limit distribuido, observabilidad, backups, checklist de seguridad post-deploy.
+- **Lint clean**: eslint config ahora respeta `_` como convencion de "unused intencional". 0 warnings, 0 errores.
+- **ADR-033**: documenta el flujo de verificacion de correo y la decision de idempotencia.
 
-## Implementado (fase actual — Operaciones IA)
+## Implementado (fase previa — Operaciones IA)
 
 - **Proveedores de ruta**: 4 proveedores (disabled/simulated/google/waze-stub) con factory pattern. Google sanitiza API key.
 - **Motor de recomendacion**: 12 criterios de puntuacion, descalificacion, nivel de riesgo, aislamiento multi-tenant.
@@ -31,8 +40,12 @@ Operaciones IA: estimacion de ruta (disabled/simulated/Google Routes API), horar
 - **Modelo de datos**: 6 modelos nuevos (TripStop, TripRouteEstimate, TripStopEstimate, DriverWorkSchedule, DriverAvailabilityException, DriverAssignmentRecommendation).
 - **UI**: secciones de estimacion y recomendacion en tarjeta de viaje, pagina de horarios, dashboard de insights operativos, nav "Operaciones IA".
 - **Server actions**: 8 acciones con requireTenantRole + audit + revalidatePath. Override requiere razon.
-- **Tests**: 28 unit tests nuevos (14 rutas + 14 recomendacion), 7 E2E tests, 7 security checks nuevos.
-- **Documentacion**: ADR-026/027/028, guias de arquitectura, setup Google Maps, motor de recomendacion.
+- **Documentacion**: ADR-026/027/028.
+
+## Implementado (fase previa — Observabilidad)
+
+- Request ID, logger estructurado JSON, error handling con `AppError`, health checks (PG/Prisma/MinIO/ClamAV/Mailpit), 19 metricas, alertas con dedup, job runner observado, PWA telemetry con allowlist, dashboard `/platform/system-status`.
+- ADR-021, ADR-022.
 
 ## Base preservada
 
@@ -49,7 +62,14 @@ Operaciones IA: estimacion de ruta (disabled/simulated/Google Routes API), horar
 - Recuperacion de contrasena con Mailpit.
 - Gestion de sesiones activas.
 - Backups cifrados AES-256-GCM con DR drill verificado.
-- 66 E2E tests, 48 security checks.
+
+## Conteos
+
+- Unit tests: 170 (Vitest).
+- E2E tests: 87 (Playwright).
+- Security checks: 55.
+- Prisma migrations: 17 (agregada `20260715060000_add_email_verification_fields`).
+- ADRs: 33 (ADR-001 a ADR-033).
 
 ## Riesgos residuales documentados
 
@@ -60,6 +80,19 @@ Operaciones IA: estimacion de ruta (disabled/simulated/Google Routes API), horar
 - `X-Forwarded-For` sin sanitizar detras de proxy no confiable.
 - 2 advisories transitivas restantes (`effect` via Prisma CLI, `postcss` via Next+geist) — NOT_REACHABLE en runtime.
 
+## Faltantes para el go-live (infraestructura)
+
+Todos son decisiones de despliegue, no de codigo. Ver [`DEPLOYMENT.md`](DEPLOYMENT.md).
+
+- Remote Git y CI conectado.
+- PostgreSQL managed (RDS/Cloud SQL/Supabase/Neon).
+- Bucket S3 con acceso privado y CORS.
+- Proveedor SMTP transaccional con dominio verificado.
+- Dominio + TLS.
+- Vault de secretos (SSM/Doppler/Vault).
+- Backups automatizados programados.
+- Sink de logs.
+
 ## Ultima verificacion
 
-Ver `docs/VERIFICATION_LATEST.md`.
+Ver [`VERIFICATION_LATEST.md`](VERIFICATION_LATEST.md).

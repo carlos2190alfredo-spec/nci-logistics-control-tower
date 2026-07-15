@@ -1,8 +1,6 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { redirect } from "next/navigation";
-import { z } from "zod";
 import type { FeedbackStatus } from "@/generated/prisma";
 import { audit } from "@/lib/server/audit";
 import { requireTenantRole } from "@/lib/server/auth";
@@ -147,7 +145,7 @@ export async function addFeedbackCommentAction(formData: FormData) {
     const { user, tenant, membership } = await requireTenantRole(tenantSlug, [
       "TENANT_OWNER", "TENANT_ADMIN", "OPERATIONS_MANAGER",
     ]);
-    const feedback = await db.tenantFeedback.findFirstOrThrow({
+    await db.tenantFeedback.findFirstOrThrow({
       where: { id: feedbackId, tenantId: tenant.id },
     });
 

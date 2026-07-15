@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Link2, Settings } from "lucide-react";
+import { Link2 } from "lucide-react";
 import { AppShell } from "@/components/shell/app-shell";
 import {
   Card,

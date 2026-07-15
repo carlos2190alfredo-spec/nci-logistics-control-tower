@@ -1,4 +1,4 @@
-import { readFile, unlink, stat } from "node:fs/promises";
+import { readFile, unlink } from "node:fs/promises";
 import { execSync } from "node:child_process";
 import { join } from "node:path";
 import { S3Client, PutObjectCommand, HeadBucketCommand, CreateBucketCommand, ListObjectsV2Command, DeleteObjectCommand } from "@aws-sdk/client-s3";

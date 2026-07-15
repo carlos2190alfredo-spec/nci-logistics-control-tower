@@ -6,7 +6,7 @@ import { requirePlatformRole } from "@/lib/server/auth";
 import { hashPassword } from "@/lib/server/crypto";
 import { getDb } from "@/lib/server/db";
 
-export async function seedDemoTenantAction(formData: FormData) {
+export async function seedDemoTenantAction(_formData: FormData) {
   const user = await requirePlatformRole(["PLATFORM_SUPER_ADMIN"]);
   const db = getDb();
 

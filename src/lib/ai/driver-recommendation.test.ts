@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { recommendDriverForTrip } from "./driver-recommendation";
-import type { RecommendationInput, DriverCandidate, DriverWorkScheduleEntry, DriverStats } from "./driver-recommendation";
+import type { RecommendationInput, DriverCandidate, DriverWorkScheduleEntry } from "./driver-recommendation";
 import type { DayOfWeek } from "@/generated/prisma";
 
 const DAY_MAP: Record<number, DayOfWeek> = {

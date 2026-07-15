@@ -1,7 +1,6 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { writeFile, readFile, unlink, mkdir, rm } from "node:fs/promises";
 import { join } from "node:path";
-import { randomBytes } from "node:crypto";
 import { encryptFile, decryptFile, sha256File, sha256Buffer, HEADER_MAGIC } from "./crypto";
 import { createManifest, addEntry, saveManifest, loadManifest, formatSize, type BackupEntry } from "./manifest";
 

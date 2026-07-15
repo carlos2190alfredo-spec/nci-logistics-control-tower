@@ -2,7 +2,6 @@ import { createCipheriv, createDecipheriv, randomBytes, createHash } from "node:
 import { createReadStream, createWriteStream } from "node:fs";
 import { stat } from "node:fs/promises";
 import { pipeline } from "node:stream/promises";
-import { Transform } from "node:stream";
 
 const ALGORITHM = "aes-256-gcm";
 const IV_LENGTH = 16;

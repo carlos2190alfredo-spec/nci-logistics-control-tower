@@ -27,7 +27,7 @@ export class RulesBasedAiProvider implements IAiProvider {
     };
   }
 
-  private generateRulesResponse(purpose: string, context: string): string {
+  private generateRulesResponse(purpose: string, _context: string): string {
     switch (purpose) {
       case "operations_summary":
         return "Resumen generado por motor de reglas. Para obtener analisis avanzados con razonamiento, configure DeepSeek en las variables de entorno (DEEPSEEK_API_KEY).";

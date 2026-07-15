@@ -38,7 +38,7 @@ export async function verifyBackup(backupDir: string): Promise<VerifyResult> {
 
       console.log(`  [OK] ${entry.filename} — ${formatSize(fileStats.size)}, checksum verified`);
       checkedFiles++;
-    } catch (err) {
+    } catch {
       errors.push(`${entry.filename}: file not found or unreadable`);
     }
   }

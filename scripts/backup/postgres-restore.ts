@@ -1,6 +1,6 @@
 import { execSync } from "node:child_process";
 import { stat, unlink } from "node:fs/promises";
-import { join, dirname } from "node:path";
+import { join } from "node:path";
 import { decryptFile, sha256File } from "./crypto";
 import { type BackupEntry } from "./manifest";
 

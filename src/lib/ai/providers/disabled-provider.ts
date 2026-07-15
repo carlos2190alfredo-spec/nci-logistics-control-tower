@@ -9,7 +9,7 @@ export class DisabledAiProvider implements IAiProvider {
     };
   }
 
-  async complete(request: AiCompletionRequest): Promise<AiCompletionResult> {
+  async complete(_request: AiCompletionRequest): Promise<AiCompletionResult> {
     return {
       provider: "disabled",
       content: "La funcionalidad de IA esta desactivada. Active la IA en la configuracion del tenant para obtener analisis avanzados.",

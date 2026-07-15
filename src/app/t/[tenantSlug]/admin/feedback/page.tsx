@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { MessageSquare, PlusCircle } from "lucide-react";
+import { MessageSquare } from "lucide-react";
 import { AppShell } from "@/components/shell/app-shell";
 import {
   Card,
@@ -23,7 +23,6 @@ import {
 import { requireTenantRole } from "@/lib/server/auth";
 import { getDb } from "@/lib/server/db";
 import { getTenantAdminNavGroups } from "@/lib/ui/tenant-admin-nav";
-import { audit } from "@/lib/server/audit";
 import { parsePagination, paginatedResult, buildPageUrl } from "@/lib/pagination/parse";
 import type { StatusTone } from "@/lib/ui/status";
 import type { Prisma } from "@/generated/prisma";
@@ -69,7 +68,7 @@ export default async function TenantFeedbackPage({
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
   const { tenantSlug } = await params;
-  const { user, tenant, membership } = await requireTenantRole(tenantSlug, [
+  const { user, tenant } = await requireTenantRole(tenantSlug, [
     "TENANT_OWNER", "TENANT_ADMIN", "OPERATIONS_MANAGER",
   ]);
   const pg = parsePagination(await searchParams, {

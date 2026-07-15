@@ -7,14 +7,12 @@ import {
   promoteSessionToMfaVerified,
   requireAuthenticatedUser,
   requiresMfaForRole,
-  revokeAllUserSessions,
 } from "@/lib/server/auth";
 import {
   createMfaChallenge,
   consumeMfaChallenge,
   deactivateMfa,
   hasRecentMfaVerification,
-  incrementChallengeAttempts,
   regenerateRecoveryCodes,
   setupMfaSecret,
   userHasMfaActive,

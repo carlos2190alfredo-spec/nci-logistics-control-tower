@@ -12,7 +12,7 @@ import {
   summarizeIncidents,
 } from "@/lib/ai/copilot-actions";
 import { getDeepSeekHealthStatus } from "@/lib/ai/deepseek-health";
-import { sanitizeAiInput, markUntrustedContent } from "@/lib/ai/prompt-safety";
+import { sanitizeAiInput } from "@/lib/ai/prompt-safety";
 
 async function logInvocation(
   tenantId: string,

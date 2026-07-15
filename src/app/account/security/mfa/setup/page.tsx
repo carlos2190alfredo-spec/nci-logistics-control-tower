@@ -1,4 +1,3 @@
-import { redirect } from "next/navigation";
 import { ShieldCheck } from "lucide-react";
 import { requireAuthenticatedUser } from "@/lib/server/auth";
 import { userHasMfaActive } from "@/lib/server/mfa";

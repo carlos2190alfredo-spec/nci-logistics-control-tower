@@ -120,8 +120,7 @@ export async function getRouteStatusAction(formData: FormData) {
     "TENANT_OWNER", "TENANT_ADMIN", "OPERATIONS_MANAGER", "DISPATCHER",
   ]);
 
-  const status = getRouteProviderStatus();
-  return;
+  getRouteProviderStatus();
 }
 
 export async function saveTripStopsAction(formData: FormData) {

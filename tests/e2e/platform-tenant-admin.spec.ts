@@ -17,7 +17,7 @@ const tenantOwnerPass = "TenOwner2026!";
 const tenantUserPass = "TenUser2026!";
 
 let tenantSlug: string;
-let tenantId: string;
+let _tenantId: string;
 
 async function loginWithMfa(page: Page, email: string, password: string) {
   await page.goto("/login");
@@ -43,7 +43,7 @@ test.beforeAll(async () => {
   const tenant = await db.tenant.findFirst({ select: { id: true, slug: true } });
   if (!tenant) throw new Error("No tenant found for E2E tests");
   tenantSlug = tenant.slug;
-  tenantId = tenant.id;
+  _tenantId = tenant.id;
 
   const platformUser = await db.user.upsert({
     where: { email: platformEmail },

@@ -1,4 +1,4 @@
-import { Calendar, Clock, Plus, Trash2, Truck } from "lucide-react";
+import { Calendar, Clock, Plus, Trash2 } from "lucide-react";
 import { AppShell } from "@/components/shell/app-shell";
 import {
   Card,

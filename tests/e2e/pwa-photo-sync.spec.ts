@@ -159,8 +159,8 @@ test.describe("PHOTO-SYNC-E2E photo capture and evidence UI", () => {
 });
 
 test.describe("ATTACHMENT-E2E attachment endpoint", () => {
-  let driverCookies: string;
-  let tripId: string;
+  let _driverCookies: string;
+  let _tripId: string;
   let tenantSlug: string;
 
   test.beforeAll(async () => {
@@ -175,7 +175,7 @@ test.describe("ATTACHMENT-E2E attachment endpoint", () => {
       select: { id: true },
     });
     if (trip) {
-      tripId = trip.id;
+      _tripId = trip.id;
     }
   });
 

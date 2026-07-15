@@ -10,7 +10,7 @@ import { Card } from "@/components/ui/card";
 
 type SetupData = { secret: string; uri: string } | null;
 
-export function MfaSetupFlow({ userEmail: _userEmail }: { userEmail: string }) {
+export function MfaSetupFlow(_props: { userEmail: string }) {
   const [setupData, setSetupData] = useState<SetupData>(null);
   const [qrSvg, setQrSvg] = useState<string>("");
   const [copied, setCopied] = useState(false);
