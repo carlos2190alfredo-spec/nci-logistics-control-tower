@@ -124,16 +124,19 @@ enum ProofStatus {
 }
 
 model User {
-  id                  String               @id @default(uuid()) @db.Uuid
-  email               String               @unique
-  name                String
-  passwordHash        String               @map("password_hash")
-  active              Boolean              @default(true)
-  platformRole        PlatformRole?        @map("platform_role")
-  lastLoginAt         DateTime?            @map("last_login_at")
-  failedLoginAttempts Int                  @default(0) @map("failed_login_attempts")
-  createdAt           DateTime             @default(now()) @map("created_at")
-  updatedAt           DateTime             @updatedAt @map("updated_at")
+  id                        String               @id @default(uuid()) @db.Uuid
+  email                     String               @unique
+  name                      String
+  passwordHash              String               @map("password_hash")
+  active                    Boolean              @default(true)
+  emailVerified             Boolean              @default(false) @map("email_verified")
+  emailVerifyToken          String?              @unique @map("email_verify_token")
+  emailVerifyTokenExpiresAt DateTime?            @map("email_verify_token_expires_at")
+  platformRole              PlatformRole?        @map("platform_role")
+  lastLoginAt               DateTime?            @map("last_login_at")
+  failedLoginAttempts       Int                  @default(0) @map("failed_login_attempts")
+  createdAt                 DateTime             @default(now()) @map("created_at")
+  updatedAt                 DateTime             @updatedAt @map("updated_at")
   tenantMemberships   TenantMembership[]
   customerMemberships CustomerMembership[]
   sessions            Session[]

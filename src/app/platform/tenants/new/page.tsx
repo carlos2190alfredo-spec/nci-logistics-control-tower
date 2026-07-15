@@ -57,6 +57,17 @@ export default async function NewTenantPage() {
               required
             />
 
+            <fieldset className="grid gap-4 rounded-lg border border-border p-4">
+              <legend className="px-2 text-sm font-medium text-foreground">Propietario (Owner)</legend>
+              <p className="text-xs text-muted-foreground">
+                Se creara la cuenta del propietario automaticamente y se le enviara un correo de verificacion con sus credenciales.
+              </p>
+              <div className="grid gap-4 sm:grid-cols-2">
+                <Field label="Nombre del propietario" name="ownerName" placeholder="Juan Perez" required />
+                <Field label="Correo del propietario" name="ownerEmail" placeholder="owner@empresa.com" required type="email" />
+              </div>
+            </fieldset>
+
             <div className="grid gap-4 sm:grid-cols-3">
               <SelectField label="Plan" name="planCode">
                 <option value="STARTER">Starter</option>

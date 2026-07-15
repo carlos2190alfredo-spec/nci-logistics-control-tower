@@ -5,6 +5,8 @@ import { createOpaqueToken, hashToken } from "@/lib/server/crypto";
 import { requireTenantRole } from "@/lib/server/auth";
 import { audit } from "@/lib/server/audit";
 import { sendMail } from "@/lib/server/mail";
+import { invitationEmail } from "@/lib/server/email-templates";
+import { tenantRoleLabel } from "@/lib/ui/status";
 import type { TenantRole } from "@/generated/prisma/enums";
 
 const INVITATION_TTL_HOURS = 72;
@@ -68,25 +70,18 @@ export async function createInvitation(
     },
   });
 
-  const baseUrl = process.env.NEXTAUTH_URL ?? "http://localhost:3000";
+  const baseUrl = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
   const inviteUrl = `${baseUrl}/invitacion/${token}`;
+  const roleLabel = tenantRoleLabel[role] ?? role;
 
-  await sendMail({
-    to: normalizedEmail,
-    subject: `Invitacion a ${tenant.name} — NCI LCT`,
-    text: [
-      `Hola,`,
-      ``,
-      `Has sido invitado a unirte a ${tenant.name} en NCI Logistics Control Tower con el rol de ${role}.`,
-      ``,
-      `Para aceptar la invitacion, visita:`,
-      inviteUrl,
-      ``,
-      `Este enlace expira en ${INVITATION_TTL_HOURS} horas.`,
-      ``,
-      `Si no esperabas esta invitacion, puedes ignorar este correo.`,
-    ].join("\n"),
+  const emailContent = invitationEmail({
+    tenantName: tenant.name,
+    role: roleLabel,
+    invitedBy: user.name,
+    inviteUrl,
+    expiresInHours: INVITATION_TTL_HOURS,
   });
+  await sendMail({ to: normalizedEmail, subject: emailContent.subject, text: emailContent.text, html: emailContent.html });
 
   await audit({
     tenantId: tenant.id,

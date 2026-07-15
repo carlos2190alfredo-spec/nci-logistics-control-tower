@@ -8,6 +8,10 @@ import { audit } from "@/lib/server/audit";
 import { requireTenantRole } from "@/lib/server/auth";
 import { hashPassword } from "@/lib/server/crypto";
 import { getDb } from "@/lib/server/db";
+import { sendMail } from "@/lib/server/mail";
+import { welcomeUserEmail } from "@/lib/server/email-templates";
+import { generateEmailVerifyToken } from "@/lib/server/email-verification";
+import { tenantRoleLabel } from "@/lib/ui/status";
 
 const createUserSchema = z.object({
   name: z.string().min(2).max(100),
@@ -27,17 +31,21 @@ export async function createTenantUserAction(tenantSlug: string, formData: FormD
 
   const db = getDb();
   const passwordHash = await hashPassword(parsed.password);
+  const normalizedEmail = parsed.email.toLowerCase();
+  let isNewUser = false;
 
   const newUser = await db.$transaction(async (tx) => {
-    let existingUser = await tx.user.findUnique({ where: { email: parsed.email.toLowerCase() } });
+    let existingUser = await tx.user.findUnique({ where: { email: normalizedEmail } });
     if (!existingUser) {
       existingUser = await tx.user.create({
         data: {
           name: parsed.name,
-          email: parsed.email.toLowerCase(),
+          email: normalizedEmail,
           passwordHash,
+          emailVerified: false,
         },
       });
+      isNewUser = true;
     }
 
     const existingMembership = await tx.tenantMembership.findFirst({
@@ -54,6 +62,22 @@ export async function createTenantUserAction(tenantSlug: string, formData: FormD
     });
     return existingUser;
   });
+
+  if (isNewUser) {
+    const verifyToken = await generateEmailVerifyToken(newUser.id);
+    const baseUrl = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
+    const verifyUrl = `${baseUrl}/verificar-email/${verifyToken}`;
+    const roleLabel = tenantRoleLabel[parsed.role as TenantRole] ?? parsed.role;
+    const email = welcomeUserEmail({
+      userName: parsed.name,
+      tenantName: tenant.name,
+      role: roleLabel,
+      verifyUrl,
+      tempPassword: parsed.password,
+      invitedBy: user.name,
+    });
+    await sendMail({ to: normalizedEmail, ...email });
+  }
 
   await audit({
     tenantId: tenant.id,
@@ -211,7 +235,7 @@ export async function updateDriverAction(tenantSlug: string, driverId: string, f
     where: { id: driverId, tenantId: tenant.id },
   });
 
-  const updated = await db.driver.update({
+  await db.driver.update({
     where: { id: driverId },
     data: {
       name: parsed.name,
