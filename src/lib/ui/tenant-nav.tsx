@@ -9,7 +9,7 @@ import {
   Smartphone,
   TriangleAlert,
 } from "lucide-react";
-import type { TenantRole } from "@/generated/prisma/enums";
+import type { TenantRole } from "@/generated/prisma";
 
 export function getTenantNavGroups(tenantSlug: string, role: TenantRole) {
   const base = `/t/${tenantSlug}`;

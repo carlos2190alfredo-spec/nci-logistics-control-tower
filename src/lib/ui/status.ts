@@ -1,14 +1,15 @@
 import type {
   CustomerRole,
+  FileStatus,
   IncidentPriority,
   IncidentStatus,
   NotificationChannel,
+  ProofStatus,
   ServiceRequestStatus,
   TenantRole,
   TenantStatus,
   TripStatus,
-} from "@/generated/prisma/enums";
-import type { FileStatus, ProofStatus } from "@/generated/prisma";
+} from "@/generated/prisma";
 
 /**
  * Etiquetas en español y tonos semánticos para todos los estados del dominio.

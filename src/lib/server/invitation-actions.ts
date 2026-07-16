@@ -7,7 +7,7 @@ import { audit } from "@/lib/server/audit";
 import { sendMail } from "@/lib/server/mail";
 import { invitationEmail } from "@/lib/server/email-templates";
 import { tenantRoleLabel } from "@/lib/ui/status";
-import type { TenantRole } from "@/generated/prisma/enums";
+import type { TenantRole } from "@/generated/prisma";
 
 const INVITATION_TTL_HOURS = 72;
 const INVITABLE_ROLES: TenantRole[] = [

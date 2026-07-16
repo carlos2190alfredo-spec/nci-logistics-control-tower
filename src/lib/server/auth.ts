@@ -1,6 +1,6 @@
 import { cookies, headers } from "next/headers";
 import { redirect } from "next/navigation";
-import type { CustomerRole, PlatformRole, TenantRole } from "@/generated/prisma/enums";
+import type { CustomerRole, PlatformRole, TenantRole } from "@/generated/prisma";
 import { createOpaqueToken, hashToken, keyedHash, verifyPassword } from "@/lib/server/crypto";
 import { getDb } from "@/lib/server/db";
 import { audit } from "@/lib/server/audit";

@@ -5,7 +5,7 @@ import { useOfflineContext } from "@/components/offline/offline-provider";
 import { discardCommand } from "@/lib/offline/queue";
 import type { LocalCommandRecord } from "@/lib/offline/db";
 import { tripStatusLabel } from "@/lib/ui/status";
-import type { TripStatus } from "@/generated/prisma/enums";
+import type { TripStatus } from "@/generated/prisma";
 import { cn } from "@/lib/utils";
 
 const errorMessage: Record<string, string> = {

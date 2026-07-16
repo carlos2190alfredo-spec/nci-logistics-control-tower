@@ -6,7 +6,7 @@ import { Loader2 } from "lucide-react";
 import { useOfflineContext } from "@/components/offline/offline-provider";
 import { buttonStyles } from "@/components/ui/button-styles";
 import { tripStatusLabel } from "@/lib/ui/status";
-import type { TripStatus } from "@/generated/prisma/enums";
+import type { TripStatus } from "@/generated/prisma";
 import { DRIVER_ALLOWED_TRANSITIONS } from "@/lib/offline/protocol";
 
 /**

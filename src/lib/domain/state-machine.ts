@@ -1,4 +1,4 @@
-import type { TenantRole, TripStatus } from "@/generated/prisma/enums";
+import type { TenantRole, TripStatus } from "@/generated/prisma";
 
 export const customerVisibleStatus: Record<TripStatus, string> = {
   REQUESTED: "Solicitud recibida",

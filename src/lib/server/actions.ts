@@ -4,7 +4,7 @@ import { randomUUID } from "node:crypto";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
-import type { TenantRole, TripStatus } from "@/generated/prisma/enums";
+import type { TenantRole, TripStatus } from "@/generated/prisma";
 import { customerVisibleStatus, canTransition } from "@/lib/domain/state-machine";
 import { audit } from "@/lib/server/audit";
 import {

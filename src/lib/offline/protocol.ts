@@ -1,5 +1,5 @@
 import { z } from "zod";
-import type { TripStatus } from "@/generated/prisma/enums";
+import type { TripStatus } from "@/generated/prisma";
 
 /**
  * Protocolo compartido cliente/servidor para la cola offline.

@@ -1,6 +1,6 @@
 import nodemailer from "nodemailer";
 import { Prisma } from "@/generated/prisma";
-import { NotificationChannel } from "@/generated/prisma/enums";
+import { NotificationChannel } from "@/generated/prisma";
 import { getDb } from "@/lib/server/db";
 
 type NotificationInput = {

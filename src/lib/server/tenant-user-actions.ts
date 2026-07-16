@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
-import type { TenantRole } from "@/generated/prisma/enums";
+import type { TenantRole } from "@/generated/prisma";
 import { audit } from "@/lib/server/audit";
 import { requireTenantRole } from "@/lib/server/auth";
 import { hashPassword } from "@/lib/server/crypto";

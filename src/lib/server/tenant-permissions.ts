@@ -1,4 +1,4 @@
-import type { TenantRole } from "@/generated/prisma/enums";
+import type { TenantRole } from "@/generated/prisma";
 
 export type TenantPermission =
   | "tenant.view"

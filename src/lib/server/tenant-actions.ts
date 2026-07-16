@@ -4,7 +4,7 @@ import { randomBytes } from "node:crypto";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
-import type { TenantPlanCode, TenantStatus } from "@/generated/prisma/enums";
+import type { TenantPlanCode, TenantStatus } from "@/generated/prisma";
 import { audit } from "@/lib/server/audit";
 import { requirePlatformRole } from "@/lib/server/auth";
 import { hashPassword } from "@/lib/server/crypto";

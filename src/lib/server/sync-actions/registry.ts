@@ -1,5 +1,5 @@
 import { z } from "zod";
-import type { TenantRole } from "@/generated/prisma/enums";
+import type { TenantRole } from "@/generated/prisma";
 import { audit } from "@/lib/server/audit";
 import { getDb } from "@/lib/server/db";
 import { ErrorCodes } from "@/lib/server/errors";
