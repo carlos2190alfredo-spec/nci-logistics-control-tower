@@ -7,6 +7,7 @@ import { LogOut, Menu, PanelLeftClose, PanelLeftOpen, Shield, X } from "lucide-r
 import { logoutAction } from "@/lib/server/actions";
 import { cn } from "@/lib/utils";
 import { BrandMark } from "@/components/ui/brand";
+import { OfflineQueueBadge } from "@/components/offline/offline-queue-badge";
 
 export type ShellNavItem = {
   label: string;
@@ -228,6 +229,7 @@ export function ShellChrome({
             </button>
             <p className="hidden text-xs font-semibold uppercase tracking-[0.16em] text-faint-foreground sm:block">{brandContext}</p>
             <div className="ml-auto flex items-center gap-2 sm:gap-3">
+              <OfflineQueueBadge />
               {topExtra}
               <div className="hidden text-right sm:block">
                 <p className="max-w-[180px] truncate text-sm font-semibold text-foreground">{user.name}</p>

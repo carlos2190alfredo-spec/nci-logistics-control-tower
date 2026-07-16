@@ -247,6 +247,7 @@ model Tenant {
   supportSessions    TenantSupportSession[]
   tripAssignments    TripAssignment[]
   offlineReceipts    OfflineCommandReceipt[]
+  syncActionReceipts SyncActionReceipt[]
   fileAttachments    FileAttachment[]
   tenantIntegrations TenantIntegration[]
   webhookEndpoints   TenantWebhookEndpoint[]
@@ -732,6 +733,30 @@ model OfflineCommandReceipt {
   @@index([tenantId, driverId, processedAt])
   @@index([expiresAt])
   @@map("offline_command_receipts")
+}
+
+/// Idempotency + audit trail for generic offline actions (any tenant role).
+/// Independent from OfflineCommandReceipt to avoid coupling with the driver
+/// queue and keep whitelists cleanly separated.
+model SyncActionReceipt {
+  id             String            @id @default(uuid()) @db.Uuid
+  tenantId       String            @map("tenant_id") @db.Uuid
+  userId         String            @map("user_id") @db.Uuid
+  idempotencyKey String            @map("idempotency_key")
+  actionId       String            @map("action_id")
+  payloadHash    String            @map("payload_hash")
+  status         OfflineCommandStatus
+  resultEntityId String?           @map("result_entity_id")
+  errorCode      String?           @map("error_code")
+  clientQueuedAt DateTime          @map("client_queued_at")
+  processedAt    DateTime          @default(now()) @map("processed_at")
+  expiresAt      DateTime          @map("expires_at")
+  tenant         Tenant            @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, userId, idempotencyKey])
+  @@index([tenantId, userId, processedAt])
+  @@index([expiresAt])
+  @@map("sync_action_receipts")
 }
 
 model RateLimitBucket {

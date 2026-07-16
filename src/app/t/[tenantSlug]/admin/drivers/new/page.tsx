@@ -7,6 +7,7 @@ import {
   PageHeader,
   SubmitButton,
 } from "@/components/ui";
+import { OfflineForm } from "@/components/offline/offline-form";
 import { requireTenantRole } from "@/lib/server/auth";
 import { getTenantAdminNavGroups } from "@/lib/ui/tenant-admin-nav";
 import { createDriverAction } from "@/lib/server/tenant-user-actions";
@@ -50,13 +51,18 @@ export default async function NewDriverPage({
             icon={<UserPlus />}
             title="Datos del conductor"
           />
-          <form action={boundAction} className="mt-4 grid gap-4">
+          <OfflineForm
+            action={boundAction}
+            actionId="driver.create"
+            className="mt-4 grid gap-4"
+            offlineLabel="Crear conductor"
+          >
             <Field label="Nombre completo" name="name" placeholder="Pedro Martinez" />
             <Field help="Codigo unico dentro del tenant." label="Codigo" name="code" placeholder="DRV-001" />
             <Field label="Numero de licencia" name="license" placeholder="LC-123456" />
             <Field label="Telefono" name="phone" placeholder="+507 6000-0000" required={false} />
             <SubmitButton>Crear conductor</SubmitButton>
-          </form>
+          </OfflineForm>
         </Card>
       </div>
     </AppShell>
