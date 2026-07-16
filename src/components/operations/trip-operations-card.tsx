@@ -17,6 +17,7 @@ import { SubmitButton } from "@/components/ui/button";
 import { Collapsible } from "@/components/ui/collapsible";
 import { SelectField, TextArea } from "@/components/ui/field";
 import { Timeline, TimelineItem } from "@/components/ui/timeline";
+import { OperationsIncidentForm } from "@/components/tenant/operations-incident-form";
 
 export type OperationsTrip = Prisma.TripGetPayload<{
   include: {
@@ -289,16 +290,7 @@ export function TripOperationsCard({
         </Collapsible>
 
         <Collapsible icon={<TriangleAlert />} summary="Registrar incidencia" tone="warning">
-          <form action={reportIncidentAction.bind(null, tenantSlug)} className="grid gap-2.5">
-            <input name="tripId" type="hidden" value={trip.id} />
-            <input name="category" type="hidden" value="Retraso" />
-            <TextArea
-              help="El cliente vera este mensaje en su portal."
-              label="Incidencia visible al cliente"
-              name="customerMessage"
-            />
-            <SubmitButton variant="accent">Registrar incidencia</SubmitButton>
-          </form>
+          <OperationsIncidentForm action={reportIncidentAction.bind(null, tenantSlug)} tripId={trip.id} />
         </Collapsible>
 
         {trip.proof ? (
