@@ -37,6 +37,20 @@ async function user(email: string, password: string, name: string, platformRole?
 }
 
 async function main() {
+  // Guarda de producción: este seed crea tenants demo con contraseñas
+  // conocidas y publicadas. NUNCA debe correr en producción salvo que se
+  // fuerce explícitamente (por ejemplo, para bootstrapping controlado).
+  if (process.env.NODE_ENV === "production" && process.env.ALLOW_PROD_SEED !== "true") {
+    console.error(
+      "\n[seed] BLOQUEADO: NODE_ENV=production.\n" +
+        "Este seed crea tenants demo con contraseñas publicas y NO debe\n" +
+        "ejecutarse en produccion. Para el arranque de produccion use un\n" +
+        "seed de administrador dedicado. Si realmente necesita este seed,\n" +
+        "exporte ALLOW_PROD_SEED=true de forma explicita.\n",
+    );
+    process.exit(1);
+  }
+
   await prisma.tenantPlan.upsert({
     where: { code: "DEMO" },
     update: {},
