@@ -6,6 +6,7 @@ import {
   Monitor,
   Route,
   Settings,
+  ShieldCheck,
   Smartphone,
   TriangleAlert,
 } from "lucide-react";
@@ -21,6 +22,9 @@ export function getTenantNavGroups(tenantSlug: string, role: TenantRole) {
         { label: "Solicitudes", href: `${base}/requests`, icon: <Inbox /> },
         { label: "Viajes activos", href: `${base}/trips`, icon: <Route /> },
         { label: "Incidencias", href: `${base}/incidents`, icon: <TriangleAlert /> },
+        ...(["TENANT_OWNER", "TENANT_ADMIN", "OPERATIONS_MANAGER", "SAFETY_MANAGER"].includes(role)
+          ? [{ label: "Cumplimiento", href: `${base}/compliance`, icon: <ShieldCheck /> }]
+          : []),
         { label: "Actividad", href: `${base}/activity`, icon: <Activity /> },
         { label: "Historial", href: `${base}/history`, icon: <History /> },
       ],
