@@ -2,6 +2,7 @@ import { TriangleAlert } from "lucide-react";
 import { AppShell } from "@/components/shell/app-shell";
 import { Card, CardHeader, EmptyState, PageHeader } from "@/components/ui";
 import { IncidentCard } from "@/components/tenant/incident-card";
+import { ExportCsvButton } from "@/components/tenant/export-csv-button";
 import { requireTenantMembership } from "@/lib/server/auth";
 import { getTenantIncidents } from "@/lib/server/tenant-dashboard-data";
 import { getTenantNavGroups } from "@/lib/ui/tenant-nav";
@@ -27,6 +28,12 @@ export default async function TenantIncidentsPage({
     >
       <div className="anim-page grid gap-6">
         <PageHeader
+          actions={
+            <ExportCsvButton
+              href={`/api/t/${tenantSlug}/export/incidents`}
+              label="Exportar incidencias"
+            />
+          }
           breadcrumbs={[
             { label: tenant.name, href: `/t/${tenantSlug}` },
             { label: "Incidencias" },

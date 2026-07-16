@@ -13,6 +13,7 @@ import {
   TableHeaderCell,
   TableRow,
 } from "@/components/ui";
+import { ExportCsvButton } from "@/components/tenant/export-csv-button";
 import { requireTenantMembership } from "@/lib/server/auth";
 import { getTenantClosedTrips } from "@/lib/server/tenant-dashboard-data";
 import { getTenantNavGroups } from "@/lib/ui/tenant-nav";
@@ -39,6 +40,12 @@ export default async function TenantHistoryPage({
     >
       <div className="anim-page grid gap-6">
         <PageHeader
+          actions={
+            <ExportCsvButton
+              href={`/api/t/${tenantSlug}/export/trips`}
+              label="Exportar viajes"
+            />
+          }
           breadcrumbs={[
             { label: tenant.name, href: `/t/${tenantSlug}` },
             { label: "Historial" },
