@@ -8,7 +8,7 @@ import {
   type SyncAction,
   type SyncActionResult,
 } from "@/lib/offline/generic-protocol";
-import { SYNC_ACTION_REGISTRY, type SyncCtx } from "@/lib/server/sync-actions/registry";
+import { getSyncActionEntry, type SyncCtx } from "@/lib/server/sync-actions/registry";
 import { recordToFormData } from "@/lib/offline/generic-protocol";
 
 const RECEIPT_TTL_DAYS = 30;
@@ -47,9 +47,9 @@ export async function processSyncActionBatch(
   for (const action of ordered) {
     const payloadHash = hashAction(action);
 
-    // Whitelist server-side. Si un cliente inyecta un actionId desconocido,
-    // se rechaza sin ejecutar nada.
-    const entry = SYNC_ACTION_REGISTRY[action.actionId];
+    // Whitelist server-side. Si un cliente inyecta un actionId desconocido
+    // (incluidos "__proto__"/"constructor"), se rechaza sin ejecutar nada.
+    const entry = getSyncActionEntry(action.actionId);
     if (!entry) {
       results.push({
         idempotencyKey: action.idempotencyKey,
