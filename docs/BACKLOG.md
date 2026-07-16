@@ -9,19 +9,23 @@
 - Provisionar dominio + certificado TLS.
 - Configurar vault de secretos (SSM/Doppler/Vault).
 - Programar backups automatizados y DR drill trimestral.
-- Configurar Redis para rate-limit distribuido (opcional; también se puede hacer en el WAF).
+- Programar `pnpm demo:reset` con cron si se mantienen tenants demo en un entorno compartido.
 - Configurar sink de logs (CloudWatch/Datadog/Grafana Cloud).
+
+**Nota:** el rate-limit ya es multi-instancia (persistido en PostgreSQL,
+`RateLimitProvider` conmutable). Redis solo seria una optimizacion de
+rendimiento, no un requisito de correccion.
 
 Ver [`DEPLOYMENT.md`](DEPLOYMENT.md).
 
 ## Mejoras post-lanzamiento
 
 - **WebAuthn/FIDO2** como segundo factor adicional (MFA-VULN-008).
-- Exportacion CSV de reportes (viajes, feedback, auditoria).
-- Reinicio programado de tenant demo (comando existente `demo:reset` — falta programarlo con cron).
+- Extender `OfflineForm` a mas formularios (crear solicitud, avanzar estado).
+- Exportacion CSV de feedback y auditoria (viajes e incidencias ya listos).
 - Modo soporte con salida visible y cierre auditado.
 - Mejora del render visual de firma en el POD PDF.
-- Cola IndexedDB idempotente para conductor (offline ya funciona; mejora de UX).
+- Conectar WhatsApp real (hoy es integracion `disabled` conmutable en el registry).
 
 ## Deuda técnica
 
