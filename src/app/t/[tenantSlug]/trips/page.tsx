@@ -9,6 +9,7 @@ import {
   getTenantEquipment,
   getTenantVehicles,
 } from "@/lib/server/tenant-dashboard-data";
+import { getTripsEligibility } from "@/lib/server/compliance-data";
 import { getTenantNavGroups } from "@/lib/ui/tenant-nav";
 import { tenantRoleLabel } from "@/lib/ui/status";
 
@@ -27,6 +28,16 @@ export default async function TenantTripsPage({
     getTenantEquipment(tenant.id),
     getTenantDrivers(tenant.id),
   ]);
+
+  // Elegibilidad advisory (no bloquea): una sola consulta para todos los viajes.
+  const eligibility = await getTripsEligibility(
+    tenant.id,
+    trips.map((t) => ({
+      id: t.id,
+      driver: t.driver ? { code: t.driver.code } : null,
+      vehicle: t.vehicle ? { code: t.vehicle.code, plate: t.vehicle.plate } : null,
+    })),
+  );
 
   return (
     <AppShell
@@ -55,6 +66,7 @@ export default async function TenantTripsPage({
             {trips.map((trip, i) => (
               <TripOperationsCard
                 drivers={drivers}
+                eligibilityLight={eligibility.get(trip.id)}
                 equipment={equipment}
                 index={i}
                 key={trip.id}

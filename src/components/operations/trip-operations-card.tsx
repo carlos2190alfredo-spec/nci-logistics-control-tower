@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { ArrowRight, Brain, CircleAlert, ClipboardCheck, FileCheck2, MapPin, Route, TriangleAlert, Truck, User } from "lucide-react";
 import type { Prisma, TenantRole } from "@/generated/prisma";
 import { nextStatuses } from "@/lib/domain/state-machine";
@@ -18,6 +19,11 @@ import { Collapsible } from "@/components/ui/collapsible";
 import { SelectField, TextArea } from "@/components/ui/field";
 import { Timeline, TimelineItem } from "@/components/ui/timeline";
 import { OperationsIncidentForm } from "@/components/tenant/operations-incident-form";
+import {
+  complianceLightLabel,
+  complianceLightTone,
+  type ComplianceLight,
+} from "@/lib/ui/compliance";
 
 export type OperationsTrip = Prisma.TripGetPayload<{
   include: {
@@ -48,6 +54,7 @@ export function TripOperationsCard({
   equipment,
   drivers,
   index = 0,
+  eligibilityLight,
 }: {
   trip: OperationsTrip;
   tenantSlug: string;
@@ -56,6 +63,7 @@ export function TripOperationsCard({
   equipment: Resource[];
   drivers: Resource[];
   index?: number;
+  eligibilityLight?: ComplianceLight;
 }) {
   const next = nextStatuses(trip.status, role);
   const canAssign = ["CONFIRMED", "SCHEDULED", "ASSIGNED"].includes(trip.status);
@@ -72,6 +80,18 @@ export function TripOperationsCard({
         <div className="flex flex-wrap items-center gap-2">
           <h3 className="font-mono text-sm font-bold tracking-tight text-foreground">{trip.reference}</h3>
           <StatusBadge label={tripStatusLabel[trip.status]} tone={tripStatusTone[trip.status]} />
+          {eligibilityLight && eligibilityLight !== "VERDE" ? (
+            <Link
+              className="inline-flex"
+              href={`/t/${tenantSlug}/compliance`}
+              title="Ver cumplimiento"
+            >
+              <StatusBadge
+                label={`Cumplimiento: ${complianceLightLabel[eligibilityLight]}`}
+                tone={complianceLightTone[eligibilityLight]}
+              />
+            </Link>
+          ) : null}
         </div>
         <p className="mt-1.5 flex items-center gap-1.5 text-sm text-muted-foreground">
           <User aria-hidden className="size-3.5 shrink-0" />
