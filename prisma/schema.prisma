@@ -264,6 +264,8 @@ model Tenant {
   driverRecommendations DriverAssignmentRecommendation[]
   aiInvocations  AiInvocation[]
   aiUsageDaily   AiUsageDaily[]
+  complianceDocuments ComplianceDocument[]
+  complianceRules     ComplianceRule[]
 
   @@map("tenants")
 }
@@ -757,6 +759,131 @@ model SyncActionReceipt {
   @@index([tenantId, userId, processedAt])
   @@index([expiresAt])
   @@map("sync_action_receipts")
+}
+
+// ===========================================================================
+// Panama Logistics Compliance Layer
+// Registro documental + reglas regulatorias configurables. NO sustituye a las
+// autoridades competentes ni constituye asesoria legal. Cada regla exige
+// fuente, fecha de vigencia y severidad, y es configurable por tenant.
+// ===========================================================================
+
+/// Entidad de negocio a la que se ancla un documento de cumplimiento.
+/// Relacion polimorfica (entityType + entityId); solo tenantId es FK dura.
+enum ComplianceEntityType {
+  TENANT
+  CLIENTE
+  PROVEEDOR
+  SUBCONTRATISTA
+  CONDUCTOR
+  VEHICULO
+  EQUIPO
+  CONTENEDOR
+  MERCANCIA
+  ORDEN
+  VIAJE
+  CONTRATO
+  RUTA
+  TERMINAL
+  NAVIERA
+  AEROPUERTO
+}
+
+enum ComplianceDocStatus {
+  PENDIENTE
+  EN_REVISION
+  VIGENTE
+  PROXIMO_A_VENCER
+  VENCIDO
+  RECHAZADO
+  SUSPENDIDO
+  REEMPLAZADO
+  NO_APLICABLE
+}
+
+enum ComplianceSeverity {
+  INFO
+  BAJA
+  MEDIA
+  ALTA
+  CRITICA
+}
+
+enum ComplianceConfidentiality {
+  PUBLICO
+  INTERNO
+  RESTRINGIDO
+  CONFIDENCIAL
+}
+
+/// Documento de cumplimiento con vencimiento, criticidad y bloqueo de despacho.
+model ComplianceDocument {
+  id                String                   @id @default(uuid()) @db.Uuid
+  tenantId          String                   @map("tenant_id") @db.Uuid
+  entityType        ComplianceEntityType     @map("entity_type")
+  entityId          String                   @map("entity_id")
+  documentType      String                   @map("document_type")
+  category          String?
+  name              String
+  number            String?
+  issuingAuthority  String?                  @map("issuing_authority")
+  holder            String?
+  status            ComplianceDocStatus      @default(PENDIENTE)
+  issuedAt          DateTime?                @map("issued_at")
+  validFrom         DateTime?                @map("valid_from")
+  expiresAt         DateTime?                @map("expires_at")
+  nextRenewalAt     DateTime?                @map("next_renewal_at")
+  alertDaysBefore   Int[]                    @default([120, 90, 60, 30, 15, 7, 3]) @map("alert_days_before")
+  criticality       ComplianceSeverity       @default(MEDIA)
+  blocksDispatch    Boolean                  @default(false) @map("blocks_dispatch")
+  confidentiality   ComplianceConfidentiality @default(INTERNO)
+  retentionPolicy   String?                  @map("retention_policy")
+  fileAttachmentId  String?                  @map("file_attachment_id") @db.Uuid
+  fileHash          String?                  @map("file_hash")
+  validationSource  String?                  @map("validation_source")
+  verifiedById      String?                  @map("verified_by_id") @db.Uuid
+  verifiedAt        DateTime?                @map("verified_at")
+  version           Int                      @default(1)
+  notes             String?
+  createdAt         DateTime                 @default(now()) @map("created_at")
+  updatedAt         DateTime                 @updatedAt @map("updated_at")
+  tenant            Tenant                   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, entityType, entityId])
+  @@index([tenantId, status])
+  @@index([tenantId, expiresAt])
+  @@index([tenantId, blocksDispatch])
+  @@map("compliance_documents")
+}
+
+/// Regla regulatoria configurable. Nunca es una verdad inmutable: exige
+/// fuente, autoridad, fechas de publicacion/verificacion/vigencia y version.
+model ComplianceRule {
+  id               String               @id @default(uuid()) @db.Uuid
+  tenantId         String               @map("tenant_id") @db.Uuid
+  name             String
+  authority        String?
+  sourceUrl        String?              @map("source_url")
+  publishedAt      DateTime?            @map("published_at")
+  verifiedAt       DateTime?            @map("verified_at")
+  effectiveFrom    DateTime?            @map("effective_from")
+  operationType    String?              @map("operation_type")
+  severity         ComplianceSeverity   @default(MEDIA)
+  /// Expresion/condicion evaluada, interpretada por el motor determinista.
+  condition        String?
+  recommendedAction String?             @map("recommended_action")
+  blocks           Boolean              @default(false)
+  active           Boolean              @default(true)
+  version          Int                  @default(1)
+  reviewerId       String?              @map("reviewer_id") @db.Uuid
+  notes            String?
+  createdAt        DateTime             @default(now()) @map("created_at")
+  updatedAt        DateTime             @updatedAt @map("updated_at")
+  tenant           Tenant               @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, active])
+  @@index([tenantId, operationType])
+  @@map("compliance_rules")
 }
 
 model RateLimitBucket {
