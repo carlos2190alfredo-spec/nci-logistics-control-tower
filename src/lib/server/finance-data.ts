@@ -10,6 +10,8 @@ export type TripProfitability = {
   reference: string;
   customerName: string;
   route: string;
+  driverName: string;
+  vehicleCode: string;
   summary: ProfitabilitySummary;
 };
 
@@ -25,6 +27,8 @@ export type TenantProfitability = {
   trips: TripProfitability[];
   byClient: GroupProfitability[];
   byRoute: GroupProfitability[];
+  byDriver: GroupProfitability[];
+  byVehicle: GroupProfitability[];
 };
 
 function groupBy(
@@ -65,6 +69,8 @@ export async function getTenantProfitability(tenantId: string): Promise<TenantPr
           origin: true,
           destination: true,
           customerAccount: { select: { name: true } },
+          driver: { select: { name: true } },
+          vehicle: { select: { code: true } },
         },
       },
     },
@@ -73,13 +79,22 @@ export async function getTenantProfitability(tenantId: string): Promise<TenantPr
 
   const byTrip = new Map<
     string,
-    { reference: string; customerName: string; route: string; lines: typeof entries }
+    {
+      reference: string;
+      customerName: string;
+      route: string;
+      driverName: string;
+      vehicleCode: string;
+      lines: typeof entries;
+    }
   >();
   for (const e of entries) {
     const cur = byTrip.get(e.tripId) ?? {
       reference: e.trip.reference,
       customerName: e.trip.customerAccount?.name ?? "",
       route: `${e.trip.origin} → ${e.trip.destination}`,
+      driverName: e.trip.driver?.name ?? "",
+      vehicleCode: e.trip.vehicle?.code ?? "",
       lines: [] as typeof entries,
     };
     cur.lines.push(e);
@@ -96,13 +111,23 @@ export async function getTenantProfitability(tenantId: string): Promise<TenantPr
         billable: l.billable,
       })),
     );
-    trips.push({ tripId, reference: data.reference, customerName: data.customerName, route: data.route, summary });
+    trips.push({
+      tripId,
+      reference: data.reference,
+      customerName: data.customerName,
+      route: data.route,
+      driverName: data.driverName,
+      vehicleCode: data.vehicleCode,
+      summary,
+    });
   }
 
   trips.sort((a, b) => b.summary.margin - a.summary.margin);
   const total = aggregateProfitability(trips.map((t) => t.summary));
   const byClient = groupBy(trips, (t) => ({ key: t.customerName || "—", label: t.customerName || "Sin cliente" }));
   const byRoute = groupBy(trips, (t) => ({ key: t.route, label: t.route }));
+  const byDriver = groupBy(trips, (t) => ({ key: t.driverName || "—", label: t.driverName || "Sin conductor" }));
+  const byVehicle = groupBy(trips, (t) => ({ key: t.vehicleCode || "—", label: t.vehicleCode || "Sin vehículo" }));
 
-  return { total, trips, byClient, byRoute };
+  return { total, trips, byClient, byRoute, byDriver, byVehicle };
 }

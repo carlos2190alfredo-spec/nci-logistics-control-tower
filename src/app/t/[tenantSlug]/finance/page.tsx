@@ -40,7 +40,7 @@ export default async function FinancePage({
   const { tenantSlug } = await params;
   const { user, tenant, membership } = await requireTenantRole(tenantSlug, ["TENANT_OWNER", "TENANT_ADMIN"]);
 
-  const { total, trips, byClient, byRoute } = await getTenantProfitability(tenant.id);
+  const { total, trips, byClient, byRoute, byDriver, byVehicle } = await getTenantProfitability(tenant.id);
   const canManage = hasPermission(membership.role, "tenant.finance.manage");
   const recentTrips = await getDb().trip.findMany({
     where: { tenantId: tenant.id },
@@ -171,6 +171,8 @@ export default async function FinancePage({
           {[
             { title: "Por cliente", rows: byClient, head: "Cliente" },
             { title: "Por ruta", rows: byRoute, head: "Ruta" },
+            { title: "Por conductor", rows: byDriver, head: "Conductor" },
+            { title: "Por equipo", rows: byVehicle, head: "Equipo" },
           ].map((group) => (
             <Card key={group.title}>
               <CardHeader description="Margen agregado." icon={<DollarSign />} title={group.title} />
