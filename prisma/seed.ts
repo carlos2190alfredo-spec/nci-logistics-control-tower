@@ -513,6 +513,23 @@ async function main() {
       }
     }
 
+    // Orden de mantenimiento demo (equipo bloqueado).
+    await prisma.maintenanceOrder.upsert({
+      where: { id: demoUuid(tenant.id, "0000-4000-8000-000000000701") },
+      update: {},
+      create: {
+        id: demoUuid(tenant.id, "0000-4000-8000-000000000701"),
+        tenantId: tenant.id,
+        assetType: "VEHICULO",
+        assetCode: "VH-2",
+        type: "CORRECTIVO",
+        status: "EN_PROGRESO",
+        blocksAsset: true,
+        description: "Reparacion de frenos",
+        provider: "Taller Central",
+      },
+    });
+
     await prisma.auditLog.upsert({
       where: { id: demoUuid(tenant.id, "0000-4000-8000-000000000201") },
       update: {},

@@ -270,6 +270,7 @@ model Tenant {
   containerCharges    ContainerCharge[]
   hazmatShipments     HazmatShipment[]
   financialEntries    TripFinancialEntry[]
+  maintenanceOrders   MaintenanceOrder[]
 
   @@map("tenants")
 }
@@ -1237,6 +1238,61 @@ model TripFinancialEntry {
   @@index([tenantId, tripId])
   @@index([tenantId, kind, category])
   @@map("trip_financial_entries")
+}
+
+// ===========================================================================
+// Mantenimiento de flota (sección 13)
+// Preventivo/correctivo con bloqueo determinista del equipo. Un equipo con una
+// orden abierta que bloquea no puede asignarse. La IA no interviene.
+// ===========================================================================
+
+enum MaintenanceAssetType {
+  VEHICULO
+  EQUIPO
+}
+
+enum MaintenanceType {
+  PREVENTIVO
+  CORRECTIVO
+  INSPECCION
+}
+
+enum MaintenanceStatus {
+  PROGRAMADO
+  EN_PROGRESO
+  COMPLETADO
+  CANCELADO
+}
+
+/// Orden de mantenimiento de un vehículo o equipo (por código de activo).
+model MaintenanceOrder {
+  id            String               @id @default(uuid()) @db.Uuid
+  tenantId      String               @map("tenant_id") @db.Uuid
+  assetType     MaintenanceAssetType @map("asset_type")
+  assetCode     String               @map("asset_code")
+  type          MaintenanceType
+  status        MaintenanceStatus    @default(PROGRAMADO)
+  /// Si el equipo queda bloqueado para asignación mientras la orden esté abierta.
+  blocksAsset   Boolean              @default(true) @map("blocks_asset")
+  description   String
+  provider      String?
+  cost          Decimal?             @db.Decimal(12, 2)
+  currency      String               @default("USD")
+  scheduledAt   DateTime?            @map("scheduled_at")
+  startedAt     DateTime?            @map("started_at")
+  completedAt   DateTime?            @map("completed_at")
+  odometerKm    Int?                 @map("odometer_km")
+  nextServiceKm Int?                 @map("next_service_km")
+  nextServiceAt DateTime?            @map("next_service_at")
+  notes         String?
+  createdById   String?              @map("created_by_id") @db.Uuid
+  createdAt     DateTime             @default(now()) @map("created_at")
+  updatedAt     DateTime             @updatedAt @map("updated_at")
+  tenant        Tenant               @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, assetType, assetCode])
+  @@index([tenantId, status])
+  @@map("maintenance_orders")
 }
 
 model RateLimitBucket {
