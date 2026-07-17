@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { Flame, ShieldAlert, TriangleAlert, Plus } from "lucide-react";
 import { AppShell } from "@/components/shell/app-shell";
 import {
@@ -159,7 +160,12 @@ export default async function HazmatPage({
                   {shipments.map((s) => (
                     <TableRow key={s.id}>
                       <TableCell>
-                        <span className="font-mono font-semibold text-foreground">{s.reference}</span>
+                        <Link
+                          className="font-mono font-semibold text-primary hover:underline"
+                          href={`/t/${tenantSlug}/hazmat/${s.id}`}
+                        >
+                          {s.reference}
+                        </Link>
                         {s.unNumber ? (
                           <span className="block text-xs text-muted-foreground">{s.unNumber}</span>
                         ) : null}

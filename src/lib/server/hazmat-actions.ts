@@ -7,6 +7,10 @@ import { audit } from "@/lib/server/audit";
 import { requireTenantRole } from "@/lib/server/auth";
 import { getDb } from "@/lib/server/db";
 import { hasPermission } from "@/lib/server/tenant-permissions";
+import { computeHazmatReadiness } from "@/lib/server/hazmat-data";
+import { HAZMAT_DISPATCH_STATUS, canTransitionHazmat } from "@/lib/hazmat/lifecycle";
+import { hazmatAllowsDispatch } from "@/lib/hazmat/readiness";
+import type { HazmatStatus } from "@/generated/prisma";
 
 const HAZARD_CLASSES = [
   "CLASE_1_EXPLOSIVOS", "CLASE_2_GASES", "CLASE_3_LIQUIDOS_INFLAMABLES",
@@ -108,4 +112,150 @@ export async function createHazmatShipmentAction(tenantSlug: string, formData: F
 
   revalidatePath(`/t/${tenantSlug}/hazmat`);
   redirect(`/t/${tenantSlug}/hazmat`);
+}
+
+// ---------------------------------------------------------------------------
+// Recalcular aptitud de cumplimiento desde los documentos verificados.
+// ---------------------------------------------------------------------------
+const idSchema = z.object({ shipmentId: z.string().uuid() });
+
+export async function refreshHazmatComplianceAction(tenantSlug: string, formData: FormData) {
+  const { user, tenant, membership } = await requireTenantRole(tenantSlug, [...MANAGE_ROLES]);
+  if (!hasPermission(membership.role, "tenant.hazmat.manage")) {
+    redirect(`/t/${tenantSlug}/hazmat`);
+  }
+  const { shipmentId } = idSchema.parse({ shipmentId: formData.get("shipmentId") });
+
+  const shipment = await getDb().hazmatShipment.findFirst({ where: { id: shipmentId, tenantId: tenant.id } });
+  if (!shipment) redirect(`/t/${tenantSlug}/hazmat`);
+
+  const readiness = await computeHazmatReadiness(tenant.id, shipment!);
+  await getDb().hazmatShipment.update({
+    where: { id: shipmentId },
+    data: { complianceState: readiness.state },
+  });
+
+  await audit({
+    tenantId: tenant.id,
+    actorId: user.id,
+    actorRole: membership.role,
+    action: "hazmat.compliance.refresh",
+    entity: "HazmatShipment",
+    entityId: shipmentId,
+    after: { complianceState: readiness.state, blocking: readiness.blockingIssues.length },
+  });
+
+  revalidatePath(`/t/${tenantSlug}/hazmat/${shipmentId}`);
+  redirect(`/t/${tenantSlug}/hazmat/${shipmentId}`);
+}
+
+// ---------------------------------------------------------------------------
+// Aprobar el despacho. Requiere rol hazmat.approve y aptitud que lo permita.
+// La IA NUNCA aprueba: esto es una decisión humana registrada y auditada.
+// ---------------------------------------------------------------------------
+export async function approveHazmatDispatchAction(tenantSlug: string, formData: FormData) {
+  const { user, tenant, membership } = await requireTenantRole(tenantSlug, [
+    "TENANT_OWNER", "TENANT_ADMIN", "SAFETY_MANAGER",
+  ]);
+  if (!hasPermission(membership.role, "tenant.hazmat.approve")) {
+    redirect(`/t/${tenantSlug}/hazmat`);
+  }
+  const { shipmentId } = idSchema.parse({ shipmentId: formData.get("shipmentId") });
+
+  const shipment = await getDb().hazmatShipment.findFirst({ where: { id: shipmentId, tenantId: tenant.id } });
+  if (!shipment) redirect(`/t/${tenantSlug}/hazmat`);
+
+  const readiness = await computeHazmatReadiness(tenant.id, shipment!);
+
+  if (!hazmatAllowsDispatch(readiness.state)) {
+    // No cumple: se registra el estado pero NO se aprueba.
+    await getDb().hazmatShipment.update({
+      where: { id: shipmentId },
+      data: { complianceState: readiness.state },
+    });
+    await audit({
+      tenantId: tenant.id,
+      actorId: user.id,
+      actorRole: membership.role,
+      action: "hazmat.approve.blocked",
+      entity: "HazmatShipment",
+      entityId: shipmentId,
+      after: { complianceState: readiness.state, blocking: readiness.blockingIssues.map((i) => i.key) },
+    });
+    redirect(`/t/${tenantSlug}/hazmat/${shipmentId}`);
+  }
+
+  await getDb().hazmatShipment.update({
+    where: { id: shipmentId },
+    data: {
+      complianceState: readiness.state,
+      approvedById: user.id,
+      approvedAt: new Date(),
+      status: "APROBACION_OPERACIONAL",
+    },
+  });
+
+  await audit({
+    tenantId: tenant.id,
+    actorId: user.id,
+    actorRole: membership.role,
+    action: "hazmat.approve",
+    entity: "HazmatShipment",
+    entityId: shipmentId,
+    after: { complianceState: readiness.state, approved: true },
+  });
+
+  revalidatePath(`/t/${tenantSlug}/hazmat/${shipmentId}`);
+  redirect(`/t/${tenantSlug}/hazmat/${shipmentId}`);
+}
+
+// ---------------------------------------------------------------------------
+// Avanzar el ciclo de vida (con guarda de aprobación para el despacho).
+// ---------------------------------------------------------------------------
+const transitionSchema = z.object({
+  shipmentId: z.string().uuid(),
+  nextStatus: z.string().min(2).max(40),
+});
+
+export async function transitionHazmatAction(tenantSlug: string, formData: FormData) {
+  const { user, tenant, membership } = await requireTenantRole(tenantSlug, [...MANAGE_ROLES]);
+  if (!hasPermission(membership.role, "tenant.hazmat.manage")) {
+    redirect(`/t/${tenantSlug}/hazmat`);
+  }
+  const parsed = transitionSchema.parse({
+    shipmentId: formData.get("shipmentId"),
+    nextStatus: formData.get("nextStatus"),
+  });
+  const nextStatus = parsed.nextStatus as HazmatStatus;
+
+  const shipment = await getDb().hazmatShipment.findFirst({ where: { id: parsed.shipmentId, tenantId: tenant.id } });
+  if (!shipment) redirect(`/t/${tenantSlug}/hazmat`);
+
+  if (!canTransitionHazmat(shipment!.status, nextStatus)) {
+    redirect(`/t/${tenantSlug}/hazmat/${parsed.shipmentId}`);
+  }
+
+  // Guarda dura: no se puede despachar sin aprobación registrada.
+  if (nextStatus === HAZMAT_DISPATCH_STATUS && !shipment!.approvedAt) {
+    redirect(`/t/${tenantSlug}/hazmat/${parsed.shipmentId}`);
+  }
+
+  await getDb().hazmatShipment.update({
+    where: { id: parsed.shipmentId },
+    data: { status: nextStatus },
+  });
+
+  await audit({
+    tenantId: tenant.id,
+    actorId: user.id,
+    actorRole: membership.role,
+    action: "hazmat.transition",
+    entity: "HazmatShipment",
+    entityId: parsed.shipmentId,
+    before: { status: shipment!.status },
+    after: { status: nextStatus },
+  });
+
+  revalidatePath(`/t/${tenantSlug}/hazmat/${parsed.shipmentId}`);
+  redirect(`/t/${tenantSlug}/hazmat/${parsed.shipmentId}`);
 }
