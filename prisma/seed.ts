@@ -398,6 +398,94 @@ async function main() {
       },
     });
 
+    // --- Datos demo Panamá: cumplimiento, contenedores y hazmat ---
+    const DAY = 24 * 60 * 60 * 1000;
+    const day = (n: number) => new Date(Date.now() + n * DAY);
+    const complianceDemo = [
+      { hx: "31", entityType: "CONDUCTOR", entityId: "DR-1", documentType: "Licencia", name: "Licencia categoria C", status: "VIGENTE", crit: "CRITICA", blocks: true, exp: day(250) },
+      { hx: "32", entityType: "CONDUCTOR", entityId: "DR-1", documentType: "Capacitacion", name: "Capacitacion mercancias peligrosas", status: "VIGENTE", crit: "ALTA", blocks: true, exp: day(150) },
+      { hx: "33", entityType: "VEHICULO", entityId: "VH-1", documentType: "Seguro", name: "Poliza de seguro", status: "VIGENTE", crit: "ALTA", blocks: true, exp: day(80) },
+      { hx: "34", entityType: "VEHICULO", entityId: "VH-1", documentType: "Revisado", name: "Revisado vehicular", status: "VIGENTE", crit: "MEDIA", blocks: false, exp: day(18) },
+      { hx: "35", entityType: "EQUIPO", entityId: "EQ-1", documentType: "PPC", name: "PPC / Registro tecnico", status: "VIGENTE", crit: "CRITICA", blocks: true, exp: day(120) },
+      { hx: "36", entityType: "VEHICULO", entityId: "VH-2", documentType: "Seguro", name: "Poliza de seguro", status: "VIGENTE", crit: "ALTA", blocks: true, exp: day(-3) },
+    ] as const;
+    for (const c of complianceDemo) {
+      await prisma.complianceDocument.upsert({
+        where: { id: demoUuid(tenant.id, `0000-4000-8000-0000000003${c.hx}`) },
+        update: {},
+        create: {
+          id: demoUuid(tenant.id, `0000-4000-8000-0000000003${c.hx}`),
+          tenantId: tenant.id,
+          entityType: c.entityType,
+          entityId: c.entityId,
+          documentType: c.documentType,
+          name: c.name,
+          status: c.status,
+          criticality: c.crit,
+          blocksDispatch: c.blocks,
+          expiresAt: c.exp,
+        },
+      });
+    }
+
+    const containerDemo = [
+      { hx: "41", reference: `${tenant.slug.toUpperCase()}-CT-0001`, operationType: "IMPORTACION", status: "EN_TRANSITO", containerNumber: "MSCU1234567", size: "S40", type: "SECO", shippingLine: "MSC", terminal: "MIT", freeDays: 5, gateOutAt: day(-8), returnDeadline: day(-3) },
+      { hx: "42", reference: `${tenant.slug.toUpperCase()}-CT-0002`, operationType: "IMPORTACION", status: "RETIRADO", containerNumber: "TCLU7654321", size: "S20", type: "REFRIGERADO", shippingLine: "Maersk", terminal: "PSA", freeDays: 5, gateOutAt: day(-4), returnDeadline: day(1) },
+      { hx: "43", reference: `${tenant.slug.toUpperCase()}-CT-0003`, operationType: "EXPORTACION", status: "LIBERADO", containerNumber: "CAIU1112223", size: "S40", type: "SECO", shippingLine: "CMA CGM", terminal: "CCT", freeDays: 7, availableAt: day(-1) },
+    ] as const;
+    for (const ct of containerDemo) {
+      await prisma.container.upsert({
+        where: { id: demoUuid(tenant.id, `0000-4000-8000-0000000004${ct.hx}`) },
+        update: {},
+        create: {
+          id: demoUuid(tenant.id, `0000-4000-8000-0000000004${ct.hx}`),
+          tenantId: tenant.id,
+          reference: ct.reference,
+          operationType: ct.operationType,
+          status: ct.status,
+          containerNumber: ct.containerNumber,
+          size: ct.size,
+          type: ct.type,
+          shippingLine: ct.shippingLine,
+          terminal: ct.terminal,
+          freeDays: ct.freeDays,
+          gateOutAt: "gateOutAt" in ct ? ct.gateOutAt : null,
+          availableAt: "availableAt" in ct ? ct.availableAt : null,
+          returnDeadline: "returnDeadline" in ct ? ct.returnDeadline : null,
+        },
+      });
+    }
+
+    const hazmatDemo = [
+      { hx: "51", reference: `${tenant.slug.toUpperCase()}-HZ-0001`, productName: "Jet-A", unNumber: "UN1863", status: "APROBACION_OPERACIONAL", complianceState: "CUMPLE", loadPoint: "Refineria", deliveryPoint: "Aeropuerto Tocumen", driverCode: "DR-1", vehicleCode: "VH-1", tankCode: "EQ-1", safetyDataSheetRef: "SDS-JETA-2026", authorizedRoute: "Panama - Tocumen", authorizedSchedule: "06:00-18:00", contingencyPlanRef: "PC-2026" },
+      { hx: "52", reference: `${tenant.slug.toUpperCase()}-HZ-0002`, productName: "Diesel", unNumber: "UN1202", status: "DOCUMENTACION_PENDIENTE", complianceState: "NO_CUMPLE", loadPoint: "Terminal AES", deliveryPoint: "Estacion Via Espana", driverCode: "DR-3", vehicleCode: "VH-3", tankCode: "EQ-3", safetyDataSheetRef: null, authorizedRoute: null, authorizedSchedule: null, contingencyPlanRef: null },
+    ] as const;
+    for (const hz of hazmatDemo) {
+      await prisma.hazmatShipment.upsert({
+        where: { id: demoUuid(tenant.id, `0000-4000-8000-0000000005${hz.hx}`) },
+        update: {},
+        create: {
+          id: demoUuid(tenant.id, `0000-4000-8000-0000000005${hz.hx}`),
+          tenantId: tenant.id,
+          reference: hz.reference,
+          productName: hz.productName,
+          unNumber: hz.unNumber,
+          hazardClass: "CLASE_3_LIQUIDOS_INFLAMABLES",
+          status: hz.status,
+          complianceState: hz.complianceState,
+          loadPoint: hz.loadPoint,
+          deliveryPoint: hz.deliveryPoint,
+          driverCode: hz.driverCode,
+          vehicleCode: hz.vehicleCode,
+          tankCode: hz.tankCode,
+          safetyDataSheetRef: hz.safetyDataSheetRef,
+          authorizedRoute: hz.authorizedRoute,
+          authorizedSchedule: hz.authorizedSchedule,
+          contingencyPlanRef: hz.contingencyPlanRef,
+        },
+      });
+    }
+
     await prisma.auditLog.upsert({
       where: { id: demoUuid(tenant.id, "0000-4000-8000-000000000201") },
       update: {},

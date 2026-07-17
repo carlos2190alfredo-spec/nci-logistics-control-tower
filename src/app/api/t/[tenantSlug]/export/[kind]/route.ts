@@ -17,8 +17,13 @@ import {
   containerStatusLabel,
   containerTypeLabel,
 } from "@/lib/ui/containers";
+import {
+  hazmatClassLabel,
+  hazmatComplianceLabel,
+  hazmatStatusLabel,
+} from "@/lib/ui/hazmat";
 
-const EXPORTABLE = ["trips", "incidents", "containers"] as const;
+const EXPORTABLE = ["trips", "incidents", "containers", "hazmat"] as const;
 type ExportKind = (typeof EXPORTABLE)[number];
 
 function isExportKind(v: string): v is ExportKind {
@@ -111,6 +116,28 @@ export async function GET(
     ];
     csv = toCsv(containers, columns);
     filename = `${tenant.slug}-contenedores.csv`;
+  } else if (kind === "hazmat") {
+    const shipments = await db.hazmatShipment.findMany({
+      where: { tenantId: tenant.id },
+      orderBy: { createdAt: "desc" },
+      take: 5000,
+    });
+    const columns: CsvColumn<(typeof shipments)[number]>[] = [
+      { header: "Referencia", value: (s) => s.reference },
+      { header: "Producto", value: (s) => s.productName },
+      { header: "ONU", value: (s) => s.unNumber ?? "" },
+      { header: "Clase", value: (s) => hazmatClassLabel[s.hazardClass] ?? s.hazardClass },
+      { header: "Estado", value: (s) => hazmatStatusLabel[s.status] ?? s.status },
+      { header: "Cumplimiento", value: (s) => hazmatComplianceLabel[s.complianceState] ?? s.complianceState },
+      { header: "Punto de carga", value: (s) => s.loadPoint ?? "" },
+      { header: "Punto de entrega", value: (s) => s.deliveryPoint ?? "" },
+      { header: "Conductor", value: (s) => s.driverCode ?? "" },
+      { header: "Cisterna", value: (s) => s.tankCode ?? "" },
+      { header: "Aprobado", value: (s) => s.approvedAt },
+      { header: "Creado", value: (s) => s.createdAt },
+    ];
+    csv = toCsv(shipments, columns);
+    filename = `${tenant.slug}-hazmat.csv`;
   } else {
     const incidents = await db.incident.findMany({
       where: { tenantId: tenant.id },
