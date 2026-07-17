@@ -1,10 +1,13 @@
 import Link from "next/link";
 import {
   Bell,
+  Boxes,
   FileCheck2,
+  Flame,
   Inbox,
   MapPin,
   Route,
+  ShieldCheck,
   TriangleAlert,
   Truck,
 } from "lucide-react";
@@ -23,12 +26,16 @@ import { IncidentCard } from "@/components/tenant/incident-card";
 import { RequestCard } from "@/components/tenant/request-card";
 import { requireTenantMembership } from "@/lib/server/auth";
 import { getTenantOverview } from "@/lib/server/tenant-dashboard-data";
+import { getComplianceOverview } from "@/lib/server/compliance-data";
+import { getContainers, summarizeContainers } from "@/lib/server/container-data";
+import { getHazmatShipments, summarizeHazmat } from "@/lib/server/hazmat-data";
 import { getTenantNavGroups } from "@/lib/ui/tenant-nav";
 import {
   tenantRoleLabel,
   tripStatusLabel,
   tripStatusTone,
 } from "@/lib/ui/status";
+import { complianceLightLabel, complianceLightTone } from "@/lib/ui/compliance";
 import { formatDate } from "@/lib/utils";
 
 export const dynamic = "force-dynamic";
@@ -51,6 +58,14 @@ export default async function TenantControlTowerPage({
     notifications,
     pendingProofs,
   } = await getTenantOverview(tenant.id);
+
+  // Señales cross-módulo de la capa logística Panamá (cumplimiento/contenedores/hazmat).
+  const [compliance, containers, hazmat] = await Promise.all([
+    getComplianceOverview(tenant.id),
+    getContainers(tenant.id).then(summarizeContainers),
+    getHazmatShipments(tenant.id).then(summarizeHazmat),
+  ]);
+  const complianceAtRisk = compliance.counts.VENCIDO + compliance.counts.PROXIMO_A_VENCER;
 
   const selectedTrip = activeTrips[0];
   const base = `/t/${tenantSlug}`;
@@ -108,6 +123,42 @@ export default async function TenantControlTowerPage({
             icon={<Truck />}
             label="Flota disponible"
             value={vehicles.length}
+          />
+        </div>
+
+        {/* Capa logística Panamá: cumplimiento, contenedores, hazmat */}
+        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+          <MetricCard
+            hint={`Semaforo: ${complianceLightLabel[compliance.light]}`}
+            href={`${base}/compliance`}
+            icon={<ShieldCheck />}
+            label="Documentos por vencer/vencidos"
+            tone={complianceLightTone[compliance.light] === "danger" ? "danger" : complianceAtRisk > 0 ? "warning" : "success"}
+            value={complianceAtRisk}
+          />
+          <MetricCard
+            hint={compliance.blockingCount > 0 ? "Bloquean despacho" : "Sin bloqueos"}
+            href={`${base}/compliance`}
+            icon={<TriangleAlert />}
+            label="Documentos que bloquean"
+            tone={compliance.blockingCount > 0 ? "danger" : "success"}
+            value={compliance.blockingCount}
+          />
+          <MetricCard
+            hint={containers.accruing > 0 ? "Cargo acumulandose" : `${containers.atRisk} en riesgo`}
+            href={`${base}/containers`}
+            icon={<Boxes />}
+            label="Contenedores en riesgo/cargo"
+            tone={containers.accruing > 0 ? "danger" : containers.atRisk > 0 ? "warning" : "default"}
+            value={containers.atRisk + containers.accruing}
+          />
+          <MetricCard
+            hint={hazmat.blocked > 0 ? "No cumplen requisitos" : "Sin bloqueos"}
+            href={`${base}/hazmat`}
+            icon={<Flame />}
+            label="Hazmat no conforme"
+            tone={hazmat.blocked > 0 ? "danger" : "success"}
+            value={hazmat.blocked}
           />
         </div>
 
