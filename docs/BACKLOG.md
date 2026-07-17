@@ -21,11 +21,18 @@ Ver [`DEPLOYMENT.md`](DEPLOYMENT.md).
 ## Mejoras post-lanzamiento
 
 - **WebAuthn/FIDO2** como segundo factor adicional (MFA-VULN-008).
-- Extender `OfflineForm` a mas formularios (crear solicitud, avanzar estado).
-- Exportacion CSV de feedback y auditoria (viajes e incidencias ya listos).
 - Modo soporte con salida visible y cierre auditado.
 - Mejora del render visual de firma en el POD PDF.
 - Conectar WhatsApp real (hoy es integracion `disabled` conmutable en el registry).
+
+## Programa Panamá — pendientes (post-piloto)
+
+- Cargar reglas regulatorias reales (`ComplianceRule`) con fuente y vigencia.
+- Pruebas E2E de los módulos nuevos (cumplimiento/contenedores/hazmat/finanzas).
+- Reportes PDF financieros y de cumplimiento con branding del tenant.
+- Mantenimiento preventivo de flota (frecuencia por km/fecha, bloqueo de equipo).
+- Conectar una integración real reemplazando su provider `Disabled*`.
+- Rentabilidad por equipo/conductor (ya está por viaje/cliente/ruta).
 
 ## Deuda técnica
 

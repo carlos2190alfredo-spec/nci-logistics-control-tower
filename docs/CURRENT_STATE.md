@@ -1,10 +1,36 @@
 # CURRENT STATE
 
-Fecha: 2026-07-15
+Fecha: 2026-07-17
 
-## Fase actual — Production Readiness
+## Fase actual — Adaptación logística Panamá (FASE 0–7 completas)
 
-Toda la funcionalidad de producto está lista. La fase actual completa el paquete de despliegue: verificación automática de correo al alta de tenants y usuarios, CI/CD, `.env.example`, guía de despliegue, y limpieza de lint. El único trabajo restante es de infraestructura (proveedor SMTP real, DB managed, dominio TLS, vault de secretos) — no de código.
+Sobre la base production-ready se construyó la capa logística de Panamá:
+cumplimiento documental, contenedores (demurrage/detention), combustible y
+mercancías peligrosas, dashboards por rol, rentabilidad y salud de conectores.
+Toda la lógica de elegibilidad/alertas/cargos/rentabilidad es **determinista**
+(sin IA); las integraciones externas quedan declaradas como `Disabled*`
+(preparadas, no simuladas). Ver `HANDOFF_PANAMA.md` para el informe completo.
+
+Baseline: 272 unit tests, 55 security checks, doctor 27/27, build ✅, 18
+migraciones, 67 modelos Prisma. El trabajo restante es de infraestructura de
+despliegue y de carga de datos reales/reglas del piloto — no de código.
+
+### Módulos Panamá (nuevos)
+
+- **Cumplimiento:** ComplianceDocument/Rule, vencimientos, semáforo advisory,
+  `/t/[slug]/compliance`.
+- **Contenedores:** ciclo de 26 estados, free-time/demurrage/detention,
+  `/t/[slug]/containers`.
+- **Combustible/Hazmat:** readiness desde documentos, aprobación humana,
+  `/t/[slug]/hazmat`.
+- **Rentabilidad:** margen por viaje/cliente/ruta, `/t/[slug]/finance`.
+- **Salud de conectores:** en `/t/[slug]/admin/integrations`.
+- **Dashboard cross-módulo** en el Resumen; **"qué sigue"** en el portal.
+
+## Base previa — Production Readiness
+
+Verificación automática de correo al alta de tenants y usuarios, CI/CD,
+`.env.example`, guía de despliegue, limpieza de lint.
 
 ## Implementado (fase actual — Email Verification y Production Readiness)
 
