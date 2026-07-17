@@ -268,6 +268,7 @@ model Tenant {
   complianceRules     ComplianceRule[]
   containers          Container[]
   containerCharges    ContainerCharge[]
+  hazmatShipments     HazmatShipment[]
 
   @@map("tenants")
 }
@@ -1066,6 +1067,109 @@ model ContainerCharge {
   @@index([tenantId, containerId])
   @@index([tenantId, type, status])
   @@map("container_charges")
+}
+
+// ===========================================================================
+// Combustible y mercancías peligrosas (FASE 3)
+// Administra cumplimiento, documentación, planificación, trazabilidad y cierre.
+// NO controla válvulas, bombas, cisternas, sensores ni equipos físicos.
+// La elegibilidad es determinista sobre datos verificados; la IA no autoriza.
+// ===========================================================================
+
+enum HazmatStatus {
+  ORDEN_RECIBIDA
+  VALIDACION_CLIENTE
+  VALIDACION_PRODUCTO
+  DOCUMENTACION_PENDIENTE
+  CONDUCTOR_VALIDADO
+  EQUIPO_VALIDADO
+  PERMISOS_VALIDADOS
+  SEGURO_VALIDADO
+  HOJA_SEGURIDAD_ASOCIADA
+  RUTA_HORARIO_REVISADOS
+  ELEGIBILIDAD_CALCULADA
+  APROBACION_OPERACIONAL
+  PROGRAMADA
+  UNIDAD_DESPACHADA
+  LLEGADA_PUNTO_CARGA
+  CARGA_CONFIRMADA
+  SALIDA_CONFIRMADA
+  EN_TRANSITO
+  LLEGADA_DESTINO
+  RECEPCION_INICIADA
+  RECEPCION_CONFIRMADA
+  DOCUMENTACION_FINAL
+  CONCILIACION
+  EXPEDIENTE_CERRADO
+  CANCELADA
+}
+
+/// Clase de peligro (ONU). Referencial y configurable; no es asesoría técnica.
+enum HazmatClass {
+  CLASE_1_EXPLOSIVOS
+  CLASE_2_GASES
+  CLASE_3_LIQUIDOS_INFLAMABLES
+  CLASE_4_SOLIDOS_INFLAMABLES
+  CLASE_5_COMBURENTES
+  CLASE_6_TOXICOS
+  CLASE_7_RADIACTIVOS
+  CLASE_8_CORROSIVOS
+  CLASE_9_VARIOS
+  NO_APLICA
+}
+
+enum HazmatComplianceState {
+  CUMPLE
+  CUMPLE_CON_OBSERVACIONES
+  NO_CUMPLE
+  NO_VERIFICADO
+  REQUIERE_APROBACION
+}
+
+/// Orden de transporte de combustible / mercancía peligrosa.
+model HazmatShipment {
+  id                 String                @id @default(uuid()) @db.Uuid
+  tenantId           String                @map("tenant_id") @db.Uuid
+  reference          String
+  status             HazmatStatus          @default(ORDEN_RECIBIDA)
+  complianceState    HazmatComplianceState @default(NO_VERIFICADO) @map("compliance_state")
+  productName        String                @map("product_name")
+  productType        String?               @map("product_type")
+  unNumber           String?               @map("un_number")
+  hazardClass        HazmatClass           @default(NO_APLICA) @map("hazard_class")
+  safetyDataSheetRef String?               @map("safety_data_sheet_ref")
+  customerAccountId  String?               @map("customer_account_id") @db.Uuid
+  cargoOwner         String?               @map("cargo_owner")
+  loadPoint          String?               @map("load_point")
+  deliveryPoint      String?               @map("delivery_point")
+  quantity           Decimal?              @db.Decimal(14, 3)
+  unit               String?
+  lot                String?
+  driverId           String?               @map("driver_id") @db.Uuid
+  driverCode         String?               @map("driver_code")
+  vehicleCode        String?               @map("vehicle_code")
+  tankCode           String?               @map("tank_code")
+  capacity           Decimal?              @db.Decimal(14, 3)
+  compartments       Int?
+  authorizedRoute    String?               @map("authorized_route")
+  authorizedSchedule String?               @map("authorized_schedule")
+  contingencyPlanRef String?               @map("contingency_plan_ref")
+  emergencyContacts  String?               @map("emergency_contacts")
+  dispatchedQty      Decimal?              @map("dispatched_qty") @db.Decimal(14, 3)
+  receivedQty        Decimal?              @map("received_qty") @db.Decimal(14, 3)
+  tripId             String?               @map("trip_id") @db.Uuid
+  notes              String?
+  approvedById       String?               @map("approved_by_id") @db.Uuid
+  approvedAt         DateTime?             @map("approved_at")
+  createdAt          DateTime              @default(now()) @map("created_at")
+  updatedAt          DateTime              @updatedAt @map("updated_at")
+  tenant             Tenant                @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, reference])
+  @@index([tenantId, status])
+  @@index([tenantId, complianceState])
+  @@index([tenantId, customerAccountId])
+  @@map("hazmat_shipments")
 }
 
 model RateLimitBucket {

@@ -20,7 +20,10 @@ export type TenantPermission =
   | "tenant.compliance.manage"
   | "tenant.compliance.verify"
   | "tenant.containers.view"
-  | "tenant.containers.manage";
+  | "tenant.containers.manage"
+  | "tenant.hazmat.view"
+  | "tenant.hazmat.manage"
+  | "tenant.hazmat.approve";
 
 const PERMISSION_MAP: Record<TenantPermission, TenantRole[]> = {
   "tenant.view": ["TENANT_OWNER", "TENANT_ADMIN", "OPERATIONS_MANAGER", "DISPATCHER", "SAFETY_MANAGER"],
@@ -43,6 +46,10 @@ const PERMISSION_MAP: Record<TenantPermission, TenantRole[]> = {
   "tenant.compliance.verify": ["TENANT_OWNER", "TENANT_ADMIN", "SAFETY_MANAGER"],
   "tenant.containers.view": ["TENANT_OWNER", "TENANT_ADMIN", "OPERATIONS_MANAGER", "DISPATCHER", "SAFETY_MANAGER"],
   "tenant.containers.manage": ["TENANT_OWNER", "TENANT_ADMIN", "OPERATIONS_MANAGER", "DISPATCHER"],
+  "tenant.hazmat.view": ["TENANT_OWNER", "TENANT_ADMIN", "OPERATIONS_MANAGER", "DISPATCHER", "SAFETY_MANAGER"],
+  "tenant.hazmat.manage": ["TENANT_OWNER", "TENANT_ADMIN", "OPERATIONS_MANAGER", "SAFETY_MANAGER"],
+  // Aprobar el despacho de carga peligrosa: solo roles de mando/seguridad.
+  "tenant.hazmat.approve": ["TENANT_OWNER", "TENANT_ADMIN", "SAFETY_MANAGER"],
 };
 
 export function hasPermission(role: TenantRole, permission: TenantPermission): boolean {
