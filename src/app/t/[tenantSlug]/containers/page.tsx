@@ -19,6 +19,7 @@ import {
   TableRow,
   TextArea,
 } from "@/components/ui";
+import { ExportCsvButton } from "@/components/tenant/export-csv-button";
 import { requireTenantRole } from "@/lib/server/auth";
 import { getContainers, summarizeContainers } from "@/lib/server/container-data";
 import { createContainerAction } from "@/lib/server/container-actions";
@@ -65,6 +66,12 @@ export default async function ContainersPage({
     >
       <div className="anim-page grid gap-6">
         <PageHeader
+          actions={
+            <ExportCsvButton
+              href={`/api/t/${tenantSlug}/export/containers`}
+              label="Exportar contenedores"
+            />
+          }
           breadcrumbs={[
             { label: tenant.name, href: `/t/${tenantSlug}` },
             { label: "Contenedores" },

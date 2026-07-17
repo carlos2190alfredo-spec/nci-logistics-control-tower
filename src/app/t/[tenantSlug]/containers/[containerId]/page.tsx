@@ -23,6 +23,7 @@ import { requireTenantRole } from "@/lib/server/auth";
 import { getContainerDetail } from "@/lib/server/container-data";
 import {
   addContainerChargeAction,
+  setContainerReleaseAction,
   transitionContainerAction,
 } from "@/lib/server/container-actions";
 import { hasPermission } from "@/lib/server/tenant-permissions";
@@ -208,6 +209,29 @@ export default async function ContainerDetailPage({
                   {nextStates.length ? "Solo lectura para su rol." : "Expediente en estado final."}
                 </p>
               )}
+            </Card>
+
+            <Card>
+              <CardHeader description="Excepción de liberación (aduana/terminal)." icon={<Boxes />} title="Liberación" />
+              <div className="mt-3">
+                <StatusBadge
+                  label={container.releaseStatus === "LIBERADO" ? "Liberado" : container.releaseStatus === "RECHAZADO" ? "Rechazado" : container.releaseStatus === "RETENIDO" ? "Retenido" : "Pendiente"}
+                  tone={container.releaseStatus === "LIBERADO" ? "success" : container.releaseStatus === "PENDIENTE" ? "neutral" : "danger"}
+                />
+              </div>
+              {canManage ? (
+                <form action={setContainerReleaseAction.bind(null, tenantSlug)} className="mt-4 grid gap-2.5">
+                  <input name="containerId" type="hidden" value={container.id} />
+                  <SelectField label="Estado de liberación" name="releaseStatus">
+                    <option value="PENDIENTE">Pendiente</option>
+                    <option value="LIBERADO">Liberado</option>
+                    <option value="RECHAZADO">Rechazado</option>
+                    <option value="RETENIDO">Retenido</option>
+                  </SelectField>
+                  <Field label="Motivo / referencia" name="reason" required={false} />
+                  <SubmitButton>Actualizar liberación</SubmitButton>
+                </form>
+              ) : null}
             </Card>
           </div>
         </div>

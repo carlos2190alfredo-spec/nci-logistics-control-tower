@@ -11,8 +11,14 @@ import {
   incidentStatusLabel,
   tripStatusLabel,
 } from "@/lib/ui/status";
+import {
+  containerOperationLabel,
+  containerSizeLabel,
+  containerStatusLabel,
+  containerTypeLabel,
+} from "@/lib/ui/containers";
 
-const EXPORTABLE = ["trips", "incidents"] as const;
+const EXPORTABLE = ["trips", "incidents", "containers"] as const;
 type ExportKind = (typeof EXPORTABLE)[number];
 
 function isExportKind(v: string): v is ExportKind {
@@ -81,6 +87,30 @@ export async function GET(
     ];
     csv = toCsv(trips, columns);
     filename = `${tenant.slug}-viajes.csv`;
+  } else if (kind === "containers") {
+    const containers = await db.container.findMany({
+      where: { tenantId: tenant.id },
+      orderBy: { createdAt: "desc" },
+      take: 5000,
+    });
+    const columns: CsvColumn<(typeof containers)[number]>[] = [
+      { header: "Referencia", value: (c) => c.reference },
+      { header: "Contenedor", value: (c) => c.containerNumber ?? "" },
+      { header: "Operacion", value: (c) => containerOperationLabel[c.operationType] ?? c.operationType },
+      { header: "Tamano", value: (c) => containerSizeLabel[c.size] ?? c.size },
+      { header: "Tipo", value: (c) => containerTypeLabel[c.type] ?? c.type },
+      { header: "Estado", value: (c) => containerStatusLabel[c.status] ?? c.status },
+      { header: "Naviera", value: (c) => c.shippingLine ?? "" },
+      { header: "Terminal", value: (c) => c.terminal ?? "" },
+      { header: "Booking", value: (c) => c.booking ?? "" },
+      { header: "Dias libres", value: (c) => (c.freeDays != null ? String(c.freeDays) : "") },
+      { header: "Gate-out", value: (c) => c.gateOutAt },
+      { header: "Devolucion limite", value: (c) => c.returnDeadline },
+      { header: "Vacio devuelto", value: (c) => c.emptyReturnedAt },
+      { header: "Creado", value: (c) => c.createdAt },
+    ];
+    csv = toCsv(containers, columns);
+    filename = `${tenant.slug}-contenedores.csv`;
   } else {
     const incidents = await db.incident.findMany({
       where: { tenantId: tenant.id },

@@ -150,6 +150,56 @@ export async function transitionContainerAction(tenantSlug: string, formData: Fo
   redirect(`/t/${tenantSlug}/containers/${parsed.containerId}`);
 }
 
+const RELEASE_STATES = ["PENDIENTE", "LIBERADO", "RECHAZADO", "RETENIDO"] as const;
+
+const releaseSchema = z.object({
+  containerId: z.string().uuid(),
+  releaseStatus: z.enum(RELEASE_STATES),
+  reason: z.string().max(500).optional(),
+});
+
+/**
+ * Registra una excepción de liberación aduanera/portuaria del contenedor
+ * (liberado / rechazado / retenido). El motivo queda auditado. Determinista;
+ * no sustituye a la autoridad, solo registra el resultado verificado.
+ */
+export async function setContainerReleaseAction(tenantSlug: string, formData: FormData) {
+  const { user, tenant, membership } = await requireTenantRole(tenantSlug, [...MANAGE_ROLES]);
+  if (!hasPermission(membership.role, "tenant.containers.manage")) {
+    redirect(`/t/${tenantSlug}/containers`);
+  }
+  const parsed = releaseSchema.parse({
+    containerId: formData.get("containerId"),
+    releaseStatus: formData.get("releaseStatus"),
+    reason: formData.get("reason")?.toString()?.trim() || undefined,
+  });
+
+  const container = await getDb().container.findFirst({
+    where: { id: parsed.containerId, tenantId: tenant.id },
+    select: { id: true, releaseStatus: true },
+  });
+  if (!container) redirect(`/t/${tenantSlug}/containers`);
+
+  await getDb().container.update({
+    where: { id: parsed.containerId },
+    data: { releaseStatus: parsed.releaseStatus },
+  });
+
+  await audit({
+    tenantId: tenant.id,
+    actorId: user.id,
+    actorRole: membership.role,
+    action: "container.release.update",
+    entity: "Container",
+    entityId: parsed.containerId,
+    before: { releaseStatus: container!.releaseStatus },
+    after: { releaseStatus: parsed.releaseStatus, reason: parsed.reason ?? null },
+  });
+
+  revalidatePath(`/t/${tenantSlug}/containers/${parsed.containerId}`);
+  redirect(`/t/${tenantSlug}/containers/${parsed.containerId}`);
+}
+
 const chargeSchema = z.object({
   containerId: z.string().uuid(),
   type: z.enum(CHARGE_TYPES),
