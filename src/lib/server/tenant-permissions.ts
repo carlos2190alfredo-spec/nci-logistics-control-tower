@@ -18,7 +18,9 @@ export type TenantPermission =
   | "tenant.roles.view"
   | "tenant.compliance.view"
   | "tenant.compliance.manage"
-  | "tenant.compliance.verify";
+  | "tenant.compliance.verify"
+  | "tenant.containers.view"
+  | "tenant.containers.manage";
 
 const PERMISSION_MAP: Record<TenantPermission, TenantRole[]> = {
   "tenant.view": ["TENANT_OWNER", "TENANT_ADMIN", "OPERATIONS_MANAGER", "DISPATCHER", "SAFETY_MANAGER"],
@@ -39,6 +41,8 @@ const PERMISSION_MAP: Record<TenantPermission, TenantRole[]> = {
   "tenant.compliance.view": ["TENANT_OWNER", "TENANT_ADMIN", "OPERATIONS_MANAGER", "SAFETY_MANAGER"],
   "tenant.compliance.manage": ["TENANT_OWNER", "TENANT_ADMIN", "SAFETY_MANAGER"],
   "tenant.compliance.verify": ["TENANT_OWNER", "TENANT_ADMIN", "SAFETY_MANAGER"],
+  "tenant.containers.view": ["TENANT_OWNER", "TENANT_ADMIN", "OPERATIONS_MANAGER", "DISPATCHER", "SAFETY_MANAGER"],
+  "tenant.containers.manage": ["TENANT_OWNER", "TENANT_ADMIN", "OPERATIONS_MANAGER", "DISPATCHER"],
 };
 
 export function hasPermission(role: TenantRole, permission: TenantPermission): boolean {

@@ -42,6 +42,27 @@ export async function getContainers(
   });
 }
 
+/** Detalle de un contenedor con sus cargos y free-time calculado. */
+export async function getContainerDetail(tenantId: string, id: string, now: Date = new Date()) {
+  const container = await getDb().container.findFirst({
+    where: { id, tenantId },
+    include: { charges: { orderBy: { createdAt: "desc" } } },
+  });
+  if (!container) return null;
+  const start = freeTimeStart(container);
+  const freeTime =
+    container.freeDays != null && start
+      ? computeFreeTime({
+          startAt: start,
+          endAt: container.emptyReturnedAt ?? undefined,
+          freeDays: container.freeDays,
+          ratePerDay: null,
+          now,
+        })
+      : null;
+  return { ...container, freeTime };
+}
+
 export type ContainerCounts = {
   total: number;
   active: number;

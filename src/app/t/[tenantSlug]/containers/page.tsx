@@ -1,20 +1,28 @@
-import { Container as ContainerIcon, Clock, TriangleAlert, Boxes } from "lucide-react";
+import Link from "next/link";
+import { Container as ContainerIcon, Clock, TriangleAlert, Boxes, Plus } from "lucide-react";
 import { AppShell } from "@/components/shell/app-shell";
 import {
   Card,
   CardHeader,
+  Collapsible,
   DataTable,
   EmptyState,
+  Field,
   PageHeader,
+  SelectField,
   StatusBadge,
+  SubmitButton,
   TableBody,
   TableCell,
   TableHead,
   TableHeaderCell,
   TableRow,
+  TextArea,
 } from "@/components/ui";
 import { requireTenantRole } from "@/lib/server/auth";
 import { getContainers, summarizeContainers } from "@/lib/server/container-data";
+import { createContainerAction } from "@/lib/server/container-actions";
+import { hasPermission } from "@/lib/server/tenant-permissions";
 import { getTenantNavGroups } from "@/lib/ui/tenant-nav";
 import { tenantRoleLabel } from "@/lib/ui/status";
 import {
@@ -46,6 +54,7 @@ export default async function ContainersPage({
 
   const containers = await getContainers(tenant.id);
   const counts = summarizeContainers(containers);
+  const canManage = hasPermission(membership.role, "tenant.containers.manage");
 
   return (
     <AppShell
@@ -83,6 +92,51 @@ export default async function ContainersPage({
           </Card>
         </div>
 
+        {canManage ? (
+          <Collapsible icon={<Plus />} summary="Registrar contenedor" tone="default">
+            <form
+              action={createContainerAction.bind(null, tenantSlug)}
+              className="grid gap-3 sm:grid-cols-2"
+            >
+              <Field label="Referencia" name="reference" placeholder="EMPRESA-CT-0001" required />
+              <SelectField label="Operación" name="operationType">
+                <option value="IMPORTACION">Importación</option>
+                <option value="EXPORTACION">Exportación</option>
+                <option value="TRANSITO">Tránsito</option>
+                <option value="REEXPORTACION">Reexportación</option>
+                <option value="MOVIMIENTO_NACIONAL">Movimiento nacional</option>
+              </SelectField>
+              <SelectField label="Tamaño" name="size">
+                <option value="S40">40&apos;</option>
+                <option value="S20">20&apos;</option>
+                <option value="S45">45&apos;</option>
+                <option value="OTRO">Otro</option>
+              </SelectField>
+              <SelectField label="Tipo" name="type">
+                <option value="SECO">Seco</option>
+                <option value="REFRIGERADO">Refrigerado</option>
+                <option value="OPEN_TOP">Open top</option>
+                <option value="FLAT_RACK">Flat rack</option>
+                <option value="TANQUE">Tanque</option>
+                <option value="ESPECIAL">Especial</option>
+              </SelectField>
+              <Field label="Número de contenedor" name="containerNumber" placeholder="MSCU1234567" required={false} />
+              <Field label="Naviera" name="shippingLine" placeholder="MSC" required={false} />
+              <Field label="Terminal" name="terminal" placeholder="MIT" required={false} />
+              <Field label="Booking" name="booking" required={false} />
+              <Field label="Sello" name="sealNumber" required={false} />
+              <Field help="Días libres pactados para demurrage/detention." label="Días libres" name="freeDays" required={false} type="number" />
+              <Field label="Fecha límite de devolución" name="returnDeadline" required={false} type="date" />
+              <div className="sm:col-span-2">
+                <TextArea label="Observaciones" name="notes" />
+              </div>
+              <div className="sm:col-span-2">
+                <SubmitButton>Registrar contenedor</SubmitButton>
+              </div>
+            </form>
+          </Collapsible>
+        ) : null}
+
         <Card>
           <CardHeader description="Contenedores registrados y su estado." icon={<Boxes />} title="Listado" />
           <div className="mt-4 overflow-x-auto">
@@ -102,7 +156,12 @@ export default async function ContainersPage({
                   {containers.map((c) => (
                     <TableRow key={c.id}>
                       <TableCell>
-                        <span className="font-mono font-semibold text-foreground">{c.reference}</span>
+                        <Link
+                          className="font-mono font-semibold text-primary hover:underline"
+                          href={`/t/${tenantSlug}/containers/${c.id}`}
+                        >
+                          {c.reference}
+                        </Link>
                         {c.containerNumber ? (
                           <span className="block text-xs text-muted-foreground">{c.containerNumber}</span>
                         ) : null}
