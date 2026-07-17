@@ -18,6 +18,7 @@ import {
   TableRow,
   TextArea,
 } from "@/components/ui";
+import { ExportCsvButton } from "@/components/tenant/export-csv-button";
 import { requireTenantRole } from "@/lib/server/auth";
 import { getDb } from "@/lib/server/db";
 import { getTenantProfitability } from "@/lib/server/finance-data";
@@ -39,7 +40,7 @@ export default async function FinancePage({
   const { tenantSlug } = await params;
   const { user, tenant, membership } = await requireTenantRole(tenantSlug, ["TENANT_OWNER", "TENANT_ADMIN"]);
 
-  const { total, trips } = await getTenantProfitability(tenant.id);
+  const { total, trips, byClient, byRoute } = await getTenantProfitability(tenant.id);
   const canManage = hasPermission(membership.role, "tenant.finance.manage");
   const recentTrips = await getDb().trip.findMany({
     where: { tenantId: tenant.id },
@@ -165,6 +166,49 @@ export default async function FinancePage({
             )}
           </div>
         </Card>
+
+        <div className="grid gap-6 xl:grid-cols-2">
+          {[
+            { title: "Por cliente", rows: byClient, head: "Cliente" },
+            { title: "Por ruta", rows: byRoute, head: "Ruta" },
+          ].map((group) => (
+            <Card key={group.title}>
+              <CardHeader description="Margen agregado." icon={<DollarSign />} title={group.title} />
+              <div className="mt-4 overflow-x-auto">
+                {group.rows.length ? (
+                  <DataTable caption={group.title}>
+                    <TableHead>
+                      <tr>
+                        <TableHeaderCell>{group.head}</TableHeaderCell>
+                        <TableHeaderCell>Servicios</TableHeaderCell>
+                        <TableHeaderCell>Margen</TableHeaderCell>
+                        <TableHeaderCell>Margen %</TableHeaderCell>
+                      </tr>
+                    </TableHead>
+                    <TableBody>
+                      {group.rows.map((g) => (
+                        <TableRow key={g.key}>
+                          <TableCell>{g.label}</TableCell>
+                          <TableCell numeric>{g.count}</TableCell>
+                          <TableCell numeric>
+                            <StatusBadge label={money(g.summary.margin)} tone={g.summary.margin >= 0 ? "success" : "danger"} />
+                          </TableCell>
+                          <TableCell numeric>{g.summary.marginPct}%</TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </DataTable>
+                ) : (
+                  <EmptyState compact icon={<DollarSign />} title="Sin datos" />
+                )}
+              </div>
+            </Card>
+          ))}
+        </div>
+
+        <div className="flex justify-end">
+          <ExportCsvButton href={`/api/t/${tenantSlug}/export/finance`} label="Exportar finanzas" />
+        </div>
       </div>
     </AppShell>
   );

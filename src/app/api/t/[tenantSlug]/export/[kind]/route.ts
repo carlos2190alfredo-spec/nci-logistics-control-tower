@@ -22,8 +22,9 @@ import {
   hazmatComplianceLabel,
   hazmatStatusLabel,
 } from "@/lib/ui/hazmat";
+import { getTenantProfitability } from "@/lib/server/finance-data";
 
-const EXPORTABLE = ["trips", "incidents", "containers", "hazmat"] as const;
+const EXPORTABLE = ["trips", "incidents", "containers", "hazmat", "finance"] as const;
 type ExportKind = (typeof EXPORTABLE)[number];
 
 function isExportKind(v: string): v is ExportKind {
@@ -53,6 +54,11 @@ export async function GET(
     "DISPATCHER",
     "SAFETY_MANAGER",
   ]);
+
+  // Finanzas es sensible: solo OWNER/ADMIN.
+  if (kind === "finance" && !["TENANT_OWNER", "TENANT_ADMIN"].includes(membership.role)) {
+    return new NextResponse("No autorizado", { status: 403 });
+  }
 
   const rate = await enforceRateLimit({
     scope: "export.csv",
@@ -138,6 +144,19 @@ export async function GET(
     ];
     csv = toCsv(shipments, columns);
     filename = `${tenant.slug}-hazmat.csv`;
+  } else if (kind === "finance") {
+    const { trips } = await getTenantProfitability(tenant.id);
+    const columns: CsvColumn<(typeof trips)[number]>[] = [
+      { header: "Viaje", value: (t) => t.reference },
+      { header: "Cliente", value: (t) => t.customerName },
+      { header: "Ruta", value: (t) => t.route },
+      { header: "Ingresos", value: (t) => t.summary.revenue },
+      { header: "Costos", value: (t) => t.summary.cost },
+      { header: "Margen", value: (t) => t.summary.margin },
+      { header: "Margen %", value: (t) => t.summary.marginPct },
+    ];
+    csv = toCsv(trips, columns);
+    filename = `${tenant.slug}-rentabilidad.csv`;
   } else {
     const incidents = await db.incident.findMany({
       where: { tenantId: tenant.id },
