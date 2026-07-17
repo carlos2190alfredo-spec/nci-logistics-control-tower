@@ -269,6 +269,7 @@ model Tenant {
   containers          Container[]
   containerCharges    ContainerCharge[]
   hazmatShipments     HazmatShipment[]
+  financialEntries    TripFinancialEntry[]
 
   @@map("tenants")
 }
@@ -532,6 +533,7 @@ model Trip {
   routeEstimates        TripRouteEstimate[]
   stopEstimates         TripStopEstimate[]
   driverRecommendations DriverAssignmentRecommendation[]
+  financialEntries      TripFinancialEntry[]
 
   @@unique([tenantId, reference])
   @@index([tenantId, customerAccountId, status])
@@ -1170,6 +1172,71 @@ model HazmatShipment {
   @@index([tenantId, complianceState])
   @@index([tenantId, customerAccountId])
   @@map("hazmat_shipments")
+}
+
+// ===========================================================================
+// Costos, ingresos y rentabilidad por servicio (FASE 5)
+// Líneas financieras (ingreso/costo) por viaje. La rentabilidad se calcula de
+// forma determinista sumando líneas verificadas. Montos son datos del tenant.
+// ===========================================================================
+
+enum FinancialEntryKind {
+  INGRESO
+  COSTO
+}
+
+enum FinancialCategory {
+  // Ingresos
+  TARIFA_BASE
+  RECARGO
+  ESPERA_FACTURABLE
+  DEMURRAGE_FACTURABLE
+  DETENTION_FACTURABLE
+  REEMBOLSABLE
+  SERVICIO_ADICIONAL
+  AJUSTE
+  IMPUESTO
+  // Costos
+  COMBUSTIBLE
+  PEAJE
+  VIATICOS
+  CONDUCTOR
+  SUBCONTRATISTA
+  MANTENIMIENTO
+  GASTOS_PORTUARIOS
+  ALMACENAJE
+  RETENCION
+  ESPERA_COSTO
+  DEMURRAGE_COSTO
+  DETENTION_COSTO
+  REENTREGA
+  CARGOS_TERMINAL
+  REPARACION
+  SEGURO
+  ADMINISTRATIVO
+  OTRO
+}
+
+/// Línea financiera de un viaje (ingreso o costo). Determinista y auditable.
+model TripFinancialEntry {
+  id         String             @id @default(uuid()) @db.Uuid
+  tenantId   String             @map("tenant_id") @db.Uuid
+  tripId     String             @map("trip_id") @db.Uuid
+  kind       FinancialEntryKind
+  category   FinancialCategory
+  amount     Decimal            @db.Decimal(14, 2)
+  currency   String             @default("USD")
+  billable   Boolean            @default(true)
+  notes      String?
+  createdById String?           @map("created_by_id") @db.Uuid
+  createdAt  DateTime           @default(now()) @map("created_at")
+  updatedAt  DateTime           @updatedAt @map("updated_at")
+  tenant     Tenant             @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  trip       Trip               @relation(fields: [tripId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, tripId])
+  @@index([tenantId, kind, category])
+  @@map("trip_financial_entries")
 }
 
 model RateLimitBucket {

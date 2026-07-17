@@ -486,6 +486,33 @@ async function main() {
       });
     }
 
+    // Líneas financieras demo sobre los primeros viajes → rentabilidad demostrable.
+    const finTrips = await prisma.trip.findMany({ where: { tenantId: tenant.id }, orderBy: { reference: "asc" }, take: 3 });
+    const finLines = [
+      { kind: "INGRESO", category: "TARIFA_BASE", amount: 1200 },
+      { kind: "INGRESO", category: "RECARGO", amount: 150 },
+      { kind: "COSTO", category: "COMBUSTIBLE", amount: 380 },
+      { kind: "COSTO", category: "PEAJE", amount: 60 },
+      { kind: "COSTO", category: "CONDUCTOR", amount: 200 },
+    ] as const;
+    for (let ti = 0; ti < finTrips.length; ti += 1) {
+      for (let li = 0; li < finLines.length; li += 1) {
+        const fl = finLines[li];
+        await prisma.tripFinancialEntry.upsert({
+          where: { id: demoUuid(tenant.id, `0000-4000-8000-0000000006${ti}${li}`) },
+          update: {},
+          create: {
+            id: demoUuid(tenant.id, `0000-4000-8000-0000000006${ti}${li}`),
+            tenantId: tenant.id,
+            tripId: finTrips[ti].id,
+            kind: fl.kind,
+            category: fl.category,
+            amount: fl.amount,
+          },
+        });
+      }
+    }
+
     await prisma.auditLog.upsert({
       where: { id: demoUuid(tenant.id, "0000-4000-8000-000000000201") },
       update: {},

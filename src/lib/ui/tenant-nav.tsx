@@ -1,6 +1,7 @@
 import {
   Activity,
   Boxes,
+  DollarSign,
   Flame,
   History,
   Inbox,
@@ -46,7 +47,10 @@ export function getTenantNavGroups(tenantSlug: string, role: TenantRole) {
       ? [
           {
             title: "Administracion",
-            items: [{ label: "Configuracion", href: `${base}/settings`, icon: <Settings /> }],
+            items: [
+              { label: "Rentabilidad", href: `${base}/finance`, icon: <DollarSign /> },
+              { label: "Configuracion", href: `${base}/settings`, icon: <Settings /> },
+            ],
           },
         ]
       : []),

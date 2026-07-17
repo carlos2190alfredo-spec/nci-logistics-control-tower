@@ -23,7 +23,9 @@ export type TenantPermission =
   | "tenant.containers.manage"
   | "tenant.hazmat.view"
   | "tenant.hazmat.manage"
-  | "tenant.hazmat.approve";
+  | "tenant.hazmat.approve"
+  | "tenant.finance.view"
+  | "tenant.finance.manage";
 
 const PERMISSION_MAP: Record<TenantPermission, TenantRole[]> = {
   "tenant.view": ["TENANT_OWNER", "TENANT_ADMIN", "OPERATIONS_MANAGER", "DISPATCHER", "SAFETY_MANAGER"],
@@ -50,6 +52,9 @@ const PERMISSION_MAP: Record<TenantPermission, TenantRole[]> = {
   "tenant.hazmat.manage": ["TENANT_OWNER", "TENANT_ADMIN", "OPERATIONS_MANAGER", "SAFETY_MANAGER"],
   // Aprobar el despacho de carga peligrosa: solo roles de mando/seguridad.
   "tenant.hazmat.approve": ["TENANT_OWNER", "TENANT_ADMIN", "SAFETY_MANAGER"],
+  // Finanzas: rentabilidad, costos e ingresos. Datos comerciales sensibles.
+  "tenant.finance.view": ["TENANT_OWNER", "TENANT_ADMIN"],
+  "tenant.finance.manage": ["TENANT_OWNER", "TENANT_ADMIN"],
 };
 
 export function hasPermission(role: TenantRole, permission: TenantPermission): boolean {
