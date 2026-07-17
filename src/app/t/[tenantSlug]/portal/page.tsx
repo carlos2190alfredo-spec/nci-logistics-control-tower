@@ -32,6 +32,7 @@ import {
   TimelineItem,
 } from "@/components/ui";
 import { createServiceRequestAction } from "@/lib/server/actions";
+import { customerNextStep } from "@/lib/domain/state-machine";
 import { requireCustomerMembership } from "@/lib/server/auth";
 import { getDb } from "@/lib/server/db";
 import {
@@ -228,6 +229,13 @@ export default async function CustomerPortalPage({ params }: { params: Promise<{
                       <span className="flex items-center gap-1 text-sm tabular-nums text-muted-foreground">
                         <CalendarClock aria-hidden className="size-3.5" />
                         ETA {formatDate(activeTrip.eta)}
+                      </span>
+                    </div>
+                    <div className="flex items-start gap-2 rounded-lg bg-surface-sunken/70 px-3 py-2.5 text-sm">
+                      <Route aria-hidden className="mt-0.5 size-4 shrink-0 text-primary" />
+                      <span>
+                        <span className="font-medium text-foreground">Qué sigue: </span>
+                        <span className="text-muted-foreground">{customerNextStep[activeTrip.status]}</span>
                       </span>
                     </div>
                   </div>

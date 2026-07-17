@@ -29,6 +29,33 @@ type Transition = {
   roles: TenantRole[];
 };
 
+/**
+ * Próximo hito, en lenguaje natural, para mostrar al cliente en el portal.
+ * Responde "¿qué sigue?" sin exponer estados técnicos.
+ */
+export const customerNextStep: Record<TripStatus, string> = {
+  REQUESTED: "Operaciones revisará su solicitud",
+  UNDER_REVIEW: "Operaciones revisará su solicitud",
+  INFORMATION_REQUIRED: "Necesitamos un dato suyo para continuar",
+  CONFIRMED: "Se asignará una unidad y un conductor",
+  SCHEDULED: "Se asignará una unidad y un conductor",
+  ASSIGNED: "El conductor confirmará e irá al origen",
+  DRIVER_CONFIRMED: "El conductor se dirigirá al punto de origen",
+  EN_ROUTE_TO_ORIGIN: "El conductor llegará al punto de origen",
+  ARRIVED_AT_ORIGIN: "Se realizará la carga",
+  WAITING_AT_ORIGIN: "Se realizará la carga",
+  LOADING_OR_PICKUP: "La unidad saldrá hacia el destino",
+  IN_TRANSIT: "La unidad llegará al destino",
+  ARRIVED_AT_DESTINATION: "Se realizará la entrega",
+  DELIVERY_IN_PROGRESS: "Se completará la entrega",
+  DELIVERED: "Se preparará la prueba de entrega",
+  EVIDENCE_PENDING: "Se preparará la prueba de entrega",
+  EVIDENCE_SUBMITTED: "La documentación quedará disponible para descarga",
+  EVIDENCE_APPROVED: "La documentación está disponible para descarga",
+  CLOSED: "Servicio finalizado",
+  CANCELLED: "Servicio finalizado",
+};
+
 export const tripTransitions: Transition[] = [
   { from: "REQUESTED", to: "UNDER_REVIEW", roles: ["OPERATIONS_MANAGER", "DISPATCHER", "TENANT_OWNER"] },
   { from: "UNDER_REVIEW", to: "CONFIRMED", roles: ["OPERATIONS_MANAGER", "DISPATCHER", "TENANT_OWNER"] },
