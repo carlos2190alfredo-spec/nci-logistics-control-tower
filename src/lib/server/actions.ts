@@ -438,6 +438,20 @@ export async function assignTripAction(tenantSlug: string, formData: FormData) {
   const authorizations = Array.isArray(driver.authorizations) ? driver.authorizations.map(String) : [];
   if (authorizations.length > 0 && !authorizations.includes(trip.serviceType.code)) return;
 
+  // Guarda determinista: un activo con orden abierta bloqueante no puede asignarse.
+  const blockingOrders = await db.maintenanceOrder.count({
+    where: {
+      tenantId: tenant.id,
+      status: { in: ["PROGRAMADO", "EN_PROGRESO"] },
+      blocksAsset: true,
+      OR: [
+        { assetType: "VEHICULO", assetCode: vehicle.code },
+        { assetType: "EQUIPO", assetCode: equipment.code },
+      ],
+    },
+  });
+  if (blockingOrders > 0) return;
+
   const scheduledAt = new Date(parsed.scheduledAt);
   const windowStart = new Date(scheduledAt.getTime() - 6 * 60 * 60 * 1000);
   const windowEnd = new Date(scheduledAt.getTime() + 6 * 60 * 60 * 1000);

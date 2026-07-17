@@ -10,6 +10,7 @@ import {
   getTenantVehicles,
 } from "@/lib/server/tenant-dashboard-data";
 import { getTripsEligibility } from "@/lib/server/compliance-data";
+import { getBlockedAssets } from "@/lib/server/maintenance-data";
 import { getTenantNavGroups } from "@/lib/ui/tenant-nav";
 import { tenantRoleLabel } from "@/lib/ui/status";
 
@@ -22,11 +23,12 @@ export default async function TenantTripsPage({
 }) {
   const { tenantSlug } = await params;
   const { user, tenant, membership } = await requireTenantMembership(tenantSlug);
-  const [trips, vehicles, equipment, drivers] = await Promise.all([
+  const [trips, vehicles, equipment, drivers, blockedAssets] = await Promise.all([
     getTenantActiveTrips(tenant.id),
     getTenantVehicles(tenant.id),
     getTenantEquipment(tenant.id),
     getTenantDrivers(tenant.id),
+    getBlockedAssets(tenant.id),
   ]);
 
   // Elegibilidad advisory (no bloquea): una sola consulta para todos los viajes.
@@ -65,6 +67,7 @@ export default async function TenantTripsPage({
           <div className="grid gap-4">
             {trips.map((trip, i) => (
               <TripOperationsCard
+                blockedAssets={blockedAssets}
                 drivers={drivers}
                 eligibilityLight={eligibility.get(trip.id)}
                 equipment={equipment}

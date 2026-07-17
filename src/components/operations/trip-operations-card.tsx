@@ -55,6 +55,7 @@ export function TripOperationsCard({
   drivers,
   index = 0,
   eligibilityLight,
+  blockedAssets,
 }: {
   trip: OperationsTrip;
   tenantSlug: string;
@@ -62,6 +63,12 @@ export function TripOperationsCard({
   vehicles: Resource[];
   equipment: Resource[];
   drivers: Resource[];
+  /**
+   * Set de activos bloqueados por mantenimiento con formato
+   * `VEHICULO:CODIGO` o `EQUIPO:CODIGO`. Sus opciones se marcan como
+   * deshabilitadas en el select de asignación.
+   */
+  blockedAssets?: Set<string>;
   index?: number;
   eligibilityLight?: ComplianceLight;
 }) {
@@ -154,18 +161,26 @@ export function TripOperationsCard({
             <input name="scheduledAt" type="hidden" value={trip.scheduledAt.toISOString().slice(0, 16)} />
             <div className="grid gap-2.5 sm:grid-cols-3">
               <SelectField defaultValue={trip.vehicleId ?? ""} label="Vehiculo" name="vehicleId">
-                {vehicles.map((vehicle) => (
-                  <option key={vehicle.id} value={vehicle.id}>
-                    {vehicle.code}
-                  </option>
-                ))}
+                {vehicles.map((vehicle) => {
+                  const isBlocked = blockedAssets?.has(`VEHICULO:${vehicle.code}`) ?? false;
+                  return (
+                    <option disabled={isBlocked} key={vehicle.id} value={vehicle.id}>
+                      {vehicle.code}
+                      {isBlocked ? " · en mantenimiento" : ""}
+                    </option>
+                  );
+                })}
               </SelectField>
               <SelectField defaultValue={trip.equipmentId ?? ""} label="Equipo" name="equipmentId">
-                {equipment.map((item) => (
-                  <option key={item.id} value={item.id}>
-                    {item.code}
-                  </option>
-                ))}
+                {equipment.map((item) => {
+                  const isBlocked = blockedAssets?.has(`EQUIPO:${item.code}`) ?? false;
+                  return (
+                    <option disabled={isBlocked} key={item.id} value={item.id}>
+                      {item.code}
+                      {isBlocked ? " · en mantenimiento" : ""}
+                    </option>
+                  );
+                })}
               </SelectField>
               <SelectField defaultValue={trip.driverId ?? ""} label="Conductor" name="driverId">
                 {drivers.map((driver) => (
