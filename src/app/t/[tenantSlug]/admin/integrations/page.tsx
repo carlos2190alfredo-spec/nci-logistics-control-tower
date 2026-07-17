@@ -18,8 +18,31 @@ import { requireTenantRole } from "@/lib/server/auth";
 import { getDb } from "@/lib/server/db";
 import { getTenantAdminNavGroups } from "@/lib/ui/tenant-admin-nav";
 import { CONNECTOR_CATALOG } from "@/lib/integrations/registry";
+import { getConnectorHealth } from "@/lib/server/connector-health-data";
 import { toggleIntegrationAction, testIntegrationAction } from "@/lib/server/integration-actions";
+import type { ConnectorHealth } from "@/lib/integrations/health";
 import type { StatusTone } from "@/lib/ui/status";
+
+const healthLabel: Record<ConnectorHealth, string> = {
+  DESACTIVADO: "Desactivado",
+  REQUIERE_CREDENCIALES: "Requiere credenciales",
+  ACTIVO: "Activo",
+  DEGRADADO: "Degradado",
+  ERROR: "Error",
+};
+
+const healthTone: Record<ConnectorHealth, StatusTone> = {
+  DESACTIVADO: "neutral",
+  REQUIERE_CREDENCIALES: "warning",
+  ACTIVO: "success",
+  DEGRADADO: "warning",
+  ERROR: "danger",
+};
+
+function formatSync(d: Date | null): string {
+  if (!d) return "Nunca";
+  return d.toLocaleDateString("es-PA", { year: "numeric", month: "short", day: "numeric" });
+}
 
 export const dynamic = "force-dynamic";
 export const metadata = { robots: { index: false } };
@@ -73,6 +96,8 @@ export default async function TenantIntegrationsPage({
     take: 10,
   });
 
+  const health = await getConnectorHealth(tenant.id);
+
   return (
     <AppShell
       brandContext={tenant.name}
@@ -96,6 +121,52 @@ export default async function TenantIntegrationsPage({
           <MetricCard icon={<Link2 />} label="Configuradas" value={configuredCount} />
           <MetricCard icon={<Link2 />} label="Activas" tone="success" value={enabledCount} />
         </div>
+
+        <Card>
+          <CardHeader
+            description="Estado operativo de cada conector: credenciales, sincronizacion y errores recientes."
+            icon={<Link2 />}
+            title="Salud de conectores"
+          />
+          <div className="mt-4 overflow-x-auto">
+            <DataTable caption="Salud de conectores">
+              <TableHead>
+                <tr>
+                  <TableHeaderCell>Conector</TableHeaderCell>
+                  <TableHeaderCell>Salud</TableHeaderCell>
+                  <TableHeaderCell>Credenciales</TableHeaderCell>
+                  <TableHeaderCell>Ult. sync</TableHeaderCell>
+                  <TableHeaderCell>Eventos (7d)</TableHeaderCell>
+                  <TableHeaderCell>Accion recomendada</TableHeaderCell>
+                </tr>
+              </TableHead>
+              <TableBody>
+                {health.map((h) => (
+                  <TableRow key={h.type}>
+                    <TableCell className="font-medium text-foreground">{h.name}</TableCell>
+                    <TableCell>
+                      <StatusBadge label={healthLabel[h.result.health]} tone={healthTone[h.result.health]} />
+                    </TableCell>
+                    <TableCell numeric>
+                      {h.presentCredentials}/{h.requiredCredentials}
+                    </TableCell>
+                    <TableCell>{formatSync(h.lastSyncAt)}</TableCell>
+                    <TableCell numeric>
+                      {h.recentProcessed} ok
+                      {h.recentFailed > 0 ? <span className="text-danger"> · {h.recentFailed} fallo(s)</span> : null}
+                    </TableCell>
+                    <TableCell>
+                      <span className="text-sm text-muted-foreground">{h.result.recommendedAction}</span>
+                      {h.lastError ? (
+                        <span className="mt-0.5 block text-xs text-danger">{h.lastError}</span>
+                      ) : null}
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </DataTable>
+          </div>
+        </Card>
 
         <Card>
           <CardHeader
