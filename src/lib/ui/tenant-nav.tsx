@@ -1,5 +1,6 @@
 import {
   Activity,
+  Boxes,
   History,
   Inbox,
   LayoutDashboard,
@@ -21,6 +22,7 @@ export function getTenantNavGroups(tenantSlug: string, role: TenantRole) {
         { label: "Resumen", href: base, icon: <LayoutDashboard />, exact: true },
         { label: "Solicitudes", href: `${base}/requests`, icon: <Inbox /> },
         { label: "Viajes activos", href: `${base}/trips`, icon: <Route /> },
+        { label: "Contenedores", href: `${base}/containers`, icon: <Boxes /> },
         { label: "Incidencias", href: `${base}/incidents`, icon: <TriangleAlert /> },
         ...(["TENANT_OWNER", "TENANT_ADMIN", "OPERATIONS_MANAGER", "SAFETY_MANAGER"].includes(role)
           ? [{ label: "Cumplimiento", href: `${base}/compliance`, icon: <ShieldCheck /> }]

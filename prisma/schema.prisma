@@ -266,6 +266,8 @@ model Tenant {
   aiUsageDaily   AiUsageDaily[]
   complianceDocuments ComplianceDocument[]
   complianceRules     ComplianceRule[]
+  containers          Container[]
+  containerCharges    ContainerCharge[]
 
   @@map("tenants")
 }
@@ -884,6 +886,186 @@ model ComplianceRule {
   @@index([tenantId, active])
   @@index([tenantId, operationType])
   @@map("compliance_rules")
+}
+
+// ===========================================================================
+// Operaciones de contenedores (FASE 2)
+// Ciclo de vida completo import/export/tránsito + control de días libres,
+// demurrage, detention y almacenaje. Tarifas configurables por tenant; el
+// sistema NO asume valores reales de navieras/terminales.
+// ===========================================================================
+
+enum ContainerOperationType {
+  IMPORTACION
+  EXPORTACION
+  TRANSITO
+  REEXPORTACION
+  MOVIMIENTO_NACIONAL
+}
+
+enum ContainerType {
+  SECO
+  REFRIGERADO
+  OPEN_TOP
+  FLAT_RACK
+  TANQUE
+  ESPECIAL
+}
+
+enum ContainerSize {
+  S20
+  S40
+  S45
+  OTRO
+}
+
+enum ContainerFill {
+  LLENO
+  VACIO
+}
+
+enum ContainerReleaseStatus {
+  PENDIENTE
+  LIBERADO
+  RECHAZADO
+  RETENIDO
+}
+
+/// Ciclo de vida del contenedor. Estados configurables/omitibles por operación.
+enum ContainerStatus {
+  SOLICITUD_RECIBIDA
+  VALIDACION_COMERCIAL
+  DOCUMENTOS_PENDIENTES
+  DOCUMENTACION_COMPLETA
+  LIBERACION_PENDIENTE
+  LIBERADO
+  CITA_SOLICITADA
+  CITA_CONFIRMADA
+  UNIDAD_ASIGNADA
+  EN_RUTA_TERMINAL
+  EN_TERMINAL
+  GATE_IN
+  RETIRADO
+  GATE_OUT
+  EN_TRANSITO
+  EN_DESTINO
+  ENTREGA_INICIADA
+  ENTREGA_COMPLETADA
+  POD_GENERADO
+  VACIO_PENDIENTE
+  DEVOLUCION_PROGRAMADA
+  VACIO_DEVUELTO
+  EIR_CONFIRMADO
+  CARGOS_CONCILIADOS
+  EXPEDIENTE_CERRADO
+  CANCELADO
+}
+
+enum ContainerChargeType {
+  ALMACENAJE_PORTUARIO
+  DEMURRAGE
+  DETENTION
+  RETENCION
+  ESPERA
+  STANDBY
+  MANIOBRAS
+  SOBRECOSTO
+  REENTREGA
+  REPROGRAMACION
+  TERCEROS
+}
+
+enum ContainerChargeStatus {
+  PROYECTADO
+  EN_CURSO
+  CERRADO
+  CONCILIADO
+  DISPUTADO
+}
+
+/// Operación de un contenedor. tenantId es FK dura (aislamiento multitenant).
+model Container {
+  id                 String                  @id @default(uuid()) @db.Uuid
+  tenantId           String                  @map("tenant_id") @db.Uuid
+  reference          String
+  operationType      ContainerOperationType  @map("operation_type")
+  status             ContainerStatus         @default(SOLICITUD_RECIBIDA)
+  fill               ContainerFill           @default(LLENO)
+  containerNumber    String?                 @map("container_number")
+  isoCode            String?                 @map("iso_code")
+  size               ContainerSize           @default(S40)
+  type               ContainerType           @default(SECO)
+  ownerLine          String?                 @map("owner_line")
+  shippingLine       String?                 @map("shipping_line")
+  terminal           String?
+  yard               String?
+  booking            String?
+  billOfLading       String?                 @map("bill_of_lading")
+  sealNumber         String?                 @map("seal_number")
+  weightKg           Int?                    @map("weight_kg")
+  tareKg             Int?                    @map("tare_kg")
+  grossWeightKg      Int?                    @map("gross_weight_kg")
+  vgmKg              Int?                    @map("vgm_kg")
+  product            String?
+  temperatureC       Float?                  @map("temperature_c")
+  customerAccountId  String?                 @map("customer_account_id") @db.Uuid
+  consignee          String?
+  customsAgent       String?                 @map("customs_agent")
+  customsOffice      String?                 @map("customs_office")
+  customsRegime      String?                 @map("customs_regime")
+  releaseStatus      ContainerReleaseStatus  @default(PENDIENTE) @map("release_status")
+  availableAt        DateTime?               @map("available_at")
+  appointmentAt      DateTime?               @map("appointment_at")
+  origin             String?
+  destination        String?
+  pickupDeadline     DateTime?               @map("pickup_deadline")
+  returnDeadline     DateTime?               @map("return_deadline")
+  freeDays           Int?                    @map("free_days")
+  gateInAt           DateTime?               @map("gate_in_at")
+  gateOutAt          DateTime?               @map("gate_out_at")
+  emptyReturnedAt    DateTime?               @map("empty_returned_at")
+  eirConfirmedAt     DateTime?               @map("eir_confirmed_at")
+  tripId             String?                 @map("trip_id") @db.Uuid
+  notes              String?
+  createdAt          DateTime                @default(now()) @map("created_at")
+  updatedAt          DateTime                @updatedAt @map("updated_at")
+  tenant             Tenant                  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  charges            ContainerCharge[]
+
+  @@unique([tenantId, reference])
+  @@index([tenantId, status])
+  @@index([tenantId, returnDeadline])
+  @@index([tenantId, customerAccountId])
+  @@map("containers")
+}
+
+/// Cargo/tiempo asociado a un contenedor (demurrage, detention, almacenaje…).
+/// Tarifas y montos son datos del tenant; el sistema no los inventa.
+model ContainerCharge {
+  id           String                @id @default(uuid()) @db.Uuid
+  tenantId     String                @map("tenant_id") @db.Uuid
+  containerId  String                @map("container_id") @db.Uuid
+  type         ContainerChargeType
+  status       ContainerChargeStatus @default(PROYECTADO)
+  startAt      DateTime?             @map("start_at")
+  endAt        DateTime?             @map("end_at")
+  freeDays     Int                   @default(0) @map("free_days")
+  ratePerDay   Decimal?              @map("rate_per_day") @db.Decimal(12, 2)
+  currency     String                @default("USD")
+  billable     Boolean               @default(true)
+  responsible  String?
+  projectedAmount Decimal?           @map("projected_amount") @db.Decimal(12, 2)
+  actualAmount    Decimal?           @map("actual_amount") @db.Decimal(12, 2)
+  evidenceRef  String?               @map("evidence_ref")
+  notes        String?
+  createdAt    DateTime              @default(now()) @map("created_at")
+  updatedAt    DateTime              @updatedAt @map("updated_at")
+  container    Container             @relation(fields: [containerId], references: [id], onDelete: Cascade)
+  tenant       Tenant                @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, containerId])
+  @@index([tenantId, type, status])
+  @@map("container_charges")
 }
 
 model RateLimitBucket {
