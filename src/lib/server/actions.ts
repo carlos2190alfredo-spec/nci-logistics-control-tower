@@ -7,6 +7,7 @@ import { z } from "zod";
 import type { TenantRole, TripStatus } from "@/generated/prisma";
 import { customerVisibleStatus, canTransition } from "@/lib/domain/state-machine";
 import { blockingDocumentsNow } from "@/lib/compliance/eligibility";
+import { hasActiveException } from "@/lib/compliance/exceptions";
 import { audit } from "@/lib/server/audit";
 import {
   requireCustomerMembership,
@@ -439,44 +440,69 @@ export async function assignTripAction(tenantSlug: string, formData: FormData) {
   const authorizations = Array.isArray(driver.authorizations) ? driver.authorizations.map(String) : [];
   if (authorizations.length > 0 && !authorizations.includes(trip.serviceType.code)) return;
 
-  // Guarda determinista: un activo con orden abierta bloqueante no puede asignarse.
-  const blockingOrders = await db.maintenanceOrder.count({
+  const now = new Date();
+  const assetKeys = [
+    `VEHICULO:${vehicle.code}`,
+    `EQUIPO:${equipment.code}`,
+    `CONDUCTOR:${driver.code}`,
+  ];
+  const exceptionCandidates = await db.complianceException.findMany({
     where: {
       tenantId: tenant.id,
-      status: { in: ["PROGRAMADO", "EN_PROGRESO"] },
-      blocksAsset: true,
+      revokedAt: null,
       OR: [
-        { assetType: "VEHICULO", assetCode: vehicle.code },
-        { assetType: "EQUIPO", assetCode: equipment.code },
+        { scope: "TRIP", targetKey: trip.id },
+        { scope: "ASSET", targetKey: { in: assetKeys } },
       ],
     },
+    select: { gate: true, scope: true, targetKey: true, expiresAt: true, revokedAt: true },
   });
-  if (blockingOrders > 0) return;
+  const targetKeys = { tripId: trip.id, assetKeys };
+  const maintenanceExempt = hasActiveException(exceptionCandidates, "MAINTENANCE", targetKeys, now);
+  const complianceExempt = hasActiveException(exceptionCandidates, "COMPLIANCE", targetKeys, now);
+
+  // Guarda determinista: un activo con orden abierta bloqueante no puede asignarse.
+  if (!maintenanceExempt) {
+    const blockingOrders = await db.maintenanceOrder.count({
+      where: {
+        tenantId: tenant.id,
+        status: { in: ["PROGRAMADO", "EN_PROGRESO"] },
+        blocksAsset: true,
+        OR: [
+          { assetType: "VEHICULO", assetCode: vehicle.code },
+          { assetType: "EQUIPO", assetCode: equipment.code },
+        ],
+      },
+    });
+    if (blockingOrders > 0) return;
+  }
 
   // Guarda determinista: documentos de cumplimiento bloqueantes vencidos/suspendidos
-  // /rechazados impiden la asignación. Advisory hasta ahora; ahora también bloquea.
-  const complianceDocs = await db.complianceDocument.findMany({
-    where: {
-      tenantId: tenant.id,
-      blocksDispatch: true,
-      OR: [
-        { entityType: "CONDUCTOR", entityId: { in: [driver.code].filter(Boolean) } },
-        { entityType: "VEHICULO", entityId: { in: [vehicle.code, vehicle.plate].filter(Boolean) } },
-        { entityType: "EQUIPO", entityId: { in: [equipment.code].filter(Boolean) } },
-      ],
-    },
-    select: {
-      status: true,
-      expiresAt: true,
-      alertDaysBefore: true,
-      blocksDispatch: true,
-      entityType: true,
-      entityId: true,
-      name: true,
-    },
-  });
-  const blockingCompliance = blockingDocumentsNow(complianceDocs, new Date());
-  if (blockingCompliance.length > 0) return;
+  // /rechazados impiden la asignación, salvo excepción aprobada vigente.
+  if (!complianceExempt) {
+    const complianceDocs = await db.complianceDocument.findMany({
+      where: {
+        tenantId: tenant.id,
+        blocksDispatch: true,
+        OR: [
+          { entityType: "CONDUCTOR", entityId: { in: [driver.code].filter(Boolean) } },
+          { entityType: "VEHICULO", entityId: { in: [vehicle.code, vehicle.plate].filter(Boolean) } },
+          { entityType: "EQUIPO", entityId: { in: [equipment.code].filter(Boolean) } },
+        ],
+      },
+      select: {
+        status: true,
+        expiresAt: true,
+        alertDaysBefore: true,
+        blocksDispatch: true,
+        entityType: true,
+        entityId: true,
+        name: true,
+      },
+    });
+    const blockingCompliance = blockingDocumentsNow(complianceDocs, now);
+    if (blockingCompliance.length > 0) return;
+  }
 
   const scheduledAt = new Date(parsed.scheduledAt);
   const windowStart = new Date(scheduledAt.getTime() - 6 * 60 * 60 * 1000);

@@ -271,6 +271,7 @@ model Tenant {
   hazmatShipments     HazmatShipment[]
   financialEntries    TripFinancialEntry[]
   maintenanceOrders   MaintenanceOrder[]
+  complianceExceptions ComplianceException[]
 
   @@map("tenants")
 }
@@ -1293,6 +1294,50 @@ model MaintenanceOrder {
   @@index([tenantId, assetType, assetCode])
   @@index([tenantId, status])
   @@map("maintenance_orders")
+}
+
+// ===========================================================================
+// Excepciones de elegibilidad (spec sección 6)
+// Un usuario autorizado puede permitir un despacho pese a un bloqueo de
+// cumplimiento o mantenimiento, dejando justificación, alcance, evidencia y
+// expiración auditados. La IA no aprueba.
+// ===========================================================================
+
+enum ComplianceExceptionGate {
+  COMPLIANCE
+  MAINTENANCE
+}
+
+enum ComplianceExceptionScope {
+  /// Alcance por viaje específico.
+  TRIP
+  /// Alcance por activo (VEHICULO:code / EQUIPO:code / CONDUCTOR:code).
+  ASSET
+}
+
+model ComplianceException {
+  id            String                   @id @default(uuid()) @db.Uuid
+  tenantId      String                   @map("tenant_id") @db.Uuid
+  gate          ComplianceExceptionGate
+  scope         ComplianceExceptionScope
+  /// Para TRIP: el trip.id. Para ASSET: "VEHICULO:VH-1" / "EQUIPO:EQ-2" / "CONDUCTOR:DR-1".
+  targetKey     String                   @map("target_key")
+  justification String
+  evidenceRef   String?                  @map("evidence_ref")
+  approverId    String                   @map("approver_id") @db.Uuid
+  approvedAt    DateTime                 @default(now()) @map("approved_at")
+  expiresAt     DateTime?                @map("expires_at")
+  revokedAt     DateTime?                @map("revoked_at")
+  revokedById   String?                  @map("revoked_by_id") @db.Uuid
+  notes         String?
+  createdAt     DateTime                 @default(now()) @map("created_at")
+  updatedAt     DateTime                 @updatedAt @map("updated_at")
+  tenant        Tenant                   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, gate, scope])
+  @@index([tenantId, targetKey])
+  @@index([tenantId, expiresAt])
+  @@map("compliance_exceptions")
 }
 
 model RateLimitBucket {

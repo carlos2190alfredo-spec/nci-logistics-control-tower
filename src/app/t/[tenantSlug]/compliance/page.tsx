@@ -21,6 +21,11 @@ import {
 import { requireTenantRole } from "@/lib/server/auth";
 import { getComplianceOverview } from "@/lib/server/compliance-data";
 import { createComplianceDocumentAction } from "@/lib/server/compliance-actions";
+import {
+  approveComplianceExceptionAction,
+  revokeComplianceExceptionAction,
+} from "@/lib/server/exception-actions";
+import { getDb } from "@/lib/server/db";
 import { hasPermission } from "@/lib/server/tenant-permissions";
 import { getTenantNavGroups } from "@/lib/ui/tenant-nav";
 import { tenantRoleLabel } from "@/lib/ui/status";
@@ -54,6 +59,12 @@ export default async function CompliancePage({
   ]);
 
   const canManage = hasPermission(membership.role, "tenant.compliance.manage");
+  const canApproveExceptions = hasPermission(membership.role, "tenant.exceptions.approve");
+  const exceptions = await getDb().complianceException.findMany({
+    where: { tenantId: tenant.id, revokedAt: null },
+    orderBy: [{ approvedAt: "desc" }],
+    take: 50,
+  });
   const overview = await getComplianceOverview(tenant.id);
 
   return (
@@ -218,6 +229,103 @@ export default async function CompliancePage({
               />
             )}
           </div>
+        </Card>
+
+        <Card>
+          <CardHeader
+            description="Excepciones aprobadas que permiten un despacho pese a un bloqueo. Requieren justificación, alcance y expiración."
+            icon={<ShieldCheck />}
+            title="Excepciones vigentes"
+          />
+          <div className="mt-4 overflow-x-auto">
+            {exceptions.length ? (
+              <DataTable caption="Excepciones aprobadas">
+                <TableHead>
+                  <tr>
+                    <TableHeaderCell>Motivo (gate)</TableHeaderCell>
+                    <TableHeaderCell>Alcance</TableHeaderCell>
+                    <TableHeaderCell>Objetivo</TableHeaderCell>
+                    <TableHeaderCell>Vence</TableHeaderCell>
+                    <TableHeaderCell>Justificación</TableHeaderCell>
+                    {canApproveExceptions ? (
+                      <TableHeaderCell>
+                        <span className="sr-only">Acciones</span>
+                      </TableHeaderCell>
+                    ) : null}
+                  </tr>
+                </TableHead>
+                <TableBody>
+                  {exceptions.map((ex) => (
+                    <TableRow key={ex.id}>
+                      <TableCell>{ex.gate === "COMPLIANCE" ? "Cumplimiento" : "Mantenimiento"}</TableCell>
+                      <TableCell>{ex.scope === "TRIP" ? "Viaje" : "Activo"}</TableCell>
+                      <TableCell className="font-mono text-xs">{ex.targetKey}</TableCell>
+                      <TableCell numeric>{ex.expiresAt ? formatDateShort(ex.expiresAt) : "—"}</TableCell>
+                      <TableCell>
+                        <span className="line-clamp-2 text-sm">{ex.justification}</span>
+                      </TableCell>
+                      {canApproveExceptions ? (
+                        <TableCell>
+                          <form action={revokeComplianceExceptionAction.bind(null, tenantSlug)}>
+                            <input name="exceptionId" type="hidden" value={ex.id} />
+                            <button
+                              className="rounded-md border border-danger/40 bg-danger/10 px-2 py-1 text-xs font-medium text-danger hover:bg-danger/20"
+                              type="submit"
+                            >
+                              Revocar
+                            </button>
+                          </form>
+                        </TableCell>
+                      ) : null}
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </DataTable>
+            ) : (
+              <EmptyState
+                compact
+                description="No hay excepciones aprobadas en este momento."
+                icon={<ShieldCheck />}
+                title="Sin excepciones vigentes"
+              />
+            )}
+          </div>
+
+          {canApproveExceptions ? (
+            <details className="mt-4 rounded-lg border border-border p-3">
+              <summary className="cursor-pointer text-sm font-semibold text-foreground">
+                Aprobar excepción
+              </summary>
+              <form
+                action={approveComplianceExceptionAction.bind(null, tenantSlug)}
+                className="mt-3 grid gap-3 sm:grid-cols-2"
+              >
+                <SelectField label="Gate" name="gate">
+                  <option value="COMPLIANCE">Cumplimiento</option>
+                  <option value="MAINTENANCE">Mantenimiento</option>
+                </SelectField>
+                <SelectField label="Alcance" name="scope">
+                  <option value="ASSET">Activo</option>
+                  <option value="TRIP">Viaje específico</option>
+                </SelectField>
+                <Field
+                  help="Alcance ASSET: use VEHICULO:CODIGO / EQUIPO:CODIGO / CONDUCTOR:CODIGO. Alcance TRIP: id del viaje."
+                  label="Objetivo"
+                  name="targetKey"
+                  placeholder="VEHICULO:VH-1"
+                  required
+                />
+                <Field label="Vence" name="expiresAt" required={false} type="datetime-local" />
+                <div className="sm:col-span-2">
+                  <TextArea label="Justificación" name="justification" required />
+                </div>
+                <Field label="Referencia de evidencia" name="evidenceRef" required={false} />
+                <div className="sm:col-span-2">
+                  <SubmitButton>Aprobar excepción</SubmitButton>
+                </div>
+              </form>
+            </details>
+          ) : null}
         </Card>
       </div>
     </AppShell>

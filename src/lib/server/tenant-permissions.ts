@@ -27,7 +27,9 @@ export type TenantPermission =
   | "tenant.finance.view"
   | "tenant.finance.manage"
   | "tenant.maintenance.view"
-  | "tenant.maintenance.manage";
+  | "tenant.maintenance.manage"
+  | "tenant.exceptions.view"
+  | "tenant.exceptions.approve";
 
 const PERMISSION_MAP: Record<TenantPermission, TenantRole[]> = {
   "tenant.view": ["TENANT_OWNER", "TENANT_ADMIN", "OPERATIONS_MANAGER", "DISPATCHER", "SAFETY_MANAGER"],
@@ -59,6 +61,9 @@ const PERMISSION_MAP: Record<TenantPermission, TenantRole[]> = {
   "tenant.finance.manage": ["TENANT_OWNER", "TENANT_ADMIN"],
   "tenant.maintenance.view": ["TENANT_OWNER", "TENANT_ADMIN", "OPERATIONS_MANAGER", "SAFETY_MANAGER"],
   "tenant.maintenance.manage": ["TENANT_OWNER", "TENANT_ADMIN", "OPERATIONS_MANAGER"],
+  // Excepciones de despacho: solo mando/seguridad pueden aprobar.
+  "tenant.exceptions.view": ["TENANT_OWNER", "TENANT_ADMIN", "OPERATIONS_MANAGER", "SAFETY_MANAGER"],
+  "tenant.exceptions.approve": ["TENANT_OWNER", "TENANT_ADMIN", "SAFETY_MANAGER"],
 };
 
 export function hasPermission(role: TenantRole, permission: TenantPermission): boolean {
