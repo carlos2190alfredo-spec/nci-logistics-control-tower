@@ -6,6 +6,7 @@ import { redirect } from "next/navigation";
 import { z } from "zod";
 import type { TenantRole, TripStatus } from "@/generated/prisma";
 import { customerVisibleStatus, canTransition } from "@/lib/domain/state-machine";
+import { blockingDocumentsNow } from "@/lib/compliance/eligibility";
 import { audit } from "@/lib/server/audit";
 import {
   requireCustomerMembership,
@@ -451,6 +452,31 @@ export async function assignTripAction(tenantSlug: string, formData: FormData) {
     },
   });
   if (blockingOrders > 0) return;
+
+  // Guarda determinista: documentos de cumplimiento bloqueantes vencidos/suspendidos
+  // /rechazados impiden la asignación. Advisory hasta ahora; ahora también bloquea.
+  const complianceDocs = await db.complianceDocument.findMany({
+    where: {
+      tenantId: tenant.id,
+      blocksDispatch: true,
+      OR: [
+        { entityType: "CONDUCTOR", entityId: { in: [driver.code].filter(Boolean) } },
+        { entityType: "VEHICULO", entityId: { in: [vehicle.code, vehicle.plate].filter(Boolean) } },
+        { entityType: "EQUIPO", entityId: { in: [equipment.code].filter(Boolean) } },
+      ],
+    },
+    select: {
+      status: true,
+      expiresAt: true,
+      alertDaysBefore: true,
+      blocksDispatch: true,
+      entityType: true,
+      entityId: true,
+      name: true,
+    },
+  });
+  const blockingCompliance = blockingDocumentsNow(complianceDocs, new Date());
+  if (blockingCompliance.length > 0) return;
 
   const scheduledAt = new Date(parsed.scheduledAt);
   const windowStart = new Date(scheduledAt.getTime() - 6 * 60 * 60 * 1000);

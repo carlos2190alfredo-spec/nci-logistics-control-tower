@@ -1,5 +1,6 @@
-import type { ComplianceEntityType } from "@/generated/prisma";
+import type { ComplianceDocStatus, ComplianceEntityType } from "@/generated/prisma";
 import type { EvaluableDocument } from "@/lib/compliance/summary";
+import { computeExpiry, documentBlocksNow, reconcileStatus } from "@/lib/compliance/expiry";
 
 /** Referencia a una entidad de negocio para resolver sus documentos. */
 export type EntityRef = { entityType: ComplianceEntityType; entityId: string };
@@ -42,4 +43,46 @@ export function tripEntityRefs(input: {
   if (input.vehiclePlate) refs.push({ entityType: "VEHICULO", entityId: input.vehiclePlate });
   if (input.equipmentCode) refs.push({ entityType: "EQUIPO", entityId: input.equipmentCode });
   return refs;
+}
+
+/**
+ * Documento evaluable con el conjunto mínimo de campos para decidir bloqueo.
+ * Se acepta la forma directa del modelo Prisma (fechas + alertDaysBefore +
+ * blocksDispatch + status).
+ */
+export type BlockingCandidate = {
+  status: ComplianceDocStatus;
+  expiresAt: Date | null;
+  alertDaysBefore: number[];
+  blocksDispatch: boolean;
+  entityType?: string;
+  entityId?: string;
+  name?: string;
+};
+
+export type BlockingDocument<T extends BlockingCandidate = BlockingCandidate> = T & {
+  effectiveStatus: ComplianceDocStatus;
+};
+
+/**
+ * Devuelve los documentos que bloquean AHORA (blocksDispatch=true y estado
+ * efectivo VENCIDO/SUSPENDIDO/RECHAZADO). Determinista, sin base de datos.
+ */
+export function blockingDocumentsNow<T extends BlockingCandidate>(
+  docs: T[],
+  now: Date,
+): BlockingDocument<T>[] {
+  const out: BlockingDocument<T>[] = [];
+  for (const doc of docs) {
+    const derived = computeExpiry({
+      expiresAt: doc.expiresAt,
+      alertDaysBefore: doc.alertDaysBefore,
+      now,
+    });
+    const effectiveStatus = reconcileStatus(doc.status, derived.derived);
+    if (documentBlocksNow({ blocksDispatch: doc.blocksDispatch, status: effectiveStatus })) {
+      out.push({ ...doc, effectiveStatus });
+    }
+  }
+  return out;
 }

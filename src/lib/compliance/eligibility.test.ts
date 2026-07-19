@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { filterDocsForRefs, tripEntityRefs } from "./eligibility";
+import { blockingDocumentsNow, filterDocsForRefs, tripEntityRefs, type BlockingCandidate } from "./eligibility";
 import type { ComplianceEntityType } from "@/generated/prisma";
 
 type Doc = {
@@ -70,5 +70,47 @@ describe("compliance eligibility", () => {
   it("tripEntityRefs ignora valores vacíos/nulos", () => {
     const refs = tripEntityRefs({ driverCode: null, vehicleCode: "", vehiclePlate: "PA-1234" });
     expect(refs).toEqual([{ entityType: "VEHICULO", entityId: "PA-1234" }]);
+  });
+});
+
+describe("blockingDocumentsNow", () => {
+  const NOW = new Date("2026-07-17T12:00:00.000Z");
+  const inDays = (d: number) => new Date(NOW.getTime() + d * 24 * 60 * 60 * 1000);
+  const ALERTS = [30, 15, 7];
+
+  const doc = (over: Partial<BlockingCandidate>): BlockingCandidate => ({
+    status: "VIGENTE",
+    expiresAt: inDays(365),
+    alertDaysBefore: ALERTS,
+    blocksDispatch: true,
+    name: "Licencia",
+    ...over,
+  });
+
+  it("no bloquea si el documento esta vigente", () => {
+    expect(blockingDocumentsNow([doc({})], NOW)).toHaveLength(0);
+  });
+
+  it("bloquea si expiro y bloquea despacho", () => {
+    const r = blockingDocumentsNow([doc({ expiresAt: inDays(-1) })], NOW);
+    expect(r).toHaveLength(1);
+    expect(r[0].effectiveStatus).toBe("VENCIDO");
+  });
+
+  it("no bloquea si el documento no marca blocksDispatch", () => {
+    expect(blockingDocumentsNow([doc({ expiresAt: inDays(-1), blocksDispatch: false })], NOW)).toHaveLength(0);
+  });
+
+  it("bloquea documento suspendido/rechazado aunque fecha sea valida", () => {
+    expect(blockingDocumentsNow([doc({ status: "SUSPENDIDO" })], NOW)).toHaveLength(1);
+    expect(blockingDocumentsNow([doc({ status: "RECHAZADO" })], NOW)).toHaveLength(1);
+  });
+
+  it("no bloquea documento en revision", () => {
+    expect(blockingDocumentsNow([doc({ status: "EN_REVISION", expiresAt: inDays(-1) })], NOW)).toHaveLength(0);
+  });
+
+  it("proximo a vencer NO bloquea (solo advierte)", () => {
+    expect(blockingDocumentsNow([doc({ expiresAt: inDays(5) })], NOW)).toHaveLength(0);
   });
 });
