@@ -2,6 +2,7 @@ import Link from "next/link";
 import {
   Building2,
   Edit,
+  LifeBuoy,
   MessageSquare,
   Route,
   ShieldCheck,
@@ -33,6 +34,14 @@ import { getDb } from "@/lib/server/db";
 import { getPlatformNavGroups, platformRoleLabel } from "@/lib/ui/platform-nav";
 import { tenantRoleLabel, tenantStatusLabel, tenantStatusTone } from "@/lib/ui/status";
 import { changeTenantStatusAction, changeTenantPlanAction } from "@/lib/server/tenant-actions";
+import {
+  endSupportSessionAction,
+  startSupportSessionAction,
+} from "@/lib/server/support-actions";
+import {
+  getActiveSupportSession,
+  getTenantSupportHistory,
+} from "@/lib/server/support-data";
 
 export const dynamic = "force-dynamic";
 export const metadata = { robots: { index: false } };
@@ -73,11 +82,11 @@ export default async function TenantDetailPage({
 
   if (!tenant) notFound();
 
-  const recentAudit = await db.auditLog.findMany({
-    where: { tenantId },
-    orderBy: { createdAt: "desc" },
-    take: 10,
-  });
+  const [recentAudit, activeSupport, supportHistory] = await Promise.all([
+    db.auditLog.findMany({ where: { tenantId }, orderBy: { createdAt: "desc" }, take: 10 }),
+    getActiveSupportSession(tenantId),
+    getTenantSupportHistory(tenantId, 8),
+  ]);
 
   const isSuperAdmin = user.platformRole === "PLATFORM_SUPER_ADMIN";
 
@@ -255,6 +264,74 @@ export default async function TenantDetailPage({
                 <DItem label="Integraciones" value={String(tenant._count.tenantIntegrations)} />
                 <DItem label="Registros de auditoria" value={String(tenant._count.auditLogs)} />
               </dl>
+            </Card>
+
+            {/* Modo soporte */}
+            <Card>
+              <CardHeader icon={<LifeBuoy />} title="Modo soporte" />
+              <div className="mt-3">
+                {activeSupport ? (
+                  <>
+                    <div className="rounded-lg border border-warning/40 bg-warning/10 px-3 py-2.5 text-sm">
+                      <p className="font-semibold text-warning-foreground">Sesión activa</p>
+                      <p className="mt-0.5 text-warning-foreground/90">
+                        Motivo: {activeSupport.reason}
+                      </p>
+                      <p className="mt-0.5 text-xs text-warning-foreground/80">
+                        Restan {activeSupport.minutesLeft} min ·{" "}
+                        {activeSupport.expiresAt?.toLocaleString("es-PA") ?? "sin expiración"}
+                      </p>
+                    </div>
+                    <form action={endSupportSessionAction} className="mt-3 grid gap-2">
+                      <input name="sessionId" type="hidden" value={activeSupport.id} />
+                      <textarea
+                        className="min-h-16 w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm text-foreground"
+                        maxLength={500}
+                        name="closeNotes"
+                        placeholder="Notas de cierre (opcional)…"
+                      />
+                      <SubmitButton>Cerrar sesión de soporte</SubmitButton>
+                    </form>
+                  </>
+                ) : (
+                  <form action={startSupportSessionAction} className="grid gap-2.5">
+                    <input name="tenantId" type="hidden" value={tenantId} />
+                    <textarea
+                      className="min-h-16 w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm text-foreground"
+                      maxLength={500}
+                      name="reason"
+                      placeholder="Motivo de la asistencia (obligatorio, ≥4 caracteres)"
+                      required
+                    />
+                    <SelectField defaultValue="60" label="Duración" name="durationMinutes">
+                      <option value="15">15 minutos</option>
+                      <option value="30">30 minutos</option>
+                      <option value="60">1 hora</option>
+                      <option value="120">2 horas</option>
+                      <option value="240">4 horas</option>
+                    </SelectField>
+                    <SubmitButton>Iniciar sesión de soporte</SubmitButton>
+                  </form>
+                )}
+                {supportHistory.length > 0 ? (
+                  <div className="mt-4">
+                    <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                      Historial reciente
+                    </p>
+                    <ul className="mt-2 grid gap-1.5 text-xs text-muted-foreground">
+                      {supportHistory.map((h) => (
+                        <li className="flex items-start gap-2 border-b border-border pb-1.5" key={h.id}>
+                          <span className="tabular-nums">{h.startedAt.toLocaleDateString("es-PA")}</span>
+                          <span className="text-foreground">{h.reason}</span>
+                          <span className="ml-auto">
+                            {h.endedAt ? "cerrada" : h.expiresAt && h.expiresAt < new Date() ? "expirada" : "activa"}
+                          </span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                ) : null}
+              </div>
             </Card>
 
             {/* Actividad reciente */}
