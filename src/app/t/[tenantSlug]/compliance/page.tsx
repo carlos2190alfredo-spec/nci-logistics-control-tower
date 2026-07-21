@@ -76,6 +76,16 @@ export default async function CompliancePage({
     >
       <div className="anim-page grid gap-6">
         <PageHeader
+          actions={
+            <a
+              className="inline-flex min-h-9 items-center gap-2 rounded-lg border border-border bg-surface px-3 text-sm font-semibold text-foreground shadow-xs transition-colors hover:bg-muted"
+              download
+              href={`/api/t/${tenantSlug}/compliance/report.pdf`}
+            >
+              <FileWarning aria-hidden className="size-4" />
+              Reporte PDF
+            </a>
+          }
           breadcrumbs={[
             { label: tenant.name, href: `/t/${tenantSlug}` },
             { label: "Cumplimiento" },
