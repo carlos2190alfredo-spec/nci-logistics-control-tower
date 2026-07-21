@@ -208,7 +208,15 @@ export default async function FinancePage({
           ))}
         </div>
 
-        <div className="flex justify-end">
+        <div className="flex flex-wrap justify-end gap-2">
+          <a
+            className="inline-flex min-h-9 items-center gap-2 rounded-lg border border-border bg-surface px-3 text-sm font-semibold text-foreground shadow-xs transition-colors hover:bg-muted"
+            download
+            href={`/api/t/${tenantSlug}/finance/report.pdf`}
+          >
+            <DollarSign aria-hidden className="size-4" />
+            Reporte PDF
+          </a>
           <ExportCsvButton href={`/api/t/${tenantSlug}/export/finance`} label="Exportar finanzas" />
         </div>
       </div>
