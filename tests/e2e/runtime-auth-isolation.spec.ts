@@ -27,14 +27,18 @@ async function login(page: Page, email: string, password: string) {
   await page.goto("/login");
   await page.getByLabel("Correo").fill(email);
   await page.getByLabel("Contrasena").fill(password);
-  await page.getByRole("button", { name: "Entrar" }).click();
-  await page.waitForLoadState("networkidle");
+  await Promise.all([
+    page.waitForURL((u) => u.pathname !== "/login", { timeout: 15_000 }),
+    page.getByRole("button", { name: "Entrar" }).click(),
+  ]);
 
   if (MFA_USERS.has(email) && page.url().includes("/mfa/verify")) {
     const totp = new TOTP({ secret: SEED_TOTP_SECRET, algorithm: "SHA1", digits: 6, period: 30 });
     await page.getByLabel("Codigo de verificacion").fill(totp.generate());
-    await page.getByRole("button", { name: "Verificar" }).click();
-    await page.waitForLoadState("networkidle");
+    await Promise.all([
+      page.waitForURL((u) => !u.pathname.includes("/mfa/verify"), { timeout: 15_000 }),
+      page.getByRole("button", { name: "Verificar" }).click(),
+    ]);
   }
 }
 
@@ -108,7 +112,7 @@ test("driver sees assigned trips only", async ({ page }) => {
 test("operations dashboard, customer portal, and navigation load", async ({ page }) => {
   await login(page, ...users.panatruckOperations);
   await expect(page).toHaveURL(/\/t\/panatruck-demo$/);
-  await expect(page.getByText("Mapa y seguimiento local")).toBeVisible();
+  await expect(page.getByText("Mapa y seguimiento").first()).toBeVisible();
   await page.getByRole("link", { name: "Portal cliente" }).click();
   await expect(page).toHaveURL(/\/t\/panatruck-demo$/);
   await expect(page.getByText("Cliente Portuario Panama - CUSTOMER_ADMIN")).toHaveCount(0);

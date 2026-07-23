@@ -164,7 +164,7 @@ test("INTEGRATION-E2E-001: tenant sees integrations all disabled", async ({ page
   await loginWithMfa(page, tenantOwnerEmail, tenantOwnerPass);
   await page.goto(`/t/${tenantSlug}/admin/integrations`);
   await expect(page.getByRole("heading", { name: "Integraciones" })).toBeVisible();
-  await expect(page.getByText("GPS Telematico")).toBeVisible();
+  await expect(page.getByText("GPS Telematico").first()).toBeVisible();
   await expect(page.getByText("Desactivado").first()).toBeVisible();
 });
 

@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 import { GenericOfflineProvider } from "@/components/offline/generic-offline-provider";
 import { SupportSessionBanner } from "@/components/support/support-session-banner";
-import { requireTenantMembership } from "@/lib/server/auth";
+import { requireTenantAccess } from "@/lib/server/auth";
 import { getActiveSupportSession } from "@/lib/server/support-data";
 
 /**
@@ -20,7 +20,7 @@ type Props = {
 
 export default async function TenantLayout(props: Props) {
   const { tenantSlug } = await props.params;
-  const { user, tenant } = await requireTenantMembership(tenantSlug);
+  const { user, tenant } = await requireTenantAccess(tenantSlug);
   const support = await getActiveSupportSession(tenant.id);
 
   return (

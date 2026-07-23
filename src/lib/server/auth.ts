@@ -244,6 +244,33 @@ export async function requireTenantMembership(tenantSlug: string) {
   return { user, tenant, membership };
 }
 
+/**
+ * Resuelve `user + tenant` para cualquier usuario con vínculo activo al
+ * tenant — sea `tenantMembership` (operaciones/owner) o `customerMembership`
+ * (portal cliente). Pensado para layouts compartidos que no necesitan el rol
+ * específico. Página que sí lo necesita debe usar `requireTenantMembership`
+ * o `requireCustomerMembership` directamente.
+ */
+export async function requireTenantAccess(tenantSlug: string) {
+  const user = await requireAuthenticatedUser();
+  const tenant = await resolveActiveTenant(tenantSlug);
+  if (!tenant) redirect("/login");
+
+  const db = getDb();
+  const [tenantMembership, customerMembership] = await Promise.all([
+    db.tenantMembership.findFirst({
+      where: { tenantId: tenant.id, userId: user.id, active: true },
+    }),
+    db.customerMembership.findFirst({
+      where: { tenantId: tenant.id, userId: user.id, active: true },
+    }),
+  ]);
+
+  if (!tenantMembership && !customerMembership) redirect("/login");
+
+  return { user, tenant };
+}
+
 export async function requireTenantRole(tenantSlug: string, roles: TenantRole[]) {
   const context = await requireTenantMembership(tenantSlug);
   if (!roles.includes(context.membership.role)) redirect(`/t/${tenantSlug}`);

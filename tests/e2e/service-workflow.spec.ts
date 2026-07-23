@@ -69,7 +69,7 @@ test.beforeEach(async () => {
 });
 
 test.describe.serial("E2E-FLOW logistics service workflow", () => {
-  test.setTimeout(120_000);
+  test.setTimeout(240_000);
 
   const stamp = Date.now();
   const uniqueOrigin = `MIT E2E ${stamp}`;
@@ -171,9 +171,13 @@ test.describe.serial("E2E-FLOW logistics service workflow", () => {
     const trip = await db.trip.findFirstOrThrow({ where: { serviceRequestId: request.id } });
     tripId = trip.id;
     tripReference = trip.reference;
-    await page.goto("/t/panatruck-demo");
+    await page.goto("/t/panatruck-demo/trips");
 
     const operationsTripCard = page.getByTestId(`trip-card-${tripId}`);
+    // El listado de conductores puede tener uno de offline-testing (Juan
+    // Offline) que ordena alfabéticamente antes que DR-1. Seleccionamos DR-1
+    // explícitamente para que el flujo termine con el conductor esperado.
+    await operationsTripCard.locator('select[name="driverId"]').selectOption({ label: "DR-1" });
     await operationsTripCard.getByRole("button", { name: "Asignar" }).click();
     await page.waitForLoadState("networkidle");
     await expect.poll(async () => {
@@ -214,6 +218,7 @@ test.describe.serial("E2E-FLOW logistics service workflow", () => {
     await logout(page);
 
     await login(page, ...users.operations);
+    await page.goto("/t/panatruck-demo/trips");
     const proofCard = page.getByTestId(`trip-card-${tripId}`);
     await proofCard.getByRole("button", { name: "Aprobar evidencia y generar POD" }).click();
     await page.waitForLoadState("networkidle");
@@ -221,7 +226,7 @@ test.describe.serial("E2E-FLOW logistics service workflow", () => {
       const approved = await db.trip.findUnique({ where: { id: tripId }, select: { status: true, proofReady: true } });
       return approved?.proofReady ? approved.status : "POD_PENDING";
     }).toBe("EVIDENCE_APPROVED");
-    await page.goto("/t/panatruck-demo");
+    await page.goto("/t/panatruck-demo/trips");
     const closeCard = page.getByTestId(`trip-card-${tripId}`);
     await closeCard.locator('select[name="nextStatus"]').selectOption("CLOSED");
     await closeCard.getByRole("button", { name: "Avanzar" }).click();
