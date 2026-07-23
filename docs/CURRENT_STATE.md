@@ -1,19 +1,26 @@
 # CURRENT STATE
 
-Fecha: 2026-07-17
+Fecha: 2026-07-23
 
-## Fase actual — Adaptación logística Panamá (FASE 0–7 completas)
+## Fase actual — Cierre de código listo para producción
 
-Sobre la base production-ready se construyó la capa logística de Panamá:
-cumplimiento documental, contenedores (demurrage/detention), combustible y
-mercancías peligrosas, dashboards por rol, rentabilidad y salud de conectores.
+Sobre la base production-ready se construyó la capa logística de Panamá
+(FASE 0–7 completas): cumplimiento documental, contenedores
+(demurrage/detention), combustible y mercancías peligrosas, dashboards por
+rol, rentabilidad y salud de conectores. Post-piloto se cerró la capa
+audit-and-support: excepciones aprobadas de cumplimiento/mantenimiento,
+reportes PDF de cumplimiento y finanzas con branding del tenant, modo soporte
+auditado con banner visible y E2E de todos los módulos Panamá.
+
 Toda la lógica de elegibilidad/alertas/cargos/rentabilidad es **determinista**
 (sin IA); las integraciones externas quedan declaradas como `Disabled*`
 (preparadas, no simuladas). Ver `HANDOFF_PANAMA.md` para el informe completo.
 
-Baseline: 272 unit tests, 55 security checks, doctor 27/27, build ✅, 18
-migraciones, 67 modelos Prisma. El trabajo restante es de infraestructura de
-despliegue y de carga de datos reales/reglas del piloto — no de código.
+Baseline: **303 unit tests**, typecheck ✅, lint 0 warnings ✅, build ✅,
+E2E Panamá 10/10 verde, resto del suite E2E estabilizado contra rate-limit
+MFA (globalSetup + retries). El trabajo restante son bloqueantes externos de
+infraestructura (managed Postgres, S3, SMTP con dominio verificado, vault de
+secretos, backups, sink de logs) — no de código.
 
 ### Módulos Panamá (nuevos)
 

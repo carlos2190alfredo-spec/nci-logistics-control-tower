@@ -21,16 +21,16 @@ Ver [`DEPLOYMENT.md`](DEPLOYMENT.md).
 ## Mejoras post-lanzamiento
 
 - **WebAuthn/FIDO2** como segundo factor adicional (MFA-VULN-008).
-- Modo soporte con salida visible y cierre auditado.
 - Mejora del render visual de firma en el POD PDF.
 - Conectar WhatsApp real (hoy es integracion `disabled` conmutable en el registry).
 
 ## Programa Panamá — pendientes (post-piloto)
 
-- Cargar reglas regulatorias reales (`ComplianceRule`) con fuente y vigencia.
-- Pruebas E2E de los módulos nuevos (cumplimiento/contenedores/hazmat/finanzas).
-- Reportes PDF financieros y de cumplimiento con branding del tenant.
-- Mantenimiento preventivo de flota (frecuencia por km/fecha, bloqueo de equipo).
+- Cargar reglas regulatorias reales (`ComplianceRule`) con fuente y vigencia
+  (**tarea de datos, no de código** — modelo, semáforo y aviso de validación
+  humana ya cargados desde el spec).
+- Mantenimiento preventivo de flota (frecuencia por km/fecha, bloqueo de
+  equipo) — hoy hay bloqueo por orden abierta.
 - Conectar una integración real reemplazando su provider `Disabled*`.
 - Rentabilidad por equipo/conductor (ya está por viaje/cliente/ruta).
 
@@ -49,3 +49,9 @@ Ver [`DEPLOYMENT.md`](DEPLOYMENT.md).
 - ~~Workflows de CI (lint/typecheck/test/build/security + E2E)~~ (2026-07-15)
 - ~~Guia de despliegue en produccion~~ (2026-07-15 — `docs/DEPLOYMENT.md`)
 - ~~Limpieza de lint warnings~~ (2026-07-15 — 0 warnings)
+- ~~Excepciones aprobadas de cumplimiento y mantenimiento~~ (2026-07-21 — bloquea assign, skippable con excepción activa, auditada)
+- ~~Reporte PDF de cumplimiento con branding del tenant~~ (2026-07-21)
+- ~~Reporte PDF de finanzas con branding del tenant~~ (2026-07-21 — OWNER/ADMIN only, rate-limited)
+- ~~Modo soporte auditado con banner visible y cierre auditado~~ (2026-07-22 — sección 22 del spec)
+- ~~E2E de módulos Panamá (cumplimiento, contenedores, hazmat, mantenimiento, finanzas, tenant isolation)~~ (2026-07-22 — 10/10 verde)
+- ~~Estabilización E2E contra rate-limit MFA~~ (2026-07-23 — globalSetup + retries + beforeEach por spec)
