@@ -1,5 +1,14 @@
 import { expect, test, type Page } from "@playwright/test";
 import { TOTP } from "otpauth";
+import { PrismaClient } from "../../src/generated/prisma";
+
+const db = new PrismaClient();
+
+test.beforeEach(async () => {
+  await db.rateLimitBucket.deleteMany({
+    where: { scope: { in: ["mfa.verify", "auth.mfa.verify", "auth.login", "login"] } },
+  });
+});
 
 const SEED_TOTP_SECRET = "JBSWY3DPEHPK3PXP4567ABCDEFGHIJKL";
 const MFA_USERS = new Set(["platform@nci.local", "owner@panatruck.local", "owner@translogistica.local"]);

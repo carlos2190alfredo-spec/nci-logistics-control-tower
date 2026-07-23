@@ -29,6 +29,12 @@ async function login(page: Page, email: string, password: string) {
   }
 }
 
+test.beforeEach(async () => {
+  await db.rateLimitBucket.deleteMany({
+    where: { scope: { in: ["mfa.verify", "auth.mfa.verify", "auth.login", "login"] } },
+  });
+});
+
 test.describe.serial("Route Estimation & Driver Recommendation", () => {
   test("operations insights page loads for admin", async ({ page }) => {
     await login(page, ...users.operations);

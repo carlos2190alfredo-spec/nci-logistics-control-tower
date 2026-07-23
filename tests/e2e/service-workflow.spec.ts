@@ -62,6 +62,12 @@ async function advanceDriver(page: Page, tripId: string, status: string) {
   await page.waitForLoadState("networkidle");
 }
 
+test.beforeEach(async () => {
+  await db.rateLimitBucket.deleteMany({
+    where: { scope: { in: ["mfa.verify", "auth.mfa.verify", "auth.login", "login"] } },
+  });
+});
+
 test.describe.serial("E2E-FLOW logistics service workflow", () => {
   test.setTimeout(120_000);
 

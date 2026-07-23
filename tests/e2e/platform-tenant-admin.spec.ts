@@ -39,6 +39,12 @@ async function loginWithMfa(page: Page, email: string, password: string) {
 
 test.describe.configure({ mode: "serial" });
 
+test.beforeEach(async () => {
+  await db.rateLimitBucket.deleteMany({
+    where: { scope: { in: ["mfa.verify", "auth.mfa.verify", "auth.login", "login"] } },
+  });
+});
+
 test.beforeAll(async () => {
   const tenant = await db.tenant.findFirst({ select: { id: true, slug: true } });
   if (!tenant) throw new Error("No tenant found for E2E tests");
