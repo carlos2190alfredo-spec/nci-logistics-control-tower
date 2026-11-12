@@ -1,7 +1,7 @@
 import Link from "next/link";
-import { ArrowRight, Brain, CircleAlert, ClipboardCheck, FileCheck2, MapPin, Route, TriangleAlert, Truck, User } from "lucide-react";
-import type { Prisma, TenantRole } from "@/generated/prisma";
-import { nextStatuses } from "@/lib/domain/state-machine";
+import { ArrowRight, Ban, Brain, CircleAlert, ClipboardCheck, FileCheck2, MapPin, Route, TriangleAlert, Truck, User } from "lucide-react";
+import type { Prisma, TenantRole, TripStatus } from "@/generated/prisma";
+import { ASSIGNABLE_TRIP_STATUSES, exceptionStatuses, nextStatuses } from "@/lib/domain/state-machine";
 import {
   approveProofAction,
   assignTripAction,
@@ -15,6 +15,7 @@ import { proofStatusLabel, proofStatusTone, tripStatusLabel, tripStatusTone } fr
 import { formatDate, formatDateShort } from "@/lib/utils";
 import { StatusBadge } from "@/components/ui/badge";
 import { SubmitButton } from "@/components/ui/button";
+import { ActionForm } from "@/components/ui/action-form";
 import { Collapsible } from "@/components/ui/collapsible";
 import { SelectField, TextArea } from "@/components/ui/field";
 import { Timeline, TimelineItem } from "@/components/ui/timeline";
@@ -41,6 +42,13 @@ export type OperationsTrip = Prisma.TripGetPayload<{
 }>;
 
 type Resource = { id: string; code: string };
+
+/** Verbo de la accion de excepcion, en vez del nombre del estado destino. */
+const exceptionActionLabel: Partial<Record<TripStatus, string>> = {
+  CANCELLED: "Cancelar servicio",
+  DELIVERY_FAILED: "Registrar entrega fallida",
+  IN_TRANSIT: "Reintentar entrega o retornar carga",
+};
 
 /**
  * Tarjeta operativa de viaje para el centro de control.
@@ -73,7 +81,8 @@ export function TripOperationsCard({
   eligibilityLight?: ComplianceLight;
 }) {
   const next = nextStatuses(trip.status, role);
-  const canAssign = ["CONFIRMED", "SCHEDULED", "ASSIGNED"].includes(trip.status);
+  const exceptions = exceptionStatuses(trip.status, role);
+  const canAssign = ASSIGNABLE_TRIP_STATUSES.includes(trip.status);
   const proofDocuments = trip.documents.filter((document) => document.proofId === trip.proof?.id);
 
   return (
@@ -136,7 +145,7 @@ export function TripOperationsCard({
                 <TimelineItem
                   isLast={eventIndex === trip.events.length - 1}
                   key={event.id}
-                  meta={formatDateShort(event.createdAt)}
+                  meta={event.reason ? `${formatDateShort(event.createdAt)} · Motivo: ${event.reason}` : formatDateShort(event.createdAt)}
                   title={tripStatusLabel[event.toStatus]}
                   tone={tripStatusTone[event.toStatus]}
                 />
@@ -149,7 +158,7 @@ export function TripOperationsCard({
       {/* Acciones permitidas segun estado */}
       <div className="grid content-start gap-3">
         {canAssign ? (
-          <form
+          <ActionForm
             action={assignTripAction.bind(null, tenantSlug)}
             className="grid gap-2.5 rounded-lg border border-border bg-surface-sunken/60 p-3.5"
           >
@@ -192,11 +201,14 @@ export function TripOperationsCard({
             </div>
             <TextArea label="Notas de asignacion" name="notes" rows={1} />
             <SubmitButton>Asignar</SubmitButton>
-          </form>
+          </ActionForm>
         ) : null}
 
         {next.length ? (
-          <form action={transitionTripAction.bind(null, tenantSlug)} className="grid gap-2.5 rounded-lg border border-border bg-surface-sunken/60 p-3.5">
+          <ActionForm
+            action={transitionTripAction.bind(null, tenantSlug)}
+            className="grid gap-2.5 rounded-lg border border-border bg-surface-sunken/60 p-3.5"
+          >
             <p className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
               <ClipboardCheck aria-hidden className="size-3.5" />
               Avance de estado
@@ -213,7 +225,30 @@ export function TripOperationsCard({
               </SelectField>
               <SubmitButton variant="secondary">Avanzar</SubmitButton>
             </div>
-          </form>
+          </ActionForm>
+        ) : null}
+
+        {exceptions.length ? (
+          <Collapsible icon={<Ban />} summary="Cancelar o registrar excepcion" tone="warning">
+            <ActionForm action={transitionTripAction.bind(null, tenantSlug)} className="grid gap-2.5">
+              <input name="tripId" type="hidden" value={trip.id} />
+              <SelectField label="Accion de excepcion" name="nextStatus">
+                {exceptions.map((status) => (
+                  <option key={status} value={status}>
+                    {exceptionActionLabel[status] ?? tripStatusLabel[status]}
+                  </option>
+                ))}
+              </SelectField>
+              <TextArea
+                help="Obligatorio. Queda en la auditoria interna; el cliente solo ve el nuevo estado."
+                label="Motivo"
+                name="reason"
+                required
+                rows={2}
+              />
+              <SubmitButton variant="danger">Aplicar excepcion</SubmitButton>
+            </ActionForm>
+          </Collapsible>
         ) : null}
 
         {/* Estimacion de ruta */}
@@ -357,14 +392,14 @@ export function TripOperationsCard({
             ) : null}
             {trip.proof.status === "SUBMITTED" ? (
               <>
-                <form action={approveProofAction.bind(null, tenantSlug)}>
+                <ActionForm action={approveProofAction.bind(null, tenantSlug)} className="grid gap-2">
                   <input name="tripId" type="hidden" value={trip.id} />
                   <SubmitButton className="w-full" variant="success">
                     Aprobar evidencia y generar POD
                   </SubmitButton>
-                </form>
+                </ActionForm>
                 <Collapsible icon={<CircleAlert />} summary="Rechazar evidencia">
-                  <form action={rejectProofAction.bind(null, tenantSlug)} className="grid gap-2.5">
+                  <ActionForm action={rejectProofAction.bind(null, tenantSlug)} className="grid gap-2.5">
                     <input name="tripId" type="hidden" value={trip.id} />
                     <TextArea
                       help="El conductor debera volver a capturar la evidencia."
@@ -373,7 +408,7 @@ export function TripOperationsCard({
                       required
                     />
                     <SubmitButton variant="danger">Rechazar evidencia</SubmitButton>
-                  </form>
+                  </ActionForm>
                 </Collapsible>
               </>
             ) : null}

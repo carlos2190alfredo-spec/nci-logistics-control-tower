@@ -224,10 +224,9 @@ export async function acceptDriverRecommendationAction(formData: FormData) {
     data: { status: "ACCEPTED", acceptedAt: new Date() },
   });
 
-  await db.trip.update({
-    where: { id: rec.tripId },
-    data: { driverId: rec.driverId },
-  });
+  // ADR-035: aceptar una recomendacion NO asigna el viaje. La asignacion real
+  // pasa siempre por `assignTripAction`, que aplica las guardas de estado,
+  // cumplimiento, mantenimiento y conflicto de agenda con bloqueo de filas.
 
   await audit({
     tenantId: tenant.id,
@@ -271,10 +270,8 @@ export async function overrideDriverRecommendationAction(formData: FormData) {
     data: { status: "OVERRIDDEN", overrideReason, dismissedAt: new Date() },
   });
 
-  await db.trip.update({
-    where: { id: trip.id },
-    data: { driverId: driver.id },
-  });
+  // ADR-035: anular la recomendacion solo registra la decision y su motivo;
+  // la asignacion real pasa por `assignTripAction` con todas sus guardas.
 
   await audit({
     tenantId: tenant.id,

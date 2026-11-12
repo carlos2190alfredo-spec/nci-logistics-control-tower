@@ -1,6 +1,47 @@
 # CURRENT STATE
 
-Fecha: 2026-07-23
+Fecha: 2026-11-12
+
+## Fase actual — Remediación P0 del núcleo operativo (ADR-035)
+
+Una auditoría (2026-11-12) encontró cuatro problemas P0 en el flujo de viajes y
+solicitudes. Quedaron corregidos:
+
+- **Cancelación y excepciones:**
+  - un viaje se puede cancelar desde cualquier estado previo a la entrega, con motivo
+    obligatorio (después de cargar, solo los mandos pueden cancelar);
+  - nuevo estado `DELIVERY_FAILED` con reintento o retorno (`→ IN_TRANSIT`);
+  - la espera en origen es opcional;
+  - se puede reasignar hasta `DRIVER_CONFIRMED`.
+- **Solicitudes:**
+  - operaciones puede pedir información o rechazar;
+  - el cliente puede responder, enviar un borrador o cancelar;
+  - el motivo visible al cliente vive en `ServiceRequest.statusReason`;
+  - las acciones están en `src/lib/server/request-actions.ts`.
+- **Mensajes en vez de fallos silenciosos:** `ActionResult` + `ActionForm`. Asignar,
+  avanzar, registrar, aprobar o rechazar evidencia y convertir solicitudes explican la
+  causa exacta de cada bloqueo.
+- **Concurrencia:**
+  - bloqueo optimista (`updateMany` con el estado leído) en las transiciones online y
+    offline, en la evidencia y en las solicitudes;
+  - `SELECT … FOR UPDATE` en la asignación, para evitar doble reserva.
+- **Bypass cerrado:** aceptar o anular una recomendación de conductor ya no escribe
+  `trip.driverId` sin guardas.
+- **Migración aditiva** `20261112120000_trip_exceptions_and_request_reasons`: agrega el
+  valor de enum y dos columnas que admiten nulos.
+
+Pendiente de la auditoría (P1/P2):
+
+- RLS o claves foráneas compuestas por tenant;
+- enlace de cumplimiento y mantenimiento por UUID;
+- estado de activos como enum;
+- ventana de conflicto basada en la duración y los horarios del conductor;
+- moneda en finanzas;
+- partir `actions.ts`;
+- tests de integración con base de datos;
+- limpieza de la documentación.
+
+## Fase previa — Cierre de código (2026-07-23)
 
 ## Fase actual — Cierre de código listo para producción
 

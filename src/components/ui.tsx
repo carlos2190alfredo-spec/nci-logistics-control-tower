@@ -10,6 +10,7 @@ export { Skeleton, PageSkeleton } from "@/components/ui/skeleton";
 export { DataTable, TableHead, TableBody, TableRow, TableHeaderCell, TableCell } from "@/components/ui/table";
 export { Timeline, TimelineItem } from "@/components/ui/timeline";
 export { Alert } from "@/components/ui/alert";
+export { ActionForm } from "@/components/ui/action-form";
 export { PageHeader, type Breadcrumb } from "@/components/ui/page-header";
 export { Collapsible } from "@/components/ui/collapsible";
 export { DocumentCard } from "@/components/ui/document-card";

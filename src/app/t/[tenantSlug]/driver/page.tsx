@@ -16,11 +16,11 @@ import {
 } from "@/components/ui";
 import { requireTenantRole } from "@/lib/server/auth";
 import { getDb } from "@/lib/server/db";
-import { nextStatuses } from "@/lib/domain/state-machine";
+import { EVIDENCE_SUBMITTABLE_STATUSES, nextStatuses } from "@/lib/domain/state-machine";
 import { tripStatusLabel, tripStatusTone } from "@/lib/ui/status";
 import { formatDate } from "@/lib/utils";
 
-const evidenceStatuses = ["DELIVERY_IN_PROGRESS", "DELIVERED", "EVIDENCE_PENDING", "EVIDENCE_SUBMITTED"];
+const evidenceStatuses: readonly string[] = EVIDENCE_SUBMITTABLE_STATUSES;
 
 export default async function DriverPage({ params }: { params: Promise<{ tenantSlug: string }> }) {
   const { tenantSlug } = await params;

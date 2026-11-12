@@ -1,95 +1,56 @@
 # HANDOFF LATEST
 
-Fecha: 2026-07-14
-Agente: Claude Opus 4.6 (Final Functional Completion + DeepSeek + Test Readiness)
+Fecha: 2026-11-12
+Agente: Claude Opus 5.5 (auditoría + remediación P0 del núcleo operativo)
 
-## Objetivo de la sesion
+## Qué se hizo
 
-Integrar DeepSeek como proveedor de IA con fallback a motor de reglas, crear UI de copiloto operativo, tooling de demo/doctor/readiness, security checks, y documentacion completa.
+1. **Auditoría de solo lectura del proyecto.** Encontró hallazgos P0, P1 y P2:
+   - P0: flujo de viajes sin cancelación ni excepciones, `return;` silenciosos y carreras
+     de concurrencia;
+   - P1: sin RLS ni claves foráneas compuestas, cumplimiento enlazado por texto, estado de
+     activos en texto libre, finanzas sin moneda, roles incoherentes;
+   - P2: `actions.ts` monolítico, sin tests de integración con DB, crecimiento de alcance,
+     documentación desincronizada.
+2. **Remediación P0 (ADR-035).** Ver `docs/decisions/ADR-035-…` y `CURRENT_STATE.md`.
 
-## Fases completadas
+## Archivos clave nuevos
 
-| Fase | Commit | Descripcion |
-| --- | --- | --- |
-| Lint fixes | fe972a8 | 3 errores de lint preexistentes corregidos |
-| DeepSeek provider | 1562830 | Factory, providers, prompt safety, tenant context, copilot actions, tracking |
-| Copilot UI | db3a4fb | Pagina operations-copilot, nav link |
-| Tooling + security | c9bd7c2 | demo:seed/reset/status, app:doctor, readiness:check, 10 security checks |
-| Documentacion | (actual) | ADR-029-032, guias, task reports |
+- `src/lib/domain/request-state-machine.ts` (+ test)
+- `src/lib/server/request-actions.ts`: convertir, revisar (pedir información o rechazar) y
+  acciones del cliente
+- `src/lib/server/action-result.ts`, `src/components/ui/action-form.tsx`
+- `prisma/migrations/20261112120000_trip_exceptions_and_request_reasons/` (aditiva)
+- `tests/e2e/trip-exceptions.spec.ts`
 
-## Arquitectura implementada
+## Contratos nuevos
 
-### Proveedor DeepSeek (ADR-029)
+- Las server actions de viaje, solicitud y evidencia devuelven `ActionResult` y se montan
+  con `<ActionForm>`.
+- Firma: `(tenantSlug, previous, formData)`.
+- `confirmRequestAsTripAction` se movió a `request-actions.ts`.
+- Botones nuevos:
+  - en la tarjeta de viaje: "Aplicar excepcion";
+  - en la tarjeta de solicitud: "Enviar";
+  - en el portal: "Enviar respuesta", "Enviar borrador a operaciones", "Cancelar solicitud".
+- Los botones existentes no cambiaron de nombre.
 
-- **Factory**: `createAiProvider(tenantAiEnabled)` → auto/disabled/rules/deepseek
-- **En test**: siempre RulesBasedAiProvider
-- **Auto**: DeepSeek si DEEPSEEK_API_KEY existe, sino reglas
-- **Fallback**: DeepSeekError → RulesBasedAiProvider
-- Archivos: `src/lib/ai/providers/`, `src/lib/ai/deepseek-config.ts`
+## Pendiente para la próxima sesión
 
-### Prompt Safety (ADR-030)
-
-- 18 patrones de deteccion de inyeccion (EN+ES)
-- Sanitizacion: secrets, signed URLs, base64, phones, object keys
-- Marcado: `[CONTENIDO_USUARIO:...]` para campos de usuario
-- Validacion: Zod schemas por cada purpose
-- Archivo: `src/lib/ai/prompt-safety.ts`
-
-### Copilot Actions
-
-- 5 funciones: operations summary, trip risk, driver explanation, feedback, incidents
-- System prompt estricto (solo JSON, no acciones, no cross-tenant)
-- `safeComplete()`: injection check → provider → error fallback → sanitize → Zod validate
-- Archivo: `src/lib/ai/copilot-actions.ts`
-
-### Server Actions + Tracking (ADR-031)
-
-- Auth: `requireTenantRole()` por cada action
-- Audit: `audit()` por cada invocacion
-- Tracking: `logInvocation()` → AiInvocation + AiUsageDaily upsert
-- Archivo: `src/lib/server/copilot-actions.ts`
-
-### UI Copiloto (ADR-032)
-
-- Ruta: `/t/[slug]/admin/operations-copilot`
-- Metricas: proveedor, solicitudes hoy, exitosas, bloqueadas
-- Acciones: generar resumen, resumir feedback, resumir incidencias
-- Historial: ultimas 10 invocaciones con status/provider/duration
-- Nav: "Copiloto IA" con icono Bot en seccion Inteligencia
-
-## Scripts nuevos
-
-| Script | Comando | Descripcion |
-| --- | --- | --- |
-| demo-seed.ts | pnpm demo:seed | Horarios, estimaciones, recomendaciones, feedback, AI settings |
-| demo-reset.ts | pnpm demo:reset | Limpia datos demo extendidos |
-| demo-status.ts | pnpm demo:status | Conteos de datos por tenant demo |
-| app-doctor.ts | pnpm app:doctor | 15 checks de diagnostico del sistema |
-| readiness-check.ts | pnpm readiness:check | 17 gates de readiness para produccion |
-
-## Estado de verificacion
-
-| Check | Estado |
-| --- | --- |
-| `pnpm typecheck` | 0 errores |
-| `pnpm lint` | 0 errores, 31 warnings |
-| `pnpm test` | 170/170 pass |
-| `pnpm build` | OK |
-| `pnpm security:check` | 63/63 pass |
-
-## Variables de entorno
-
-Solo requerida para DeepSeek:
-```
-DEEPSEEK_API_KEY=sk-...
-```
-
-Opcionales con defaults: `DEEPSEEK_BASE_URL`, `DEEPSEEK_MODEL`, `DEEPSEEK_REASONING_EFFORT`, `DEEPSEEK_THINKING_ENABLED`, `DEEPSEEK_TIMEOUT_MS`, `DEEPSEEK_MAX_OUTPUT_TOKENS`, `AI_PROVIDER`.
-
-## Pendiente para proxima sesion
-
-- Completar audits funcionales de todos los recorridos (7)
-- Platform admin: vista de AI provider status
-- Agregar timezone al motor de recomendacion
-- E2E tests del copiloto
-- Actualizar docs existentes afectados
+- **Datos locales:**
+  - renovar la póliza VH-1 del seed (usar fechas relativas a "hoy" al correr el seed, o
+    re-seed);
+  - limpiar los 246 viajes E2E acumulados (`pnpm db:reset` es destructivo: pedir
+    autorización);
+  - paginar `/trips`.
+- **Arreglar el helper `login` de los E2E existentes:** esperar `networkidle` antes de
+  `fill`.
+- **P1 de la auditoría:**
+  - RLS o claves foráneas compuestas;
+  - enlaces por UUID;
+  - enum de estado de activos;
+  - ventana de conflicto basada en la duración y los horarios del conductor;
+  - moneda en finanzas;
+  - matriz de roles central.
+- **Conductor declarando entrega fallida desde la PWA offline:** hoy solo operaciones.
+- Nada commiteado (sin autorización de commit).

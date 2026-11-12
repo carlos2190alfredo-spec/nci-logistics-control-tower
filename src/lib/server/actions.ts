@@ -4,8 +4,18 @@ import { randomUUID } from "node:crypto";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
-import type { TenantRole, TripStatus } from "@/generated/prisma";
-import { customerVisibleStatus, canTransition } from "@/lib/domain/state-machine";
+import type { TenantRole, Trip, TripStatus } from "@/generated/prisma";
+import {
+  ASSIGNABLE_TRIP_STATUSES,
+  EVIDENCE_SUBMITTABLE_STATUSES,
+  MIN_REASON_LENGTH,
+  TERMINAL_TRIP_STATUSES,
+  canTransition,
+  customerVisibleStatus,
+  transitionRequiresReason,
+} from "@/lib/domain/state-machine";
+import { tripStatusLabel } from "@/lib/ui/status";
+import { actionError, actionOk, StaleStateError, type ActionResult } from "@/lib/server/action-result";
 import { blockingDocumentsNow } from "@/lib/compliance/eligibility";
 import { hasActiveException } from "@/lib/compliance/exceptions";
 import { audit } from "@/lib/server/audit";
@@ -24,7 +34,13 @@ import { enforceRateLimit } from "@/lib/server/rate-limit";
 import { logger } from "@/lib/server/logger";
 import { sendLocalNotification } from "@/lib/providers/notifications";
 import { generateProofOfDeliveryPdf } from "@/lib/server/pod-pdf";
-import { getStorageBucket, isValidSignaturePng, uploadBuffer, validateUploadedFile } from "@/lib/server/storage";
+import {
+  getStorageBucket,
+  isValidSignaturePng,
+  uploadBuffer,
+  UploadRejectedError,
+  validateUploadedFile,
+} from "@/lib/server/storage";
 import { processUploadThroughPipeline } from "@/lib/server/file-pipeline";
 
 const loginSchema = z.object({
@@ -317,91 +333,8 @@ export async function createServiceRequestAction(tenantSlug: string, formData: F
   redirect(`/t/${tenantSlug}/portal`);
 }
 
-export async function confirmRequestAsTripAction(tenantSlug: string, formData: FormData) {
-  const { user, tenant, membership } = await requireTenantRole(tenantSlug, [
-    "OPERATIONS_MANAGER",
-    "DISPATCHER",
-    "TENANT_OWNER",
-  ]);
-  const requestId = String(formData.get("requestId") ?? "");
-  const db = getDb();
-  const request = await db.serviceRequest.findFirstOrThrow({
-    where: { id: requestId, tenantId: tenant.id },
-    include: { trip: true, customerAccount: true, serviceType: true },
-  });
-
-  if (request.trip) {
-    revalidatePath(`/t/${tenantSlug}`);
-    return;
-  }
-
-  const trip = await db.$transaction(async (tx) => {
-    const count = await tx.trip.count({ where: { tenantId: tenant.id } });
-    const created = await tx.trip.create({
-      data: {
-        tenantId: tenant.id,
-        customerAccountId: request.customerAccountId,
-        serviceRequestId: request.id,
-        serviceTypeId: request.serviceTypeId,
-        reference: `${tenant.slug.toUpperCase()}-TR-${String(count + 1).padStart(4, "0")}`,
-        status: "CONFIRMED",
-        origin: request.origin,
-        destination: request.destination,
-        scheduledAt: request.requestedDate,
-        eta: new Date(request.requestedDate.getTime() + 4 * 60 * 60 * 1000),
-        routePoints: [
-          { label: request.origin, lat: 9.36, lng: -79.88 },
-          { label: "Las Cumbres", lat: 9.09, lng: -79.54 },
-          { label: request.destination, lat: 8.95, lng: -79.56 },
-        ],
-        customerVisibleStatus: customerVisibleStatus.CONFIRMED,
-        events: {
-          create: {
-            tenantId: tenant.id,
-            actorId: user.id,
-            toStatus: "CONFIRMED",
-            note: "Solicitud confirmada y convertida en viaje.",
-            visibleToCustomer: true,
-          },
-        },
-      },
-    });
-
-    await tx.serviceRequest.update({
-      where: { id: request.id },
-      data: { status: "CONVERTED" },
-    });
-
-    return created;
-  });
-
-  await audit({
-    tenantId: tenant.id,
-    actorId: user.id,
-    actorRole: membership.role,
-    action: "service_request.convert_to_trip",
-    entity: "Trip",
-    entityId: trip.id,
-    after: trip,
-  });
-  await sendLocalNotification({
-    tenantId: tenant.id,
-    customerAccountId: request.customerAccountId,
-    channel: "EMAIL",
-    recipient: tenant.branding?.supportMail ?? "operaciones@nci.local",
-    subject: `Viaje ${trip.reference} creado`,
-    body: `La solicitud ${request.reference} fue confirmada y convertida en viaje.`,
-  });
-  await sendLocalNotification({
-    tenantId: tenant.id,
-    customerAccountId: request.customerAccountId,
-    channel: "PORTAL",
-    recipient: request.customerAccount.name,
-    subject: `Servicio confirmado ${trip.reference}`,
-    body: `Tu servicio fue confirmado para ${trip.origin} -> ${trip.destination}.`,
-  });
-  revalidatePath(`/t/${tenantSlug}`);
-}
+/** Ventana de conflicto de agenda por recurso alrededor de la hora programada. */
+const ASSIGNMENT_CONFLICT_WINDOW_MS = 6 * 60 * 60 * 1000;
 
 const assignmentSchema = z.object({
   tripId: z.string().uuid(),
@@ -412,9 +345,13 @@ const assignmentSchema = z.object({
   notes: z.string().optional(),
 });
 
-export async function assignTripAction(tenantSlug: string, formData: FormData) {
+export async function assignTripAction(
+  tenantSlug: string,
+  _previous: ActionResult,
+  formData: FormData,
+): Promise<ActionResult> {
   const { user, tenant, membership } = await requireTenantRole(tenantSlug, ["DISPATCHER", "TENANT_OWNER", "OPERATIONS_MANAGER"]);
-  const parsed = assignmentSchema.parse({
+  const parsedInput = assignmentSchema.safeParse({
     tripId: formData.get("tripId"),
     vehicleId: formData.get("vehicleId"),
     equipmentId: formData.get("equipmentId"),
@@ -422,23 +359,36 @@ export async function assignTripAction(tenantSlug: string, formData: FormData) {
     scheduledAt: formData.get("scheduledAt"),
     notes: formData.get("notes")?.toString(),
   });
+  if (!parsedInput.success) return actionError("Seleccione vehiculo, equipo y conductor antes de asignar.");
+  const parsed = parsedInput.data;
   const db = getDb();
-  const trip = await db.trip.findFirstOrThrow({
+  const trip = await db.trip.findFirst({
     where: { id: parsed.tripId, tenantId: tenant.id },
     include: { serviceType: true },
   });
+  if (!trip) return actionError("El viaje no existe o no pertenece a esta empresa.");
 
-  if (!["CONFIRMED", "SCHEDULED", "ASSIGNED"].includes(trip.status)) return;
+  if (!ASSIGNABLE_TRIP_STATUSES.includes(trip.status)) {
+    return actionError(`El viaje ya no admite asignacion: esta en "${tripStatusLabel[trip.status]}".`);
+  }
 
   const [vehicle, equipment, driver] = await Promise.all([
-    db.vehicle.findFirst({ where: { id: parsed.vehicleId, tenantId: tenant.id, status: "AVAILABLE" } }),
-    db.equipment.findFirst({ where: { id: parsed.equipmentId, tenantId: tenant.id, status: "AVAILABLE" } }),
-    db.driver.findFirst({ where: { id: parsed.driverId, tenantId: tenant.id, status: "AVAILABLE" } }),
+    db.vehicle.findFirst({ where: { id: parsed.vehicleId, tenantId: tenant.id } }),
+    db.equipment.findFirst({ where: { id: parsed.equipmentId, tenantId: tenant.id } }),
+    db.driver.findFirst({ where: { id: parsed.driverId, tenantId: tenant.id } }),
   ]);
-  if (!vehicle || !equipment || !driver) return;
+  if (!vehicle || !equipment || !driver) return actionError("Vehiculo, equipo o conductor no encontrado en esta empresa.");
+  const unavailable = [
+    vehicle.status !== "AVAILABLE" ? `vehiculo ${vehicle.code}` : null,
+    equipment.status !== "AVAILABLE" ? `equipo ${equipment.code}` : null,
+    driver.status !== "AVAILABLE" ? `conductor ${driver.code}` : null,
+  ].filter(Boolean);
+  if (unavailable.length > 0) return actionError(`No disponible: ${unavailable.join(", ")}.`);
 
   const authorizations = Array.isArray(driver.authorizations) ? driver.authorizations.map(String) : [];
-  if (authorizations.length > 0 && !authorizations.includes(trip.serviceType.code)) return;
+  if (authorizations.length > 0 && !authorizations.includes(trip.serviceType.code)) {
+    return actionError(`El conductor ${driver.code} no esta autorizado para el servicio "${trip.serviceType.name}".`);
+  }
 
   const now = new Date();
   const assetKeys = [
@@ -463,7 +413,7 @@ export async function assignTripAction(tenantSlug: string, formData: FormData) {
 
   // Guarda determinista: un activo con orden abierta bloqueante no puede asignarse.
   if (!maintenanceExempt) {
-    const blockingOrders = await db.maintenanceOrder.count({
+    const blockingOrders = await db.maintenanceOrder.findMany({
       where: {
         tenantId: tenant.id,
         status: { in: ["PROGRAMADO", "EN_PROGRESO"] },
@@ -473,8 +423,14 @@ export async function assignTripAction(tenantSlug: string, formData: FormData) {
           { assetType: "EQUIPO", assetCode: equipment.code },
         ],
       },
+      select: { assetCode: true },
     });
-    if (blockingOrders > 0) return;
+    if (blockingOrders.length > 0) {
+      const codes = [...new Set(blockingOrders.map((order) => order.assetCode))].join(", ");
+      return actionError(
+        `Mantenimiento bloqueante abierto para ${codes}. Cierre la orden o registre una excepcion aprobada.`,
+      );
+    }
   }
 
   // Guarda determinista: documentos de cumplimiento bloqueantes vencidos/suspendidos
@@ -501,24 +457,55 @@ export async function assignTripAction(tenantSlug: string, formData: FormData) {
       },
     });
     const blockingCompliance = blockingDocumentsNow(complianceDocs, now);
-    if (blockingCompliance.length > 0) return;
+    if (blockingCompliance.length > 0) {
+      const names = blockingCompliance.map((doc) => `${doc.name} (${doc.entityId})`).join(", ");
+      return actionError(`Documentos de cumplimiento bloqueantes: ${names}. Renuevelos o registre una excepcion aprobada.`);
+    }
   }
 
   const scheduledAt = new Date(parsed.scheduledAt);
-  const windowStart = new Date(scheduledAt.getTime() - 6 * 60 * 60 * 1000);
-  const windowEnd = new Date(scheduledAt.getTime() + 6 * 60 * 60 * 1000);
-  const conflict = await db.trip.findFirst({
-    where: {
-      tenantId: tenant.id,
-      id: { not: trip.id },
-      status: { notIn: ["CLOSED", "CANCELLED"] },
-      scheduledAt: { gte: windowStart, lte: windowEnd },
-      OR: [{ vehicleId: vehicle.id }, { equipmentId: equipment.id }, { driverId: driver.id }],
-    },
-  });
-  if (conflict) return;
+  if (Number.isNaN(scheduledAt.getTime())) return actionError("La fecha programada no es valida.");
+  const windowStart = new Date(scheduledAt.getTime() - ASSIGNMENT_CONFLICT_WINDOW_MS);
+  const windowEnd = new Date(scheduledAt.getTime() + ASSIGNMENT_CONFLICT_WINDOW_MS);
 
-  const updated = await db.$transaction(async (tx) => {
+  // Seccion critica: se bloquean (FOR UPDATE) el viaje y los tres recursos en
+  // orden fijo (viaje -> vehiculo -> equipo -> conductor) para que dos
+  // asignaciones concurrentes no reserven el mismo recurso. Con READ COMMITTED,
+  // la consulta de conflicto posterior al bloqueo ve lo que confirmo la otra
+  // transaccion. El orden fijo evita deadlocks.
+  type AssignOutcome =
+    | { kind: "stale"; status: TripStatus | null }
+    | { kind: "conflict"; reference: string; resource: string }
+    | { kind: "ok"; updated: Trip; fromStatus: TripStatus };
+  const outcome: AssignOutcome = await db.$transaction(async (tx) => {
+    const locked = await tx.$queryRaw<{ status: TripStatus }[]>`
+      SELECT status FROM trips WHERE id = ${trip.id}::uuid AND tenant_id = ${tenant.id}::uuid FOR UPDATE`;
+    const lockedStatus = locked[0]?.status ?? null;
+    if (!lockedStatus || !ASSIGNABLE_TRIP_STATUSES.includes(lockedStatus)) return { kind: "stale", status: lockedStatus };
+    await tx.$queryRaw`SELECT id FROM vehicles WHERE id = ${vehicle.id}::uuid FOR UPDATE`;
+    await tx.$queryRaw`SELECT id FROM equipment WHERE id = ${equipment.id}::uuid FOR UPDATE`;
+    await tx.$queryRaw`SELECT id FROM drivers WHERE id = ${driver.id}::uuid FOR UPDATE`;
+
+    const conflict = await tx.trip.findFirst({
+      where: {
+        tenantId: tenant.id,
+        id: { not: trip.id },
+        status: { notIn: [...TERMINAL_TRIP_STATUSES] },
+        scheduledAt: { gte: windowStart, lte: windowEnd },
+        OR: [{ vehicleId: vehicle.id }, { equipmentId: equipment.id }, { driverId: driver.id }],
+      },
+      select: { reference: true, vehicleId: true, equipmentId: true, driverId: true },
+    });
+    if (conflict) {
+      const resource =
+        conflict.driverId === driver.id
+          ? `el conductor ${driver.code}`
+          : conflict.vehicleId === vehicle.id
+            ? `el vehiculo ${vehicle.code}`
+            : `el equipo ${equipment.code}`;
+      return { kind: "conflict", reference: conflict.reference, resource };
+    }
+
     await tx.tripAssignment.updateMany({
       where: { tenantId: tenant.id, tripId: trip.id, active: true },
       data: { active: false },
@@ -536,28 +523,44 @@ export async function assignTripAction(tenantSlug: string, formData: FormData) {
       },
     });
 
-    return tx.trip.update({
+    const reassigned = lockedStatus === "DRIVER_CONFIRMED" || lockedStatus === "ASSIGNED";
+    const updated = await tx.trip.update({
       where: { id: trip.id },
       data: {
-        vehicleId: parsed.vehicleId,
-        equipmentId: parsed.equipmentId,
-        driverId: parsed.driverId,
+        vehicleId: vehicle.id,
+        equipmentId: equipment.id,
+        driverId: driver.id,
         scheduledAt,
+        // Una reasignacion vuelve a ASSIGNED: el nuevo conductor debe confirmar.
         status: "ASSIGNED",
         customerVisibleStatus: customerVisibleStatus.ASSIGNED,
         events: {
           create: {
             tenantId: tenant.id,
             actorId: user.id,
-            fromStatus: trip.status,
+            fromStatus: lockedStatus,
             toStatus: "ASSIGNED",
-            note: "Unidad, equipo y conductor asignados.",
+            note: reassigned ? "Recursos reasignados." : "Unidad, equipo y conductor asignados.",
             visibleToCustomer: true,
           },
         },
       },
     });
+    return { kind: "ok", updated, fromStatus: lockedStatus };
   });
+
+  if (outcome.kind === "stale") {
+    return actionError(
+      outcome.status
+        ? `El viaje cambio a "${tripStatusLabel[outcome.status]}" mientras asignaba. No se aplicaron cambios.`
+        : "El viaje ya no existe.",
+    );
+  }
+  if (outcome.kind === "conflict") {
+    return actionError(
+      `Conflicto de agenda: ${outcome.resource} ya esta asignado al viaje ${outcome.reference} dentro de ±${ASSIGNMENT_CONFLICT_WINDOW_MS / 3_600_000} h.`,
+    );
+  }
 
   await audit({
     tenantId: tenant.id,
@@ -567,7 +570,7 @@ export async function assignTripAction(tenantSlug: string, formData: FormData) {
     entity: "Trip",
     entityId: trip.id,
     before: trip,
-    after: updated,
+    after: outcome.updated,
   });
   await sendLocalNotification({
     tenantId: tenant.id,
@@ -585,56 +588,118 @@ export async function assignTripAction(tenantSlug: string, formData: FormData) {
     subject: `Asignacion ${trip.reference}`,
     body: `Asignado a ${driver.name} con ${vehicle.code} y ${equipment.code}.`,
   });
-  revalidatePath(`/t/${tenantSlug}`);
+  // Layout: refresca todas las vistas del tenant (/trips, /requests, /driver, /portal...).
+  revalidatePath(`/t/${tenantSlug}`, "layout");
+  revalidatePath(`/t/${tenantSlug}/driver`);
+  return actionOk(`Viaje ${trip.reference} asignado a ${driver.name} con ${vehicle.code} y ${equipment.code}.`);
 }
 
-export async function transitionTripAction(tenantSlug: string, formData: FormData) {
+/** Texto que ve el cliente en la linea de tiempo para transiciones de excepcion. */
+const customerExceptionNote: Partial<Record<TripStatus, string>> = {
+  CANCELLED: "Servicio cancelado por operaciones.",
+  DELIVERY_FAILED: "La entrega no pudo completarse. Operaciones coordinara el siguiente paso.",
+  IN_TRANSIT: "Nuevo intento de entrega o retorno en curso.",
+};
+
+export async function transitionTripAction(
+  tenantSlug: string,
+  _previous: ActionResult,
+  formData: FormData,
+): Promise<ActionResult> {
   const { user, tenant, membership } = await requireTenantMembership(tenantSlug);
   const tripId = String(formData.get("tripId") ?? "");
   const nextStatus = String(formData.get("nextStatus") ?? "") as TripStatus;
-  const note = String(formData.get("note") ?? "");
+  const note = String(formData.get("note") ?? "").slice(0, 500);
+  const reason = String(formData.get("reason") ?? "").trim().slice(0, 1000);
   const db = getDb();
-  const trip = await db.trip.findFirstOrThrow({ where: { id: tripId, tenantId: tenant.id } });
+  const trip = await db.trip.findFirst({ where: { id: tripId, tenantId: tenant.id } });
+  if (!trip) return actionError("El viaje no existe o no pertenece a esta empresa.");
 
-  const driver = await db.driver.findFirst({ where: { tenantId: tenant.id, userId: user.id } });
-  const effectiveRole: TenantRole = membership.role;
+  const role: TenantRole = membership.role;
+  let driverId: string | null = null;
+  if (role === "DRIVER") {
+    const driver = await db.driver.findFirst({ where: { tenantId: tenant.id, userId: user.id } });
+    if (!driver || trip.driverId !== driver.id) return actionError("Este viaje no esta asignado a usted.");
+    driverId = driver.id;
+  }
+  if (!tripStatusLabel[nextStatus]) return actionError("Seleccione un estado valido.");
+  if (!canTransition(trip.status, nextStatus, role)) {
+    return actionError(
+      `No se puede pasar de "${tripStatusLabel[trip.status]}" a "${tripStatusLabel[nextStatus]}" con su rol.`,
+    );
+  }
+  const requiresReason = transitionRequiresReason(trip.status, nextStatus, role);
+  if (requiresReason && reason.length < MIN_REASON_LENGTH) {
+    return actionError("Escriba el motivo (minimo 5 caracteres). Queda en la auditoria y no lo ve el cliente.");
+  }
 
-  if (membership.role === "DRIVER" && trip.driverId !== driver?.id) return;
-  if (!canTransition(trip.status, nextStatus, effectiveRole)) return;
-
-  const updated = await db.trip.update({
-    where: { id: trip.id },
-    data: {
-      status: nextStatus,
-      customerVisibleStatus: customerVisibleStatus[nextStatus],
-      simulationStartedAt: nextStatus === "EN_ROUTE_TO_ORIGIN" ? new Date() : undefined,
-      proofReady: nextStatus === "CLOSED" ? true : undefined,
-      events: {
-        create: {
-          tenantId: tenant.id,
-          actorId: user.id,
-          fromStatus: trip.status,
-          toStatus: nextStatus,
-          note,
-          visibleToCustomer: true,
-        },
+  const applied = await db.$transaction(async (tx) => {
+    // Bloqueo optimista: si el estado cambio desde la lectura (otro usuario o
+    // la cola offline del conductor), el update afecta 0 filas.
+    const result = await tx.trip.updateMany({
+      where: { id: trip.id, tenantId: tenant.id, status: trip.status, ...(driverId ? { driverId } : {}) },
+      data: {
+        status: nextStatus,
+        customerVisibleStatus: customerVisibleStatus[nextStatus],
+        simulationStartedAt: nextStatus === "EN_ROUTE_TO_ORIGIN" ? new Date() : undefined,
+        proofReady: nextStatus === "CLOSED" ? true : undefined,
       },
-    },
+    });
+    if (result.count === 0) return false;
+    await tx.tripEvent.create({
+      data: {
+        tenantId: tenant.id,
+        tripId: trip.id,
+        actorId: user.id,
+        fromStatus: trip.status,
+        toStatus: nextStatus,
+        note: requiresReason ? (customerExceptionNote[nextStatus] ?? note) : note,
+        reason: requiresReason ? reason : null,
+        visibleToCustomer: true,
+      },
+    });
+    if (nextStatus === "CANCELLED") {
+      await tx.tripAssignment.updateMany({
+        where: { tenantId: tenant.id, tripId: trip.id, active: true },
+        data: { active: false },
+      });
+    }
+    return true;
   });
+
+  if (!applied) {
+    const current = await db.trip.findFirst({ where: { id: trip.id, tenantId: tenant.id }, select: { status: true } });
+    return actionError(
+      current
+        ? `El viaje cambio a "${tripStatusLabel[current.status]}" mientras trabajaba. No se aplicaron cambios.`
+        : "El viaje ya no existe.",
+    );
+  }
 
   await audit({
     tenantId: tenant.id,
     actorId: user.id,
     actorRole: membership.role,
-    action: "trip.transition",
+    action: nextStatus === "CANCELLED" ? "trip.cancel" : requiresReason ? "trip.exception" : "trip.transition",
     entity: "Trip",
     entityId: trip.id,
     before: { status: trip.status },
-    after: { status: updated.status },
+    after: { status: nextStatus, ...(requiresReason ? { reason } : {}) },
   });
-  revalidatePath(`/t/${tenantSlug}`);
+  if (requiresReason) {
+    await sendLocalNotification({
+      tenantId: tenant.id,
+      customerAccountId: trip.customerAccountId,
+      channel: "PORTAL",
+      recipient: "customer",
+      subject: `${trip.reference}: ${customerVisibleStatus[nextStatus]}`,
+      body: customerExceptionNote[nextStatus] ?? customerVisibleStatus[nextStatus],
+    });
+  }
+  revalidatePath(`/t/${tenantSlug}`, "layout");
   revalidatePath(`/t/${tenantSlug}/driver`);
   revalidatePath(`/t/${tenantSlug}/portal`);
+  return actionOk(`${trip.reference}: ${tripStatusLabel[nextStatus]}.`);
 }
 
 export async function reportIncidentAction(tenantSlug: string, formData: FormData) {
@@ -672,22 +737,41 @@ export async function reportIncidentAction(tenantSlug: string, formData: FormDat
   redirect(`/t/${tenantSlug}`);
 }
 
-export async function submitProofAction(tenantSlug: string, formData: FormData) {
+export async function submitProofAction(
+  tenantSlug: string,
+  _previous: ActionResult,
+  formData: FormData,
+): Promise<ActionResult> {
   const { user, tenant, membership } = await requireTenantMembership(tenantSlug);
   const tripId = String(formData.get("tripId") ?? "");
-  const receiverName = String(formData.get("receiverName") ?? "");
+  const receiverName = String(formData.get("receiverName") ?? "").trim();
   const observation = String(formData.get("observation") ?? "");
   const signatureData = String(formData.get("signatureData") ?? "");
   const evidenceFile = formData.get("evidenceFile");
   const availablePhotoIdsRaw = String(formData.get("availablePhotoIds") ?? "");
   const db = getDb();
-  const trip = await db.trip.findFirstOrThrow({ where: { id: tripId, tenantId: tenant.id } });
+  const trip = await db.trip.findFirst({ where: { id: tripId, tenantId: tenant.id }, include: { proof: true } });
+  if (!trip) return actionError("El viaje no existe o no pertenece a esta empresa.");
 
   const driver = await db.driver.findFirst({ where: { tenantId: tenant.id, userId: user.id } });
-  if (membership.role === "DRIVER" && trip.driverId !== driver?.id) return;
-  if (!receiverName || !isValidSignaturePng(signatureData)) return;
-  if (!(evidenceFile instanceof File)) return;
-  const { filename, buffer, mimeType } = await validateUploadedFile(evidenceFile);
+  if (membership.role === "DRIVER" && trip.driverId !== driver?.id) return actionError("Este viaje no esta asignado a usted.");
+  if (!EVIDENCE_SUBMITTABLE_STATUSES.includes(trip.status)) {
+    return actionError(`No se puede registrar evidencia con el viaje en "${tripStatusLabel[trip.status]}".`);
+  }
+  if (trip.proof?.status === "APPROVED") return actionError("La evidencia de este viaje ya fue aprobada.");
+  if (!receiverName) return actionError("Escriba el nombre de quien recibe la carga.");
+  if (!isValidSignaturePng(signatureData)) return actionError("Capture la firma del receptor antes de enviar.");
+  if (!(evidenceFile instanceof File) || evidenceFile.size === 0) {
+    return actionError("Adjunte una fotografia o documento de evidencia.");
+  }
+  let validated;
+  try {
+    validated = await validateUploadedFile(evidenceFile);
+  } catch (error) {
+    if (error instanceof UploadRejectedError) return actionError(error.message);
+    throw error;
+  }
+  const { filename, buffer, mimeType } = validated;
 
   const proof = await db.proofOfDelivery.upsert({
     where: { tripId: trip.id },
@@ -720,7 +804,7 @@ export async function submitProofAction(tenantSlug: string, formData: FormData) 
       tripId: trip.id,
       fileAttachmentId: pipelineResult.fileAttachmentId,
     });
-    return;
+    return actionError("El archivo fue bloqueado por el antivirus. Capture otra fotografia.");
   }
 
   if (pipelineResult.objectKey) {
@@ -768,23 +852,31 @@ export async function submitProofAction(tenantSlug: string, formData: FormData) 
     }
   }
 
-  await db.trip.update({
-    where: { id: trip.id },
-    data: {
-      status: "EVIDENCE_SUBMITTED",
-      customerVisibleStatus: customerVisibleStatus.EVIDENCE_SUBMITTED,
-      events: {
-        create: {
-          tenantId: tenant.id,
-          actorId: user.id,
-          fromStatus: trip.status,
-          toStatus: "EVIDENCE_SUBMITTED",
-          note: "Evidencia y firma registradas.",
-          visibleToCustomer: true,
-        },
+  const submitted = await db.$transaction(async (tx) => {
+    const result = await tx.trip.updateMany({
+      where: { id: trip.id, tenantId: tenant.id, status: { in: [...EVIDENCE_SUBMITTABLE_STATUSES] } },
+      data: {
+        status: "EVIDENCE_SUBMITTED",
+        customerVisibleStatus: customerVisibleStatus.EVIDENCE_SUBMITTED,
       },
-    },
+    });
+    if (result.count === 0) return false;
+    await tx.tripEvent.create({
+      data: {
+        tenantId: tenant.id,
+        tripId: trip.id,
+        actorId: user.id,
+        fromStatus: trip.status,
+        toStatus: "EVIDENCE_SUBMITTED",
+        note: "Evidencia y firma registradas.",
+        visibleToCustomer: true,
+      },
+    });
+    return true;
   });
+  if (!submitted) {
+    return actionError("El viaje cambio de estado mientras enviaba la evidencia (posible cancelacion). Avise a operaciones.");
+  }
 
   await audit({
     tenantId: tenant.id,
@@ -803,16 +895,21 @@ export async function submitProofAction(tenantSlug: string, formData: FormData) 
     subject: `Evidencia recibida ${trip.reference}`,
     body: `El conductor envio evidencia para ${trip.reference}.`,
   });
-  revalidatePath(`/t/${tenantSlug}`);
+  revalidatePath(`/t/${tenantSlug}`, "layout");
   revalidatePath(`/t/${tenantSlug}/driver`);
   revalidatePath(`/t/${tenantSlug}/portal`);
+  return actionOk("Evidencia y firma enviadas. Operaciones la revisara.");
 }
 
-export async function approveProofAction(tenantSlug: string, formData: FormData) {
+export async function approveProofAction(
+  tenantSlug: string,
+  _previous: ActionResult,
+  formData: FormData,
+): Promise<ActionResult> {
   const { user, tenant, membership } = await requireTenantRole(tenantSlug, ["OPERATIONS_MANAGER", "TENANT_OWNER"]);
   const tripId = String(formData.get("tripId") ?? "");
   const db = getDb();
-  const trip = await db.trip.findFirstOrThrow({
+  const trip = await db.trip.findFirst({
     where: { id: tripId, tenantId: tenant.id },
     include: {
       tenant: { include: { branding: true } },
@@ -827,7 +924,12 @@ export async function approveProofAction(tenantSlug: string, formData: FormData)
       events: { orderBy: { createdAt: "asc" } },
     },
   });
-  if (!trip.proof) return;
+  if (!trip) return actionError("El viaje no existe o no pertenece a esta empresa.");
+  if (!trip.proof) return actionError("El viaje no tiene evidencia registrada.");
+  if (trip.proof.status !== "SUBMITTED") return actionError("La evidencia ya fue revisada.");
+  if (trip.status !== "EVIDENCE_SUBMITTED") {
+    return actionError(`No se puede aprobar evidencia con el viaje en "${tripStatusLabel[trip.status]}".`);
+  }
 
   const pdfObjectKey = `tenants/${tenant.slug}/trips/${trip.reference}/pod/${trip.reference}-pod.pdf`;
   const pdfBuffer = await generateProofOfDeliveryPdf(trip);
@@ -838,46 +940,57 @@ export async function approveProofAction(tenantSlug: string, formData: FormData)
     contentType: "application/pdf",
   });
 
-  const updatedProof = await db.$transaction(async (tx) => {
-    const proof = await tx.proofOfDelivery.update({
-      where: { id: trip.proof!.id },
-      data: { status: "APPROVED", approvedAt: new Date(), rejectionReason: null },
-    });
-    await tx.document.create({
-      data: {
-        tenantId: tenant.id,
-        customerAccountId: trip.customerAccountId,
-        tripId: trip.id,
-        proofId: proof.id,
-        filename: `${trip.reference}-pod.pdf`,
-        mimeType: "application/pdf",
-        sizeBytes: pdfBuffer.length,
-        bucket: getStorageBucket(),
-        objectKey: pdfObjectKey,
-        visibility: "CUSTOMER_VISIBLE",
-        uploadedById: user.id,
-      },
-    });
-    await tx.trip.update({
-      where: { id: trip.id },
-      data: {
-        status: "EVIDENCE_APPROVED",
-        customerVisibleStatus: customerVisibleStatus.EVIDENCE_APPROVED,
-        proofReady: true,
-        events: {
-          create: {
-            tenantId: tenant.id,
-            actorId: user.id,
-            fromStatus: trip.status,
-            toStatus: "EVIDENCE_APPROVED",
-            note: "Evidencia aprobada y POD generado.",
-            visibleToCustomer: true,
-          },
+  let updatedProof;
+  try {
+    updatedProof = await db.$transaction(async (tx) => {
+      const claimed = await tx.proofOfDelivery.updateMany({
+        where: { id: trip.proof!.id, tenantId: tenant.id, status: "SUBMITTED" },
+        data: { status: "APPROVED", approvedAt: new Date(), rejectionReason: null },
+      });
+      const moved = await tx.trip.updateMany({
+        where: { id: trip.id, tenantId: tenant.id, status: "EVIDENCE_SUBMITTED" },
+        data: {
+          status: "EVIDENCE_APPROVED",
+          customerVisibleStatus: customerVisibleStatus.EVIDENCE_APPROVED,
+          proofReady: true,
         },
-      },
+      });
+      if (claimed.count === 0 || moved.count === 0) throw new StaleStateError();
+      const proof = await tx.proofOfDelivery.findUniqueOrThrow({ where: { id: trip.proof!.id } });
+      await tx.document.create({
+        data: {
+          tenantId: tenant.id,
+          customerAccountId: trip.customerAccountId,
+          tripId: trip.id,
+          proofId: proof.id,
+          filename: `${trip.reference}-pod.pdf`,
+          mimeType: "application/pdf",
+          sizeBytes: pdfBuffer.length,
+          bucket: getStorageBucket(),
+          objectKey: pdfObjectKey,
+          visibility: "CUSTOMER_VISIBLE",
+          uploadedById: user.id,
+        },
+      });
+      await tx.tripEvent.create({
+        data: {
+          tenantId: tenant.id,
+          tripId: trip.id,
+          actorId: user.id,
+          fromStatus: trip.status,
+          toStatus: "EVIDENCE_APPROVED",
+          note: "Evidencia aprobada y POD generado.",
+          visibleToCustomer: true,
+        },
+      });
+      return proof;
     });
-    return proof;
-  });
+  } catch (error) {
+    if (error instanceof StaleStateError) {
+      return actionError("La evidencia o el viaje cambiaron mientras revisaba. Recargue la pagina.");
+    }
+    throw error;
+  }
 
   await audit({
     tenantId: tenant.id,
@@ -904,44 +1017,70 @@ export async function approveProofAction(tenantSlug: string, formData: FormData)
     subject: `POD disponible ${trip.reference}`,
     body: `La prueba de entrega ${trip.reference} esta disponible en el portal.`,
   });
-  revalidatePath(`/t/${tenantSlug}`);
+  revalidatePath(`/t/${tenantSlug}`, "layout");
   revalidatePath(`/t/${tenantSlug}/portal`);
+  return actionOk(`Evidencia aprobada. POD de ${trip.reference} disponible para el cliente.`);
 }
 
-export async function rejectProofAction(tenantSlug: string, formData: FormData) {
+export async function rejectProofAction(
+  tenantSlug: string,
+  _previous: ActionResult,
+  formData: FormData,
+): Promise<ActionResult> {
   const { user, tenant, membership } = await requireTenantRole(tenantSlug, ["OPERATIONS_MANAGER", "TENANT_OWNER"]);
   const tripId = String(formData.get("tripId") ?? "");
-  const reason = String(formData.get("reason") ?? "Correccion requerida.");
+  const reason = String(formData.get("reason") ?? "").trim().slice(0, 1000);
+  if (reason.length < MIN_REASON_LENGTH) return actionError("Escriba el motivo del rechazo para el conductor.");
   const db = getDb();
-  const trip = await db.trip.findFirstOrThrow({
+  const trip = await db.trip.findFirst({
     where: { id: tripId, tenantId: tenant.id },
     include: { proof: true },
   });
-  if (!trip.proof) return;
+  if (!trip) return actionError("El viaje no existe o no pertenece a esta empresa.");
+  if (!trip.proof) return actionError("El viaje no tiene evidencia registrada.");
+  if (trip.proof.status !== "SUBMITTED") return actionError("La evidencia ya fue revisada.");
 
-  const proof = await db.proofOfDelivery.update({
-    where: { id: trip.proof.id },
-    data: { status: "REJECTED", rejectionReason: reason },
-  });
-  await db.tripEvent.create({
-    data: {
-      tenantId: tenant.id,
-      tripId: trip.id,
-      actorId: user.id,
-      fromStatus: trip.status,
-      toStatus: "EVIDENCE_PENDING",
-      note: `Evidencia rechazada: ${reason}`,
-      visibleToCustomer: false,
-    },
-  });
+  try {
+    await db.$transaction(async (tx) => {
+      const claimed = await tx.proofOfDelivery.updateMany({
+        where: { id: trip.proof!.id, tenantId: tenant.id, status: "SUBMITTED" },
+        data: { status: "REJECTED", rejectionReason: reason },
+      });
+      // El viaje vuelve a "Evidencia pendiente" para que el conductor recapture.
+      const moved = await tx.trip.updateMany({
+        where: { id: trip.id, tenantId: tenant.id, status: "EVIDENCE_SUBMITTED" },
+        data: { status: "EVIDENCE_PENDING", customerVisibleStatus: customerVisibleStatus.EVIDENCE_PENDING },
+      });
+      if (claimed.count === 0 || moved.count === 0) throw new StaleStateError();
+      await tx.tripEvent.create({
+        data: {
+          tenantId: tenant.id,
+          tripId: trip.id,
+          actorId: user.id,
+          fromStatus: trip.status,
+          toStatus: "EVIDENCE_PENDING",
+          note: "Evidencia rechazada; se solicito nueva captura.",
+          reason,
+          visibleToCustomer: false,
+        },
+      });
+    });
+  } catch (error) {
+    if (error instanceof StaleStateError) {
+      return actionError("La evidencia o el viaje cambiaron mientras revisaba. Recargue la pagina.");
+    }
+    throw error;
+  }
   await audit({
     tenantId: tenant.id,
     actorId: user.id,
     actorRole: membership.role,
     action: "proof.reject",
     entity: "ProofOfDelivery",
-    entityId: proof.id,
+    entityId: trip.proof.id,
     after: { reason },
   });
-  revalidatePath(`/t/${tenantSlug}`);
+  revalidatePath(`/t/${tenantSlug}`, "layout");
+  revalidatePath(`/t/${tenantSlug}/driver`);
+  return actionOk("Evidencia rechazada. El conductor debera capturarla de nuevo.");
 }

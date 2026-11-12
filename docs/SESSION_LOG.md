@@ -102,3 +102,25 @@
 - 20 E2E tests nuevos (66 total).
 - 38 unit tests de observabilidad.
 - Documentacion: ADR-021, ADR-022, OBSERVABILITY_ARCHITECTURE, HEALTH_CHECKS, ALERTING_POLICY, OPERATIONAL_RUNBOOK.
+
+## 2026-11-12 Auditoría y remediación P0 del núcleo operativo (ADR-035)
+
+- Auditoría de solo lectura: arquitectura, auth, multitenant, lógica de viajes, finanzas y
+  documentación. Hallazgos priorizados P0, P1 y P2.
+- Cancelación con motivo; `DELIVERY_FAILED` con reintento o retorno; espera en origen
+  opcional; reasignación hasta `DRIVER_CONFIRMED`.
+- Máquina de estados de solicitudes: pedir información, rechazar, responder, enviar
+  borrador, cancelar (`statusReason` visible al cliente).
+- `ActionResult` + `ActionForm`: mensajes de bloqueo en lugar de `return;` silenciosos.
+- Bloqueo optimista en las transiciones online y offline, en la evidencia y en las
+  solicitudes; `FOR UPDATE` en la asignación.
+- Rechazar evidencia devuelve el viaje a `EVIDENCE_PENDING`.
+- Cerrado el bypass de aceptar o anular una recomendación de conductor.
+- Migración aditiva `20261112120000_trip_exceptions_and_request_reasons`.
+- Verificación:
+  - typecheck, lint 0/0, 317 tests unitarios, `security:check` 77/77, build;
+  - 6 E2E nuevos;
+  - `offline-sync` 9/9.
+- Hallazgos de entorno documentados en `VERIFICATION_LATEST.md`: seed vencido, 246 viajes
+  acumulados que tumban el dev server, carrera de login en un helper E2E.
+

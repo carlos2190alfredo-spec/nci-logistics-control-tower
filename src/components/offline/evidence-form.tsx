@@ -4,7 +4,7 @@ import { useState } from "react";
 import { AlertTriangle, PackageCheck } from "lucide-react";
 import { EvidencePhotoCapture } from "@/components/offline/evidence-photo-capture";
 import { SignaturePad } from "@/components/signature-pad";
-import { Alert, Field, SubmitButton, TextArea } from "@/components/ui";
+import { ActionForm, Alert, Field, SubmitButton, TextArea } from "@/components/ui";
 import { submitProofAction } from "@/lib/server/actions";
 import type { OfflinePhoto } from "@/lib/offline/photo-store";
 
@@ -51,7 +51,7 @@ export function EvidenceForm({
           </span>
         </div>
       )}
-      <form action={submitProofAction.bind(null, tenantSlug)} className="grid gap-3">
+      <ActionForm action={submitProofAction.bind(null, tenantSlug)} className="grid gap-3">
         <input name="tripId" type="hidden" value={tripId} />
         <input name="availablePhotoIds" type="hidden" value={availableIds.join(",")} />
         <Field defaultValue="Receptor Demo" label="Nombre del receptor" name="receiverName" />
@@ -72,7 +72,7 @@ export function EvidenceForm({
         <SubmitButton size="lg" variant="success">
           Registrar evidencia y firma
         </SubmitButton>
-      </form>
+      </ActionForm>
     </div>
   );
 }

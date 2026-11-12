@@ -1,8 +1,9 @@
+import { OPERATIONS_INBOX_REQUEST_STATUSES } from "@/lib/domain/request-state-machine";
 import { getDb } from "@/lib/server/db";
 
 export async function getTenantRequests(tenantId: string) {
   return getDb().serviceRequest.findMany({
-    where: { tenantId, status: { in: ["REQUESTED", "UNDER_REVIEW", "CONFIRMED"] } },
+    where: { tenantId, status: { in: OPERATIONS_INBOX_REQUEST_STATUSES } },
     include: { customerAccount: true, serviceType: true },
     orderBy: { createdAt: "desc" },
   });

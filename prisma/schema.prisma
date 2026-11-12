@@ -74,6 +74,7 @@ enum TripStatus {
   IN_TRANSIT
   ARRIVED_AT_DESTINATION
   DELIVERY_IN_PROGRESS
+  DELIVERY_FAILED
   DELIVERED
   EVIDENCE_PENDING
   EVIDENCE_SUBMITTED
@@ -479,6 +480,8 @@ model ServiceRequest {
   cargoDetails      Json                 @default("{}") @map("cargo_details")
   customerNotes     String?              @map("customer_notes")
   internalNotes     String?              @map("internal_notes")
+  /// Motivo del ultimo cambio de estado (rechazo, pedido de informacion, cancelacion). Visible al cliente.
+  statusReason      String?              @map("status_reason")
   createdById       String?              @map("created_by_id") @db.Uuid
   createdAt         DateTime             @default(now()) @map("created_at")
   updatedAt         DateTime             @updatedAt @map("updated_at")
@@ -576,6 +579,8 @@ model TripEvent {
   fromStatus        TripStatus? @map("from_status")
   toStatus          TripStatus  @map("to_status")
   note              String?
+  /// Motivo interno de una transicion de excepcion (cancelacion, entrega fallida). Nunca se muestra al cliente.
+  reason            String?
   visibleToCustomer Boolean     @default(false) @map("visible_to_customer")
   createdAt         DateTime    @default(now()) @map("created_at")
   trip              Trip        @relation(fields: [tripId], references: [id], onDelete: Cascade)

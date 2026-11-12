@@ -16,8 +16,10 @@ import { AppShell } from "@/components/shell/app-shell";
 import type { ShellNavGroup } from "@/components/shell/shell-chrome";
 import { TripMap } from "@/components/trip-map";
 import {
+  ActionForm,
   Card,
   CardHeader,
+  Collapsible,
   DocumentCard,
   EmptyState,
   Field,
@@ -32,6 +34,9 @@ import {
   TimelineItem,
 } from "@/components/ui";
 import { createServiceRequestAction } from "@/lib/server/actions";
+import { customerRequestAction } from "@/lib/server/request-actions";
+import { availableRequestActions } from "@/lib/domain/request-state-machine";
+import type { ServiceRequest } from "@/generated/prisma";
 import { customerNextStep } from "@/lib/domain/state-machine";
 import { requireCustomerMembership } from "@/lib/server/auth";
 import { getDb } from "@/lib/server/db";
@@ -53,6 +58,57 @@ function documentLabel(filename: string) {
     return "Evidencia de entrega";
   }
   return filename;
+}
+
+/** Acciones del cliente sobre su solicitud segun el estado (ADR-035). */
+function CustomerRequestActions({
+  request,
+  tenantSlug,
+  canAct,
+}: {
+  request: ServiceRequest;
+  tenantSlug: string;
+  canAct: boolean;
+}) {
+  // Solo CUSTOMER_ADMIN modifica solicitudes; el servidor lo vuelve a exigir.
+  const actions = canAct ? availableRequestActions(request.status, "CUSTOMER") : [];
+  const showReason = (request.status === "REJECTED" || request.status === "INFORMATION_REQUIRED") && request.statusReason;
+  if (!actions.length && !showReason) return null;
+  return (
+    <div className="grid w-full gap-2">
+      {showReason ? (
+        <p className={request.status === "REJECTED" ? "text-sm text-danger-strong" : "text-sm text-warning-strong"}>
+          {request.status === "REJECTED" ? "Motivo del rechazo: " : "Operaciones necesita: "}
+          {request.statusReason}
+        </p>
+      ) : null}
+      {actions.includes("provide_info") ? (
+        <ActionForm action={customerRequestAction.bind(null, tenantSlug)} className="grid gap-2">
+          <input name="requestId" type="hidden" value={request.id} />
+          <input name="decision" type="hidden" value="provide_info" />
+          <TextArea label="Su respuesta" name="reason" required rows={2} />
+          <SubmitButton variant="secondary">Enviar respuesta</SubmitButton>
+        </ActionForm>
+      ) : null}
+      {actions.includes("submit_draft") ? (
+        <ActionForm action={customerRequestAction.bind(null, tenantSlug)} className="grid gap-2">
+          <input name="requestId" type="hidden" value={request.id} />
+          <input name="decision" type="hidden" value="submit_draft" />
+          <SubmitButton variant="secondary">Enviar borrador a operaciones</SubmitButton>
+        </ActionForm>
+      ) : null}
+      {actions.includes("cancel") ? (
+        <Collapsible summary="Cancelar solicitud">
+          <ActionForm action={customerRequestAction.bind(null, tenantSlug)} className="grid gap-2">
+            <input name="requestId" type="hidden" value={request.id} />
+            <input name="decision" type="hidden" value="cancel" />
+            <TextArea label="Motivo (opcional)" name="reason" rows={2} />
+            <SubmitButton variant="danger">Cancelar solicitud</SubmitButton>
+          </ActionForm>
+        </Collapsible>
+      ) : null}
+    </div>
+  );
 }
 
 export default async function CustomerPortalPage({ params }: { params: Promise<{ tenantSlug: string }> }) {
@@ -266,6 +322,11 @@ export default async function CustomerPortalPage({ params }: { params: Promise<{
                           </p>
                         </div>
                         <StatusBadge label={requestStatusLabel[request.status]} tone={requestStatusTone[request.status]} />
+                        <CustomerRequestActions
+                          canAct={membership.role === "CUSTOMER_ADMIN"}
+                          request={request}
+                          tenantSlug={tenantSlug}
+                        />
                       </div>
                     ))
                   ) : (

@@ -51,6 +51,37 @@ function isPrismaUniqueViolation(error: unknown): boolean {
   return typeof error === "object" && error !== null && "code" in error && (error as { code?: string }).code === "P2002";
 }
 
+/** El estado del viaje cambio entre la lectura y la escritura. */
+class StaleTripStateError extends Error {
+  constructor() {
+    super("stale_trip_state");
+    this.name = "StaleTripStateError";
+  }
+}
+
+/** Registra un receipt CONFLICT (idempotente: un duplicado se ignora). */
+async function recordConflictReceipt(ctx: SyncContext, command: OfflineCommand, tripId: string, payloadHash: string) {
+  try {
+    await getDb().offlineCommandReceipt.create({
+      data: {
+        tenantId: ctx.tenantId,
+        userId: ctx.userId,
+        driverId: ctx.driverId,
+        tripId,
+        idempotencyKey: command.idempotencyKey,
+        actionType: command.payload.actionType,
+        payloadHash,
+        status: "CONFLICT",
+        errorCode: ErrorCodes.STATE_CONFLICT,
+        clientQueuedAt: new Date(command.clientQueuedAt),
+        expiresAt: new Date(Date.now() + RECEIPT_TTL_DAYS * 24 * 60 * 60 * 1000),
+      },
+    });
+  } catch (error) {
+    if (!isPrismaUniqueViolation(error)) throw error;
+  }
+}
+
 async function processTransition(ctx: SyncContext, command: OfflineCommand): Promise<OfflineCommandResult> {
   if (command.payload.actionType !== "trip.transition") throw new Error("wrong action");
   const { tripId, nextStatus, note } = command.payload;
@@ -107,27 +138,7 @@ async function processTransition(ctx: SyncContext, command: OfflineCommand): Pro
   }
 
   if (!canTransition(trip.status, nextStatus, ctx.role)) {
-    try {
-      await db.$transaction(async (tx) => {
-        await tx.offlineCommandReceipt.create({
-          data: {
-            tenantId: ctx.tenantId,
-            userId: ctx.userId,
-            driverId: ctx.driverId,
-            tripId,
-            idempotencyKey: command.idempotencyKey,
-            actionType: command.payload.actionType,
-            payloadHash,
-            status: "CONFLICT",
-            errorCode: ErrorCodes.STATE_CONFLICT,
-            clientQueuedAt: new Date(command.clientQueuedAt),
-            expiresAt: new Date(Date.now() + RECEIPT_TTL_DAYS * 24 * 60 * 60 * 1000),
-          },
-        });
-      });
-    } catch (error) {
-      if (!isPrismaUniqueViolation(error)) throw error;
-    }
+    await recordConflictReceipt(ctx, command, tripId, payloadHash);
     return reject(command, ErrorCodes.STATE_CONFLICT, false, {
       currentServerState: trip.status,
       nextAllowedActions: nextStatuses(trip.status, ctx.role),
@@ -152,15 +163,19 @@ async function processTransition(ctx: SyncContext, command: OfflineCommand): Pro
           expiresAt: new Date(Date.now() + RECEIPT_TTL_DAYS * 24 * 60 * 60 * 1000),
         },
       });
-      // 2. Mutaciones dentro del mismo commit atomico.
-      await tx.trip.update({
-        where: { id: trip.id },
+      // 2. Mutaciones dentro del mismo commit atomico. Bloqueo optimista: si
+      //    operaciones cambio el estado o reasigno el viaje desde la lectura,
+      //    el update afecta 0 filas y toda la transaccion (receipt incluido)
+      //    hace rollback.
+      const moved = await tx.trip.updateMany({
+        where: { id: trip.id, tenantId: ctx.tenantId, status: trip.status, driverId: ctx.driverId },
         data: {
           status: nextStatus,
           customerVisibleStatus: customerVisibleStatus[nextStatus],
           simulationStartedAt: nextStatus === "EN_ROUTE_TO_ORIGIN" ? new Date() : undefined,
         },
       });
+      if (moved.count === 0) throw new StaleTripStateError();
       const event = await tx.tripEvent.create({
         data: {
           tenantId: ctx.tenantId,
@@ -179,6 +194,20 @@ async function processTransition(ctx: SyncContext, command: OfflineCommand): Pro
       return event.id;
     });
   } catch (error) {
+    if (error instanceof StaleTripStateError) {
+      const current = await db.trip.findFirst({
+        where: { id: trip.id, tenantId: ctx.tenantId },
+        select: { status: true, driverId: true },
+      });
+      if (!current || current.driverId !== ctx.driverId) {
+        return reject(command, ErrorCodes.ASSIGNMENT_CHANGED);
+      }
+      await recordConflictReceipt(ctx, command, tripId, payloadHash);
+      return reject(command, ErrorCodes.STATE_CONFLICT, false, {
+        currentServerState: current.status,
+        nextAllowedActions: nextStatuses(current.status, ctx.role),
+      });
+    }
     if (isPrismaUniqueViolation(error)) {
       // Otro request con misma idempotencyKey gano la carrera. Devolvemos su resultado.
       const existing = await db.offlineCommandReceipt.findUnique({
