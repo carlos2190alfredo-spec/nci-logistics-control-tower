@@ -3,9 +3,9 @@
  * finanzas) — cubre lo que las verificaciones vía curl ya validaron por HTTP,
  * pero navegando la UI real como haría un usuario.
  */
-import { expect, test, type Page } from "@playwright/test";
-import { TOTP } from "otpauth";
+import { expect, test } from "@playwright/test";
 import { PrismaClient } from "../../src/generated/prisma";
+import { login } from "./helpers/auth";
 
 // Reset MFA/login rate-limit buckets antes de CADA test: cada test hace un
 // login fresco con MFA y la ventana de rate-limit se agotaría en 5-6 tests.
@@ -20,33 +20,12 @@ test.beforeEach(async () => {
   }
 });
 
-const SEED_TOTP_SECRET = "JBSWY3DPEHPK3PXP4567ABCDEFGHIJKL";
-const MFA_USERS = new Set(["platform@nci.local", "owner@panatruck.local", "owner@translogistica.local"]);
 
 const users = {
   panatruckOwner: ["owner@panatruck.local", "PanatruckOwner2026!"],
   panatruckOperations: ["operaciones@panatruck.local", "Operaciones2026!"],
   transOwner: ["owner@translogistica.local", "TransLogistica2026!"],
 } as const;
-
-async function login(page: Page, email: string, password: string) {
-  await page.goto("/login");
-  await page.getByLabel("Correo").fill(email);
-  await page.getByLabel("Contrasena").fill(password);
-  await Promise.all([
-    page.waitForURL(/\/(mfa\/verify|t\/|platform|conductor|cliente)/, { timeout: 15_000 }),
-    page.getByRole("button", { name: "Entrar" }).click(),
-  ]);
-
-  if (MFA_USERS.has(email) && page.url().includes("/mfa/verify")) {
-    const totp = new TOTP({ secret: SEED_TOTP_SECRET, algorithm: "SHA1", digits: 6, period: 30 });
-    await page.getByLabel("Codigo de verificacion").fill(totp.generate());
-    await Promise.all([
-      page.waitForURL((u) => !u.pathname.includes("/mfa/verify"), { timeout: 15_000 }),
-      page.getByRole("button", { name: "Verificar" }).click(),
-    ]);
-  }
-}
 
 test.describe("Panamá — cumplimiento", () => {
   test("owner ve el semáforo y la lista de documentos", async ({ page }) => {

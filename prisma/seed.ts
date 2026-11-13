@@ -412,7 +412,9 @@ async function main() {
     for (const c of complianceDemo) {
       await prisma.complianceDocument.upsert({
         where: { id: demoUuid(tenant.id, `0000-4000-8000-0000000003${c.hx}`) },
-        update: {},
+        // Los vencimientos son relativos a "hoy": re-sembrar debe refrescarlos,
+        // si no el escenario demo caduca con el calendario (VH-1 vencio el 2026-10-05).
+        update: { status: c.status, expiresAt: c.exp },
         create: {
           id: demoUuid(tenant.id, `0000-4000-8000-0000000003${c.hx}`),
           tenantId: tenant.id,
@@ -436,7 +438,12 @@ async function main() {
     for (const ct of containerDemo) {
       await prisma.container.upsert({
         where: { id: demoUuid(tenant.id, `0000-4000-8000-0000000004${ct.hx}`) },
-        update: {},
+        update: {
+          status: ct.status,
+          gateOutAt: "gateOutAt" in ct ? ct.gateOutAt : null,
+          availableAt: "availableAt" in ct ? ct.availableAt : null,
+          returnDeadline: "returnDeadline" in ct ? ct.returnDeadline : null,
+        },
         create: {
           id: demoUuid(tenant.id, `0000-4000-8000-0000000004${ct.hx}`),
           tenantId: tenant.id,

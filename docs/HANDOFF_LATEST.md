@@ -37,14 +37,18 @@ Agente: Claude Opus 5.5 (auditoría + remediación P0 del núcleo operativo)
 
 ## Pendiente para la próxima sesión
 
-- **Datos locales:**
-  - renovar la póliza VH-1 del seed (usar fechas relativas a "hoy" al correr el seed, o
-    re-seed);
-  - limpiar los 246 viajes E2E acumulados (`pnpm db:reset` es destructivo: pedir
-    autorización);
-  - paginar `/trips`.
-- **Arreglar el helper `login` de los E2E existentes:** esperar `networkidle` antes de
-  `fill`.
+- **Datos locales (hecho en la segunda parte de la sesión):**
+  - el seed ahora refresca vencimientos de cumplimiento y fechas de contenedores al
+    re-ejecutarse (antes `update: {}` los congelaba);
+  - nuevo `pnpm e2e:cleanup` (dry-run por defecto, `--apply` borra): elimina viajes de
+    tenants demo cuya solicitud no es del seed (`cargoDetails.demo`), con sus documentos,
+    adjuntos, incidentes, recibos offline y objetos de MinIO;
+  - aplicado: 295 viajes E2E borrados, quedan 10 + 5 del seed;
+  - ClamAV local estaba detenido: `docker compose up -d clamav` (no está en `local:up`).
+- **Pendiente:** paginar `/trips`; los E2E siguen sin limpiar lo que crean (correr
+  `pnpm e2e:cleanup --apply` tras cada suite completa).
+- **Helper `login` (hecho):** `tests/e2e/helpers/auth.ts` es el único helper; las specs
+  nuevas deben importarlo. Suite completa 103/103 sin reintentos desde DB limpia.
 - **P1 de la auditoría:**
   - RLS o claves foráneas compuestas;
   - enlaces por UUID;
@@ -53,4 +57,4 @@ Agente: Claude Opus 5.5 (auditoría + remediación P0 del núcleo operativo)
   - moneda en finanzas;
   - matriz de roles central.
 - **Conductor declarando entrega fallida desde la PWA offline:** hoy solo operaciones.
-- Nada commiteado (sin autorización de commit).
+- ADR-035 commiteado en `5787d15`. Seed y limpieza: sin commit al cierre.

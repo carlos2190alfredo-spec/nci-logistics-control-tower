@@ -1,7 +1,6 @@
 import { randomUUID } from "node:crypto";
-import { test, expect, type Page } from "@playwright/test";
+import { test, expect } from "@playwright/test";
 import { config } from "dotenv";
-import { TOTP } from "otpauth";
 import { PrismaClient } from "../../src/generated/prisma";
 import {
   S3Client,
@@ -9,12 +8,12 @@ import {
   DeleteObjectCommand,
 } from "@aws-sdk/client-s3";
 import { Socket } from "node:net";
+import { processUploadThroughPipeline } from "../../src/lib/server/file-pipeline";
+import { login } from "./helpers/auth";
 
 config({ path: ".env.local" });
 
 const db = new PrismaClient();
-const SEED_TOTP_SECRET = "JBSWY3DPEHPK3PXP4567ABCDEFGHIJKL";
-const MFA_USERS = new Set(["owner@panatruck.local", "owner@translogistica.local", "platform@nci.local"]);
 
 const s3 = new S3Client({
   endpoint: process.env.MINIO_ENDPOINT ?? "http://localhost:9000",
@@ -41,21 +40,6 @@ const users = {
   driver: ["conductor1@panatruck.local", "Conductor2026!"],
   transOwner: ["owner@translogistica.local", "TransLogistica2026!"],
 } as const;
-
-async function login(page: Page, email: string, password: string) {
-  await page.goto("/login");
-  await page.getByLabel("Correo").fill(email);
-  await page.getByLabel("Contrasena").fill(password);
-  await page.getByRole("button", { name: "Entrar" }).click();
-  await page.waitForLoadState("networkidle");
-
-  if (MFA_USERS.has(email) && page.url().includes("/mfa/verify")) {
-    const totp = new TOTP({ secret: SEED_TOTP_SECRET, algorithm: "SHA1", digits: 6, period: 30 });
-    await page.getByLabel("Codigo de verificacion").fill(totp.generate());
-    await page.getByRole("button", { name: "Verificar" }).click();
-    await page.waitForLoadState("networkidle");
-  }
-}
 
 function clamavPing(): Promise<boolean> {
   return new Promise((resolve) => {
@@ -205,19 +189,36 @@ test.describe.serial("FILE-SEC file security pipeline", () => {
   test("FILE-SEC-E2E-004 tenant isolation prevents cross-tenant document access", async ({ page }) => {
     if (!testTrip) test.skip();
 
-    const docs = await db.document.findMany({
-      where: { tenantId: panatruck.id, visibility: "CUSTOMER_VISIBLE" },
-      take: 1,
+    // Documento propio de Panatruck: antes se omitia si la DB no traia documentos
+    // visibles al cliente de corridas previas (caso habitual tras `pnpm e2e:cleanup`).
+    const objectKey = `tenants/panatruck-demo/trips/${testTrip.reference}/evidence/isolation-${randomUUID()}.png`;
+    await s3.send(new PutObjectCommand({ Bucket: BUCKET, Key: objectKey, Body: pngFixture, ContentType: "image/png" }));
+    const doc = await db.document.create({
+      data: {
+        tenantId: panatruck.id,
+        customerAccountId: testTrip.customerAccountId,
+        tripId: testTrip.id,
+        filename: `isolation-${randomUUID()}.png`,
+        mimeType: "image/png",
+        sizeBytes: pngFixture.length,
+        bucket: BUCKET,
+        objectKey,
+        visibility: "CUSTOMER_VISIBLE",
+      },
     });
-    if (docs.length === 0) test.skip();
 
-    await login(page, ...users.transOwner);
-    const response = await page.request.get(
-      `/api/t/translogistica-demo/documents/${docs[0].id}`,
-      { maxRedirects: 0 },
-    );
-    expect(response.status()).not.toBe(303);
-    expect(response.ok()).toBe(false);
+    try {
+      await login(page, ...users.transOwner);
+      const response = await page.request.get(
+        `/api/t/translogistica-demo/documents/${doc.id}`,
+        { maxRedirects: 0 },
+      );
+      expect(response.status()).not.toBe(303);
+      expect(response.ok()).toBe(false);
+    } finally {
+      await db.document.delete({ where: { id: doc.id } });
+      await s3.send(new DeleteObjectCommand({ Bucket: BUCKET, Key: objectKey })).catch(() => {});
+    }
   });
 
   test("FILE-SEC-E2E-005 PENDING_SCAN file blocked from download", async ({ page }) => {
@@ -375,19 +376,45 @@ test.describe.serial("FILE-SEC file security pipeline", () => {
   });
 
   test("FILE-SEC-E2E-008 FileAttachment records scan events", async () => {
-    const attachments = await db.fileAttachment.findMany({
-      where: { tenantId: panatruck.id },
+    if (!testTrip) test.skip();
+
+    // Autosuficiente: antes dependia de adjuntos que dejaban corridas previas, y
+    // fallaba con la DB recien limpiada (`pnpm e2e:cleanup`). Pasa un archivo
+    // real por el pipeline (cuarentena → ClamAV → promocion) y lo borra al final.
+    const own = await processUploadThroughPipeline({
+      tenantId: panatruck.id,
+      tripId: testTrip.id,
+      filename: `scan-event-${randomUUID()}.png`,
+      mimeType: "image/png",
+      buffer: pngFixture,
+      targetKey: `tenants/panatruck-demo/trips/${testTrip.reference}/evidence/scan-event-${randomUUID()}.png`,
+    });
+    const ownAttachment = await db.fileAttachment.findUniqueOrThrow({
+      where: { id: own.fileAttachmentId },
       include: { scanEvents: true },
     });
+    try {
+      expect(own.verdict).toBe("CLEAN");
+      expect(ownAttachment.scanEvents.length).toBeGreaterThan(0);
 
-    const scanned = attachments.filter((a) => a.scanEvents.length > 0);
-    expect(scanned.length).toBeGreaterThan(0);
+      const attachments = await db.fileAttachment.findMany({
+        where: { tenantId: panatruck.id },
+        include: { scanEvents: true },
+      });
+      const scanned = attachments.filter((a) => a.scanEvents.length > 0);
+      expect(scanned.length).toBeGreaterThan(0);
 
-    for (const a of scanned) {
-      expect(a.scanVerdict).toBeTruthy();
-      expect(a.scannedAt).toBeTruthy();
-      for (const event of a.scanEvents) {
-        expect(["CLEAN", "INFECTED", "ERROR"]).toContain(event.verdict);
+      for (const a of scanned) {
+        expect(a.scanVerdict).toBeTruthy();
+        expect(a.scannedAt).toBeTruthy();
+        for (const event of a.scanEvents) {
+          expect(["CLEAN", "INFECTED", "ERROR"]).toContain(event.verdict);
+        }
+      }
+    } finally {
+      await db.fileAttachment.delete({ where: { id: ownAttachment.id } });
+      for (const key of [ownAttachment.quarantineKey, ownAttachment.objectKey]) {
+        if (key) await s3.send(new DeleteObjectCommand({ Bucket: BUCKET, Key: key })).catch(() => {});
       }
     }
   });

@@ -1,9 +1,9 @@
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test } from "@playwright/test";
 import { config } from "dotenv";
-import { TOTP } from "otpauth";
 import { PrismaClient } from "../../src/generated/prisma";
 import { hashPassword } from "../../src/lib/server/crypto";
 import { encryptSecret } from "../../src/lib/server/mfa-crypto";
+import { login as loginWithMfa } from "./helpers/auth";
 
 config({ path: ".env.local" });
 
@@ -18,24 +18,6 @@ const tenantUserPass = "TenUser2026!";
 
 let tenantSlug: string;
 let _tenantId: string;
-
-async function loginWithMfa(page: Page, email: string, password: string) {
-  await page.goto("/login");
-  await page.waitForLoadState("networkidle");
-  await page.getByLabel("Correo").fill(email);
-  await page.getByLabel("Contrasena").fill(password);
-  await page.getByRole("button", { name: "Entrar" }).click();
-  await page.waitForURL((url) => !url.pathname.endsWith("/login"), { timeout: 15000 });
-  await page.waitForLoadState("networkidle");
-
-  if (page.url().includes("/mfa/verify")) {
-    const totp = new TOTP({ secret: SEED_TOTP_SECRET, algorithm: "SHA1", digits: 6, period: 30 });
-    await page.getByLabel("Codigo de verificacion").fill(totp.generate());
-    await page.getByRole("button", { name: "Verificar" }).click();
-    await page.waitForURL((url) => !url.pathname.includes("/mfa/"), { timeout: 15000 });
-    await page.waitForLoadState("networkidle");
-  }
-}
 
 test.describe.configure({ mode: "serial" });
 
@@ -205,7 +187,8 @@ test("FEEDBACK-E2E-001: tenant owner can submit feedback", async ({ page }) => {
   await loginWithMfa(page, tenantOwnerEmail, tenantOwnerPass);
   await page.goto(`/t/${tenantSlug}/admin/feedback`);
   await expect(page.getByRole("heading", { name: "Feedback", exact: true })).toBeVisible();
-  await page.locator("select[name='type']").selectOption("BUG");
+  // `:visible`: durante el streaming puede existir una copia oculta del formulario.
+  await page.locator("select[name='type']:visible").selectOption("BUG");
   await page.locator("input[name='title']").fill("E2E Test Bug Report");
   await page.locator("textarea[name='description']").fill("This is an automated E2E test feedback submission.");
   await page.getByRole("button", { name: "Enviar feedback" }).click();

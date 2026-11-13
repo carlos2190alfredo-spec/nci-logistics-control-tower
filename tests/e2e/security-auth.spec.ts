@@ -1,9 +1,9 @@
-import { expect, test, type BrowserContext, type Page } from "@playwright/test";
+import { expect, test, type BrowserContext } from "@playwright/test";
 import { config } from "dotenv";
-import { TOTP } from "otpauth";
 import { PrismaClient } from "../../src/generated/prisma";
 import { hashPassword } from "../../src/lib/server/crypto";
 import { encryptSecret } from "../../src/lib/server/mfa-crypto";
+import { login } from "./helpers/auth";
 
 config({ path: ".env.local" });
 
@@ -11,21 +11,6 @@ const db = new PrismaClient();
 
 const SEED_TOTP_SECRET = "JBSWY3DPEHPK3PXP4567ABCDEFGHIJKL";
 const testUser = { email: `sec-e2e-${Date.now()}@nci.local`, password: "InitialTest2026!" };
-
-async function login(page: Page, email: string, password: string) {
-  await page.goto("/login");
-  await page.getByLabel("Correo").fill(email);
-  await page.getByLabel("Contrasena").fill(password);
-  await page.getByRole("button", { name: "Entrar" }).click();
-  await page.waitForLoadState("networkidle");
-
-  if (page.url().includes("/mfa/verify")) {
-    const totp = new TOTP({ secret: SEED_TOTP_SECRET, algorithm: "SHA1", digits: 6, period: 30 });
-    await page.getByLabel("Codigo de verificacion").fill(totp.generate());
-    await page.getByRole("button", { name: "Verificar" }).click();
-    await page.waitForLoadState("networkidle");
-  }
-}
 
 async function ensureUser(email: string, password: string) {
   const user = await db.user.upsert({

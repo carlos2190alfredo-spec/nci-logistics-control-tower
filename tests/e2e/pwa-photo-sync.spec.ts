@@ -1,6 +1,7 @@
-import { test, expect, type Page } from "@playwright/test";
+import { test, expect } from "@playwright/test";
 import { config } from "dotenv";
 import { PrismaClient } from "../../src/generated/prisma";
+import { login } from "./helpers/auth";
 
 config({ path: ".env.local" });
 
@@ -11,13 +12,49 @@ const users = {
   operations: ["operaciones@panatruck.local", "Operaciones2026!"],
 } as const;
 
-async function login(page: Page, email: string, password: string) {
-  await page.goto("/login");
-  await page.getByLabel("Correo").fill(email);
-  await page.getByLabel("Contrasena").fill(password);
-  await page.getByRole("button", { name: "Entrar" }).click();
-  await page.waitForLoadState("networkidle");
-}
+/**
+ * Viaje propio en DELIVERY_IN_PROGRESS para DR-1: sin el, las pruebas de captura de
+ * foto se omitian en una DB recien sembrada (solo pasaban con datos sobrantes de
+ * otras corridas). Se borra al final.
+ */
+let evidenceTripId: string | undefined;
+
+test.beforeAll(async () => {
+  const tenant = await db.tenant.findUniqueOrThrow({ where: { slug: "panatruck-demo" } });
+  const driver = await db.driver.findFirstOrThrow({ where: { tenantId: tenant.id, code: "DR-1" } });
+  const vehicle = await db.vehicle.findFirstOrThrow({ where: { tenantId: tenant.id, code: "VH-1" } });
+  const equipment = await db.equipment.findFirstOrThrow({ where: { tenantId: tenant.id, code: "EQ-1" } });
+  const serviceType = await db.serviceType.findFirstOrThrow({ where: { tenantId: tenant.id } });
+  const customer = await db.customerAccount.findFirstOrThrow({ where: { tenantId: tenant.id } });
+  const stamp = Date.now();
+  const trip = await db.trip.create({
+    data: {
+      tenantId: tenant.id,
+      customerAccountId: customer.id,
+      serviceTypeId: serviceType.id,
+      reference: `PHOTO-E2E-${stamp}`,
+      status: "DELIVERY_IN_PROGRESS",
+      origin: `PHOTO-ORIG-${stamp}`,
+      destination: `PHOTO-DEST-${stamp}`,
+      scheduledAt: new Date(stamp - 60 * 60 * 1000),
+      eta: new Date(stamp + 60 * 60 * 1000),
+      driverId: driver.id,
+      vehicleId: vehicle.id,
+      equipmentId: equipment.id,
+      customerVisibleStatus: "Entrega en curso",
+      routePoints: [
+        { label: "Inicio", lat: 9.0, lng: -79.0 },
+        { label: "Fin", lat: 9.1, lng: -79.1 },
+      ],
+    },
+  });
+  evidenceTripId = trip.id;
+});
+
+test.afterAll(async () => {
+  if (evidenceTripId) await db.trip.delete({ where: { id: evidenceTripId } }).catch(() => {});
+  await db.$disconnect();
+});
 
 test.describe("PWA-E2E PWA installability and service worker", () => {
   test("PWA-E2E-001 manifest is served with correct fields", async ({ page }) => {

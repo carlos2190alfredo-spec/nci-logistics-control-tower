@@ -1,9 +1,9 @@
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test } from "@playwright/test";
 import { config } from "dotenv";
-import { TOTP } from "otpauth";
 import { PrismaClient } from "../../src/generated/prisma";
 import { hashPassword } from "../../src/lib/server/crypto";
 import { encryptSecret } from "../../src/lib/server/mfa-crypto";
+import { login as loginWithMfa } from "./helpers/auth";
 
 config({ path: ".env.local" });
 
@@ -13,24 +13,6 @@ const adminEmail = `obs-admin-${Date.now()}@nci.local`;
 const driverEmail = `obs-driver-${Date.now()}@nci.local`;
 const adminPass = "ObsAdmin2026!";
 const driverPass = "ObsDriver2026!";
-
-async function loginWithMfa(page: Page, email: string, password: string) {
-  await page.goto("/login");
-  await page.waitForLoadState("networkidle");
-  await page.getByLabel("Correo").fill(email);
-  await page.getByLabel("Contrasena").fill(password);
-  await page.getByRole("button", { name: "Entrar" }).click();
-  await page.waitForURL((url) => !url.pathname.endsWith("/login"), { timeout: 15000 });
-  await page.waitForLoadState("networkidle");
-
-  if (page.url().includes("/mfa/verify")) {
-    const totp = new TOTP({ secret: SEED_TOTP_SECRET, algorithm: "SHA1", digits: 6, period: 30 });
-    await page.getByLabel("Codigo de verificacion").fill(totp.generate());
-    await page.getByRole("button", { name: "Verificar" }).click();
-    await page.waitForURL((url) => !url.pathname.includes("/mfa/"), { timeout: 15000 });
-    await page.waitForLoadState("networkidle");
-  }
-}
 
 test.describe.configure({ mode: "serial" });
 

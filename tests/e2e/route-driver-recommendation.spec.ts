@@ -1,33 +1,16 @@
-import { test, expect, type Page } from "@playwright/test";
+import { test, expect } from "@playwright/test";
 import { config } from "dotenv";
-import { TOTP } from "otpauth";
 import { PrismaClient } from "../../src/generated/prisma";
+import { login } from "./helpers/auth";
 
 config({ path: ".env.local" });
 
 const db = new PrismaClient();
-const SEED_TOTP_SECRET = "JBSWY3DPEHPK3PXP4567ABCDEFGHIJKL";
-const MFA_USERS = new Set(["owner@panatruck.local", "owner@translogistica.local", "platform@nci.local"]);
 
 const users = {
   operations: ["operaciones@panatruck.local", "Operaciones2026!"],
   transOwner: ["owner@translogistica.local", "TransLogistica2026!"],
 } as const;
-
-async function login(page: Page, email: string, password: string) {
-  await page.goto("/login");
-  await page.getByLabel("Correo").fill(email);
-  await page.getByLabel("Contrasena").fill(password);
-  await page.getByRole("button", { name: "Entrar" }).click();
-  await page.waitForLoadState("networkidle");
-
-  if (MFA_USERS.has(email) && page.url().includes("/mfa/verify")) {
-    const totp = new TOTP({ secret: SEED_TOTP_SECRET, algorithm: "SHA1", digits: 6, period: 30 });
-    await page.getByLabel("Codigo de verificacion").fill(totp.generate());
-    await page.getByRole("button", { name: "Verificar" }).click();
-    await page.waitForLoadState("networkidle");
-  }
-}
 
 test.beforeEach(async () => {
   await db.rateLimitBucket.deleteMany({
@@ -50,7 +33,9 @@ test.describe.serial("Route Estimation & Driver Recommendation", () => {
     });
     expect(driver).toBeTruthy();
     await page.goto(`/t/panatruck-demo/admin/drivers/${driver!.id}/schedule`);
-    await expect(page.getByText("Horario Semanal")).toBeVisible({ timeout: 10_000 });
+    // Rol en lugar de texto: durante el streaming del dev server puede existir una copia
+    // oculta del mismo h2, y getByText falla por modo estricto antes de mirar la visibilidad.
+    await expect(page.getByRole("heading", { name: "Horario semanal" })).toBeVisible({ timeout: 10_000 });
   });
 
   test("driver list shows schedule link", async ({ page }) => {

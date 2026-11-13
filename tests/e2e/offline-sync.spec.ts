@@ -1,8 +1,9 @@
 import { randomUUID } from "node:crypto";
-import { expect, test, type APIRequestContext, type BrowserContext, type Page } from "@playwright/test";
+import { expect, test, type APIRequestContext, type BrowserContext } from "@playwright/test";
 import { config } from "dotenv";
 import { PrismaClient } from "../../src/generated/prisma";
 import { hashPassword } from "../../src/lib/server/crypto";
+import { login } from "./helpers/auth";
 
 config({ path: ".env.local" });
 
@@ -31,14 +32,6 @@ async function ensureDriverTwo() {
     create: { tenantId: panatruck.id, userId: driverTwoUser.id, role: "DRIVER" },
   });
   await db.driver.updateMany({ where: { tenantId: panatruck.id, code: "DR-2" }, data: { userId: driverTwoUser.id } });
-}
-
-async function login(page: Page, email: string, password: string) {
-  await page.goto("/login");
-  await page.getByLabel("Correo").fill(email);
-  await page.getByLabel("Contrasena").fill(password);
-  await page.getByRole("button", { name: "Entrar" }).click();
-  await page.waitForLoadState("networkidle");
 }
 
 async function sync(request: APIRequestContext, tenantSlug: string, commands: unknown[]) {

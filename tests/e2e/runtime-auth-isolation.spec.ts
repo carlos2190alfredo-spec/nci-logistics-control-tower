@@ -1,6 +1,6 @@
-import { expect, test, type Page } from "@playwright/test";
-import { TOTP } from "otpauth";
+import { expect, test } from "@playwright/test";
 import { PrismaClient } from "../../src/generated/prisma";
+import { login } from "./helpers/auth";
 
 const db = new PrismaClient();
 
@@ -10,8 +10,6 @@ test.beforeEach(async () => {
   });
 });
 
-const SEED_TOTP_SECRET = "JBSWY3DPEHPK3PXP4567ABCDEFGHIJKL";
-const MFA_USERS = new Set(["platform@nci.local", "owner@panatruck.local", "owner@translogistica.local"]);
 
 const users = {
   platform: ["platform@nci.local", "NCIPlatform2026!"],
@@ -22,25 +20,6 @@ const users = {
   transOwner: ["owner@translogistica.local", "TransLogistica2026!"],
   transCustomer: ["cliente@distribuciones.local", "Distribuciones2026!"],
 } as const;
-
-async function login(page: Page, email: string, password: string) {
-  await page.goto("/login");
-  await page.getByLabel("Correo").fill(email);
-  await page.getByLabel("Contrasena").fill(password);
-  await Promise.all([
-    page.waitForURL((u) => u.pathname !== "/login", { timeout: 15_000 }),
-    page.getByRole("button", { name: "Entrar" }).click(),
-  ]);
-
-  if (MFA_USERS.has(email) && page.url().includes("/mfa/verify")) {
-    const totp = new TOTP({ secret: SEED_TOTP_SECRET, algorithm: "SHA1", digits: 6, period: 30 });
-    await page.getByLabel("Codigo de verificacion").fill(totp.generate());
-    await Promise.all([
-      page.waitForURL((u) => !u.pathname.includes("/mfa/verify"), { timeout: 15_000 }),
-      page.getByRole("button", { name: "Verificar" }).click(),
-    ]);
-  }
-}
 
 test("platform user can access platform dashboard and logout", async ({ page }) => {
   await login(page, ...users.platform);

@@ -2,6 +2,17 @@
 
 Fecha: 2026-11-12
 
+## Datos locales y E2E (2026-11-12, tras ADR-035)
+
+- El seed refresca al re-ejecutarse los vencimientos de cumplimiento y las fechas de
+  contenedores, que son relativos a "hoy". La póliza VH-1 vence el 2027-01-31.
+- `pnpm e2e:cleanup` (dry-run por defecto; `--apply` borra) elimina los viajes que dejan
+  los E2E en tenants demo y conserva los del seed. La DB local quedó con 10 + 5 viajes.
+- ClamAV local debe estar arriba para `file-security` y E2E-FLOW-001:
+  `docker compose up -d clamav`.
+- E2E completa: 103/103 en verde, sin reintentos, desde DB limpia. Todas las specs usan
+  `tests/e2e/helpers/auth.ts`.
+
 ## Fase actual — Remediación P0 del núcleo operativo (ADR-035)
 
 Una auditoría (2026-11-12) encontró cuatro problemas P0 en el flujo de viajes y

@@ -1,6 +1,34 @@
 # VERIFICATION LATEST
 
-Fecha: 2026-11-12 (Remediación P0 del núcleo operativo — ADR-035)
+Fecha: 2026-11-12 (Seed renovable y limpieza de datos E2E acumulados)
+
+## Seed y limpieza de datos locales
+
+| Comando / Verificación | Resultado |
+| --- | --- |
+| `pnpm e2e:cleanup` (dry-run) | Panatruck: 295 viajes E2E (217 `OFFLINE-E2E-*`, 78 convertidos desde el portal), 78 solicitudes, 101 documentos, 41 adjuntos, 55 incidentes, 664 recibos offline. Se conservan los 10 viajes del seed. TransLogistica: nada que limpiar |
+| Respaldo previo | `pg_dump -Fc` de la DB local (1,3 MB) en el scratchpad de la sesión, fuera del repo |
+| `pnpm e2e:cleanup --apply` | Aplicado en una transacción. 142 objetos de MinIO borrados. Un segundo dry-run reporta 0 pendientes |
+| `pnpm db:seed` (re-ejecución) | Pasa. La póliza VH-1 vence ahora el 2027-01-31; VH-2 sigue vencida a propósito (2026-11-09) |
+| `pnpm typecheck`, `pnpm lint` (archivos tocados), `pnpm test` | Pasan: 317 tests |
+| ClamAV local | El contenedor `nci-lct-clamav` estaba detenido desde hace 3 meses. Se levantó con `docker compose up -d clamav` (healthy en 40 s) |
+| E2E completa, 1.ª corrida (ClamAV detenido) | 86 pasan, 2 fallan, 1 flaky, 12 sin correr, 8,4 min. El dev server ya no se cae en `/trips`. Fallos: FILE-SEC-001 (ClamAV detenido) y E2E-FLOW-001, que recorre el flujo hasta el cierre y solo falla porque la evidencia queda en cuarentena sin antivirus |
+| `file-security` + `service-workflow` + `offline-sync` con ClamAV | E2E-FLOW-001 pasa. `file-security` pasa 10/10 en dos corridas aisladas consecutivas |
+| E2E completa, 2.ª corrida (ClamAV activo) | 87 pasan, 4 fallan, 4 flaky, 6 sin correr, 30 min. Todos los fallos (FILE-SEC-003/006, OFFLINE-E2E-001/007, E2E-FLOW-003, route-driver-recommendation, EXC-005) quedan en la pantalla de `/login`: es la carrera de hidratación de los helpers `login` (los snapshots de Playwright lo muestran). No es seed ni volumen de datos |
+
+## Helper de login compartido y specs autosuficientes
+
+| Comando / Verificación | Resultado |
+| --- | --- |
+| `tests/e2e/helpers/auth.ts` | Un único `login()` para las 11 specs: espera la hidratación real del formulario (props de React en el `<form>`), verifica los valores escritos, exige salir de `/login` y completa el TOTP del seed |
+| Specs con dependencia de datos sobrantes | FILE-SEC-004 y FILE-SEC-008 crean su propio documento o adjunto (FILE-SEC-008 pasa un PNG real por el pipeline con ClamAV); PHOTO-SYNC/PHOTO-EXIF crean su viaje en `DELIVERY_IN_PROGRESS`. Todos limpian al terminar |
+| Selectores con copia oculta durante el streaming | `getByRole("heading")` en el horario del conductor y `select[name='type']:visible` en feedback. Causa de la copia oculta no confirmada |
+| `pnpm exec eslint tests/e2e`, `pnpm typecheck` | Pasan |
+| **E2E completa (desde DB limpia, ClamAV activo)** | **103/103 pasan, 0 fallos, 0 flaky, 0 reintentos, 0 omitidos (15,2 min)** |
+
+---
+
+## Sesión anterior del mismo día (ADR-035)
 
 ## Resultados ejecutados
 

@@ -1,7 +1,8 @@
 import { randomUUID } from "node:crypto";
-import { test, expect, type Page } from "@playwright/test";
+import { test, expect } from "@playwright/test";
 import { config } from "dotenv";
 import { PrismaClient } from "../../src/generated/prisma";
+import { login } from "./helpers/auth";
 
 /**
  * ADR-035 — flujos de excepcion, mensajes de bloqueo y concurrencia.
@@ -41,18 +42,6 @@ const fx: Fixture = {
   tripIds: [],
   requestIds: [],
 };
-
-async function login(page: Page, email: string, password: string) {
-  await page.goto("/login");
-  // Esperar hidratacion: con el dev server en frio, React puede reponer los
-  // valores por defecto del formulario despues de un fill temprano.
-  await page.waitForLoadState("networkidle");
-  await page.getByLabel("Correo").fill(email);
-  await page.getByLabel("Contrasena").fill(password);
-  await page.getByRole("button", { name: "Entrar" }).click();
-  await expect(page).not.toHaveURL(/\/login/, { timeout: 30_000 });
-  await page.waitForLoadState("networkidle");
-}
 
 async function createResources(suffix: string) {
   const vehicle = await db.vehicle.create({

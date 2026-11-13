@@ -124,3 +124,20 @@
 - Hallazgos de entorno documentados en `VERIFICATION_LATEST.md`: seed vencido, 246 viajes
   acumulados que tumban el dev server, carrera de login en un helper E2E.
 
+## 2026-11-12 Seed renovable y limpieza de datos E2E
+
+- Causa raíz del seed vencido: los `upsert` de cumplimiento y contenedores usaban
+  `update: {}`, así que re-sembrar no refrescaba las fechas relativas. Ahora las refrescan.
+- Nuevo `scripts/e2e-cleanup.ts` (`pnpm e2e:cleanup`, dry-run por defecto). Aplicado tras
+  un `pg_dump`: 295 viajes E2E y sus dependencias borrados; 142 objetos de MinIO.
+- ClamAV local levantado (estaba detenido desde hace 3 meses).
+- E2E completa: el dev server ya no se cae; E2E-FLOW-001 pasa con ClamAV. Los fallos
+  restantes son todos la carrera de hidratación de los helpers `login`.
+
+## 2026-11-12 Helper de login compartido y suite E2E en verde
+
+- `tests/e2e/helpers/auth.ts` reemplaza 11 helpers duplicados (−190 líneas). Espera la
+  hidratación del formulario: antes el `fill` temprano se perdía y el envío salía con el
+  usuario por defecto (`platform@nci.local`) o se quedaba en `/login`.
+- FILE-SEC-004/008 y PHOTO-SYNC/PHOTO-EXIF dejan de depender de datos sobrantes.
+- Suite completa: 103/103, sin reintentos ni omitidos.
