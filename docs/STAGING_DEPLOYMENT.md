@@ -18,11 +18,11 @@ que es público.
 | Pieza | Estado |
 | --- | --- |
 | GitHub `carlos2190alfredo-spec/nci-logistics-control-tower` | Publicado (`main`). Cada push a `main` despliega en Vercel |
-| Vercel | Desplegado (READY). Postgres y Prisma sanos en runtime; health `UNHEALTHY` solo por `storage` y `clamav` |
+| Vercel | Desplegado (`feb486e`, success). Postgres y Prisma sanos en runtime; health `UNHEALTHY` mientras falte la clave S3 |
 | Supabase | Migrado, endurecido, sembrado; bucket creado |
 | Storage S3 | **Falta** `MINIO_ACCESS_KEY` / `MINIO_SECRET_KEY` (Supabase → Storage → S3 Connection → New access key) |
 | Correo | **Falta** `MAIL_PASSWORD` (API key de envío de Resend para `nciautomation.com`) |
-| ClamAV en Fly | **Falta** `flyctl auth login` del dueño; luego `fly launch`/`secrets`/`deploy` |
+| ClamAV en Fly | Desplegado: app `nci-lct-clamav-staging`, 1 máquina en iad, check pasando. Verificado desde internet: 401 sin token o con token incorrecto, `CLEAN`, `INFECTED` (EICAR), 413 con 7 MB |
 
 ## Secretos
 
@@ -74,10 +74,18 @@ APP_ENV=staging DATABASE_URL="<conexión de sesión de arriba>" pnpm db:seed
 
 ```bash
 cd infra/clamav-gateway
-fly launch --no-deploy --copy-config --name nci-lct-clamav-staging
-fly secrets set GATEWAY_TOKEN="<ANTIVIRUS_TOKEN>"
-fly deploy
+fly apps create nci-lct-clamav-staging --org personal        # hecho 2026-11-13
+fly secrets set GATEWAY_TOKEN="<ANTIVIRUS_TOKEN>" -a nci-lct-clamav-staging --stage
+fly deploy -a nci-lct-clamav-staging --remote-only --ha=false
 curl -s https://nci-lct-clamav-staging.fly.dev/livez   # 200 cuando clamd cargó firmas (~5 min)
+```
+
+## Redesplegar Vercel tras cambiar variables
+
+Cada push a `main` despliega. Sin cambios de código:
+
+```bash
+git commit --allow-empty -m "chore: redeploy staging" && git push origin main
 ```
 
 ## Verificación tras desplegar
