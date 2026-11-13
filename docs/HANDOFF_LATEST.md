@@ -3,12 +3,12 @@
 ## 2026-11-13 (noche) — Endurecimiento de producción (ADR-037)
 
 - Leer `docs/decisions/ADR-037-production-readiness-audit.md` y `docs/STAGING_DEPLOYMENT.md`.
-- **Pendiente del dueño** (las conexiones de Vercel/Supabase/Resend estaban desconectadas):
-  1. Supabase → Storage → S3 Connection → New access key → Vercel `MINIO_ACCESS_KEY` / `MINIO_SECRET_KEY`.
-  2. Resend: API key solo de envío para `nciautomation.com` → Vercel `MAIL_PASSWORD`.
-  3. Vercel: `CRON_SECRET` (`openssl rand -hex 32`) y `OPS_ALERT_EMAIL`. Todas Sensitive,
-     Production y Preview.
-  4. `APP_ENV=production` (también en build) solo cuando el sitio deba ser indexable.
+- **Hecho con los conectores (2026-11-13):** `MAIL_PASSWORD` (API key de Resend solo de envío
+  para `nciautomation.com`), `CRON_SECRET` y `APP_ENV=production` en Vercel Production
+  (Preview sigue en `staging`). Los valores viven en `.env.staging.local` (local, ignorado).
+- **Pendiente del dueño:** Supabase → `nci-lct-staging` → Storage → S3 Connection → New access
+  key → Vercel `MINIO_ACCESS_KEY` / `MINIO_SECRET_KEY` (Sensitive, Production y Preview). Ninguna
+  API ni conector crea esas claves. Opcional: `OPS_ALERT_EMAIL`.
 - Tras definir variables: redesplegar (`git commit --allow-empty` + push) y verificar
   `/api/internal/health` en verde, una subida de evidencia y el correo de recuperación.
 - Reseembrar staging (`APP_ENV=staging`, con `.env.staging.local`) para que los viajes demo con

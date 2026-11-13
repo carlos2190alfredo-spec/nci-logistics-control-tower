@@ -20,8 +20,11 @@ ninguno crítico) se corrigió y se revisó con revisores independientes:
   `prod:bootstrap`, `db:deploy`, `demo:purge`, respaldos contra Supabase (simulacro real hecho).
 - **Frontend:** service worker con lista blanca, `robots`/`sitemap`/metadatos (indexable solo con
   `APP_ENV=production`), contraste AA, acentos y páginas 404 y de error en español.
-- **Pendiente de credenciales del dueño:** `MINIO_ACCESS_KEY`/`MINIO_SECRET_KEY`, `MAIL_PASSWORD`,
-  `CRON_SECRET`, `OPS_ALERT_EMAIL` y, para indexar, `APP_ENV=production`.
+- **Configurado el 2026-11-13 con los conectores:** `MAIL_PASSWORD` (Resend, solo envío, dominio
+  `nciautomation.com`), `CRON_SECRET` (Production) y `APP_ENV=production` (Production; Preview
+  sigue en `staging`). Cron verificado de punta a punta.
+- **Pendiente:** `MINIO_ACCESS_KEY`/`MINIO_SECRET_KEY` (solo se crean en el panel de Supabase; el
+  health sigue UNHEALTHY por el storage hasta entonces) y, opcional, `OPS_ALERT_EMAIL`.
 
 ## Staging en la nube (ADR-036) y rediseño de la cara pública
 

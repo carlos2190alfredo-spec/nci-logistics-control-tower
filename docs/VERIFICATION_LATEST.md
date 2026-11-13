@@ -16,11 +16,19 @@ Fecha: 2026-11-13 (Auditoría de producción y endurecimiento — ADR-037)
 | Respaldo cifrado de Supabase staging (`pnpm backup:postgres` con `BACKUP_DATABASE_URL`) | 235,2 KB; checksum verificado (`backup:verify`) |
 | **Simulacro de restauración** (`backup:restore:postgres` en un Postgres local descartable) | **70 tablas restauradas**; users 8, tenants 2, trips 15, service_requests 15, audit_logs 2; base descartable eliminada |
 
+## Despliegue con credenciales (2026-11-13, tras reconectar los conectores)
+
+| Verificación | Resultado |
+| --- | --- |
+| SMTP Resend (`nodemailer.verify`, sin enviar correo) | Credenciales y TLS OK en `smtp.resend.com:465` |
+| Cron `/api/internal/cron/maintenance` | Sin token 401; token incorrecto 401; token correcto 200: rescan 0, prune 0, health evaluado y alerta registrada |
+| `robots.txt` y `sitemap.xml` con `APP_ENV=production` | `Allow: /` y `/login`, áreas privadas bloqueadas; sitemap con las dos URLs; sin `noindex` |
+| Health público | 503 UNHEALTHY: solo el storage, falta la clave S3 |
+
 ## No ejecutado
 
 - Pruebas contra el sitio desplegado con sesión (no se introducen credenciales en una URL no local).
-- Envío real de correo y subida real de evidencia en staging: faltan `MAIL_PASSWORD` y las claves S3.
-- Cron en Vercel: requiere `CRON_SECRET`.
+- Envío real de correo desde la app y subida real de evidencia: la subida necesita las claves S3.
 
 ---
 
