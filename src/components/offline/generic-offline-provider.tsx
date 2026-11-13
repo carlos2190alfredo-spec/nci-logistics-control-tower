@@ -7,6 +7,7 @@ import {
   useEffect,
   useRef,
   useState,
+  useSyncExternalStore,
   type ReactNode,
 } from "react";
 import {
@@ -43,6 +44,15 @@ const GenericOfflineContext = createContext<GenericOfflineContextValue | null>(n
  * - limpieza periódica de acciones SYNCED antiguas
  * - detección de `online` / `offline` via `navigator.onLine`
  */
+function subscribeOnline(onChange: () => void) {
+  window.addEventListener("online", onChange);
+  window.addEventListener("offline", onChange);
+  return () => {
+    window.removeEventListener("online", onChange);
+    window.removeEventListener("offline", onChange);
+  };
+}
+
 export function GenericOfflineProvider({
   owner,
   children,
@@ -51,9 +61,10 @@ export function GenericOfflineProvider({
   children: ReactNode;
 }) {
   const [records, setRecords] = useState<SyncLocalRecord[]>([]);
-  const [online, setOnline] = useState(() =>
-    typeof navigator === "undefined" ? true : navigator.onLine,
-  );
+  // useSyncExternalStore con snapshot de servidor `true`: durante la hidratacion el
+  // cliente usa el mismo valor que el HTML del servidor y luego pasa al real. Leer
+  // navigator.onLine en useState producia un mismatch de hidratacion (OfflineQueueBadge).
+  const online = useSyncExternalStore(subscribeOnline, () => navigator.onLine, () => true);
   const [syncing, setSyncing] = useState(false);
   const [lastOutcome, setLastOutcome] = useState<GenericSyncOutcome | null>(null);
   const syncingRef = useRef(false);
@@ -96,13 +107,8 @@ export function GenericOfflineProvider({
 
   useEffect(() => {
     if (typeof navigator === "undefined") return;
-    const onOnline = () => {
-      setOnline(true);
-      void sync();
-    };
-    const onOffline = () => setOnline(false);
+    const onOnline = () => void sync();
     window.addEventListener("online", onOnline);
-    window.addEventListener("offline", onOffline);
     // Diferir para evitar setState síncrono desde el effect (React 19 rule).
     const bootstrap = window.setTimeout(() => {
       void refresh();
@@ -114,7 +120,6 @@ export function GenericOfflineProvider({
     }, 5 * 60_000);
     return () => {
       window.removeEventListener("online", onOnline);
-      window.removeEventListener("offline", onOffline);
       window.clearTimeout(bootstrap);
       window.clearInterval(syncInterval);
       window.clearInterval(cleanupInterval);
