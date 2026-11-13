@@ -1,6 +1,5 @@
 import { NextResponse } from "next/server";
-import { requireAuthenticatedUser } from "@/lib/server/auth";
-import { getDb } from "@/lib/server/db";
+import { getApiSessionUser, resolveTenantAccess } from "@/lib/server/auth";
 import { ErrorCodes, errorMessages } from "@/lib/server/errors";
 import { logger } from "@/lib/server/logger";
 import { enforceRateLimit } from "@/lib/server/rate-limit";
@@ -44,7 +43,10 @@ export async function POST(request: Request) {
   const contentLength = Number(request.headers.get("content-length") ?? "0");
   if (contentLength > MAX_BODY_BYTES) return errorResponse("INVALID_PAYLOAD", 413);
 
-  const user = await requireAuthenticatedUser();
+  // Endpoint JSON: sin sesion completa responde 401 (el cliente offline lo
+  // interpreta como sesion caducada) en vez de la redireccion HTML a /login.
+  const user = await getApiSessionUser();
+  if (!user) return errorResponse("AUTH_REQUIRED", 401);
 
   const rate = await enforceRateLimit({
     scope: "sync.actions",
@@ -84,20 +86,22 @@ export async function POST(request: Request) {
   if (slugs.size !== 1) return errorResponse("INVALID_PAYLOAD", 400);
   const tenantSlug = [...slugs][0];
 
-  const db = getDb();
-  const membership = await db.tenantMembership.findFirst({
-    where: { userId: user.id, active: true, tenant: { slug: tenantSlug } },
-    include: { tenant: { select: { id: true, slug: true } } },
-  });
-  if (!membership) return errorResponse("ACCESS_DENIED", 403);
+  // Misma regla que las paginas y los demas endpoints del tenant: tenant ACTIVE,
+  // membresia activa y MFA verificado para propietario/administrador. El rol
+  // concreto de cada accion lo valida su entrada del registro.
+  const access = await resolveTenantAccess(user.id, tenantSlug);
+  if (!access.ok) {
+    logger.warn("generic sync access denied", { userId: user.id, tenantSlug, reason: access.reason });
+    return errorResponse("ACCESS_DENIED", 403);
+  }
 
   const results = await processSyncActionBatch(
     {
       userId: user.id,
       userName: user.name,
-      tenantId: membership.tenant.id,
-      tenantSlug: membership.tenant.slug,
-      role: membership.role,
+      tenantId: access.tenant.id,
+      tenantSlug: access.tenant.slug,
+      role: access.membership.role,
     },
     parsed.data.actions,
   );

@@ -6,6 +6,41 @@ const TEXT_COLOR = "#1e293b";
 const MUTED_COLOR = "#64748b";
 const BORDER_COLOR = "#e2e8f0";
 
+/**
+ * Escapa HTML. TODO valor que no sea una constante de plantilla (nombres de
+ * usuario, empresa, rol, quien invita, URLs) pasa por aqui antes de entrar al
+ * HTML: los valores los eligen administradores de tenant y el correo sale del
+ * dominio de la plataforma.
+ */
+export function escapeHtml(value: string): string {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+/** Colapsa saltos de linea y caracteres de control: para asuntos y cuerpos de texto plano. */
+export function toSingleLine(value: string): string {
+  return value.replace(/[\u0000-\u001f\u007f\u2028\u2029]+/g, " ").trim();
+}
+
+/** Solo http(s): cualquier otro esquema (javascript:, data:) se descarta. */
+function safeUrl(url: string): string {
+  try {
+    const parsed = new URL(url);
+    return parsed.protocol === "https:" || parsed.protocol === "http:"
+      ? url
+      : "#";
+  } catch {
+    return "#";
+  }
+}
+
+/** Valor de usuario listo para HTML. */
+const h = (value: string) => escapeHtml(toSingleLine(value));
+
 function layout(content: string): string {
   return `<!DOCTYPE html>
 <html lang="es">
@@ -36,7 +71,7 @@ function layout(content: string): string {
 
 function button(text: string, url: string): string {
   return `<table cellpadding="0" cellspacing="0" style="margin:24px 0"><tr><td>
-    <a href="${url}" style="display:inline-block;background:${ACCENT_COLOR};color:#fff;padding:14px 32px;border-radius:8px;font-size:15px;font-weight:600;text-decoration:none;letter-spacing:0.3px">${text}</a>
+    <a href="${escapeHtml(safeUrl(url))}" style="display:inline-block;background:${ACCENT_COLOR};color:#fff;padding:14px 32px;border-radius:8px;font-size:15px;font-weight:600;text-decoration:none;letter-spacing:0.3px">${h(text)}</a>
   </td></tr></table>`;
 }
 
@@ -44,35 +79,78 @@ function infoBox(items: { label: string; value: string }[]): string {
   const rows = items
     .map(
       (i) =>
-        `<tr><td style="padding:8px 12px;font-size:13px;color:${MUTED_COLOR};border-bottom:1px solid ${BORDER_COLOR}">${i.label}</td><td style="padding:8px 12px;font-size:13px;font-weight:600;color:${TEXT_COLOR};border-bottom:1px solid ${BORDER_COLOR}">${i.value}</td></tr>`,
+        `<tr><td style="padding:8px 12px;font-size:13px;color:${MUTED_COLOR};border-bottom:1px solid ${BORDER_COLOR}">${h(i.label)}</td><td style="padding:8px 12px;font-size:13px;font-weight:600;color:${TEXT_COLOR};border-bottom:1px solid ${BORDER_COLOR}">${h(i.value)}</td></tr>`,
     )
     .join("");
   return `<table width="100%" cellpadding="0" cellspacing="0" style="background:${BG_COLOR};border:1px solid ${BORDER_COLOR};border-radius:8px;margin:16px 0">${rows}</table>`;
 }
 
+type EmailContent = { subject: string; html: string; text: string };
+
+/**
+ * Bloque de acceso de una cuenta nueva. Nunca incluye una contrasena: la
+ * persona define la suya con un enlace de un solo uso (flujo de restablecimiento).
+ */
+function accessBlock(opts: {
+  setPasswordUrl?: string;
+  setPasswordTtlHours?: number;
+  loginUrl?: string;
+}): string {
+  if (opts.setPasswordUrl) {
+    const ttl = opts.setPasswordTtlHours
+      ? `El enlace es de un solo uso y expira en ${opts.setPasswordTtlHours} horas.`
+      : "El enlace es de un solo uso.";
+    return `
+    <p style="margin:0 0 4px;font-size:14px;color:${TEXT_COLOR};line-height:1.5">
+      Para entrar por primera vez, defina su contrasena con el siguiente enlace:
+    </p>
+    ${button("Establecer mi contrasena", opts.setPasswordUrl)}
+    <p style="margin:0 0 16px;font-size:12px;color:${MUTED_COLOR}">${h(ttl)}</p>`;
+  }
+  return `
+    <p style="margin:0 0 16px;font-size:14px;color:${TEXT_COLOR};line-height:1.5">
+      Inicie sesion con su contrasena actual${opts.loginUrl ? ` en <a href="${escapeHtml(safeUrl(opts.loginUrl))}" style="color:${ACCENT_COLOR}">${h(opts.loginUrl)}</a>` : ""}.
+    </p>`;
+}
+
+function accessText(opts: {
+  setPasswordUrl?: string;
+  setPasswordTtlHours?: number;
+  loginUrl?: string;
+}): string[] {
+  if (opts.setPasswordUrl) {
+    return [
+      `Defina su contrasena (enlace de un solo uso${opts.setPasswordTtlHours ? `, expira en ${opts.setPasswordTtlHours} horas` : ""}):`,
+      opts.setPasswordUrl,
+    ];
+  }
+  return [
+    `Inicie sesion con su contrasena actual${opts.loginUrl ? `: ${opts.loginUrl}` : "."}`,
+  ];
+}
+
 export function welcomeTenantOwnerEmail(opts: {
   ownerName: string;
   tenantName: string;
-  verifyUrl: string;
   loginUrl: string;
-  tempPassword: string;
-}): { subject: string; html: string; text: string } {
-  const subject = `Bienvenido a ${opts.tenantName} — NCI Logistics Control Tower`;
+  /** Se omite si el correo ya estaba verificado. */
+  verifyUrl?: string;
+  /** Se omite si la cuenta ya existia: conserva su contrasena. */
+  setPasswordUrl?: string;
+  setPasswordTtlHours?: number;
+}): EmailContent {
+  const subject = `Bienvenido a ${toSingleLine(opts.tenantName)} — NCI Logistics Control Tower`;
   const html = layout(`
-    <h1 style="margin:0 0 8px;font-size:22px;color:${TEXT_COLOR}">Bienvenido, ${opts.ownerName}</h1>
+    <h1 style="margin:0 0 8px;font-size:22px;color:${TEXT_COLOR}">Bienvenido, ${h(opts.ownerName)}</h1>
     <p style="margin:0 0 20px;font-size:15px;color:${MUTED_COLOR};line-height:1.6">
-      Su cuenta de <strong>${opts.tenantName}</strong> ha sido creada exitosamente en NCI Logistics Control Tower.
-      Antes de iniciar sesion, confirme su correo electronico.
-    </p>
-    ${button("Verificar mi correo electronico", opts.verifyUrl)}
-    <p style="margin:0 0 16px;font-size:14px;color:${TEXT_COLOR};line-height:1.5">
-      Una vez verificado su correo, inicie sesion con las siguientes credenciales:
+      Su cuenta de <strong>${h(opts.tenantName)}</strong> ha sido creada exitosamente en NCI Logistics Control Tower.
     </p>
     ${infoBox([
       { label: "Empresa", value: opts.tenantName },
       { label: "Rol", value: "Propietario (Owner)" },
-      { label: "Contrasena temporal", value: opts.tempPassword },
     ])}
+    ${accessBlock(opts)}
+    ${opts.verifyUrl ? `<p style="margin:0 0 4px;font-size:14px;color:${TEXT_COLOR};line-height:1.5">Confirme tambien su correo electronico:</p>${button("Verificar mi correo electronico", opts.verifyUrl)}` : ""}
     <p style="margin:16px 0 0;font-size:13px;color:${MUTED_COLOR};line-height:1.5">
       <strong>Importante:</strong> Despues de iniciar sesion por primera vez, se le pedira configurar la
       autenticacion de dos factores (MFA) para proteger su cuenta. Necesitara una aplicacion autenticadora
@@ -84,15 +162,14 @@ export function welcomeTenantOwnerEmail(opts: {
     </p>
   `);
   const text = [
-    `Bienvenido, ${opts.ownerName}`,
+    `Bienvenido, ${toSingleLine(opts.ownerName)}`,
     ``,
-    `Su cuenta de ${opts.tenantName} ha sido creada en NCI Logistics Control Tower.`,
+    `Su cuenta de ${toSingleLine(opts.tenantName)} ha sido creada en NCI Logistics Control Tower.`,
     ``,
-    `Verifique su correo: ${opts.verifyUrl}`,
+    ...accessText(opts),
+    ...(opts.verifyUrl ? [``, `Verifique su correo: ${opts.verifyUrl}`] : []),
     ``,
-    `Contrasena temporal: ${opts.tempPassword}`,
-    ``,
-    `Despues de verificar e iniciar sesion, configure la autenticacion de dos factores (MFA).`,
+    `Despues de iniciar sesion, configure la autenticacion de dos factores (MFA).`,
   ].join("\n");
   return { subject, html, text };
 }
@@ -101,26 +178,28 @@ export function welcomeUserEmail(opts: {
   userName: string;
   tenantName: string;
   role: string;
-  verifyUrl: string;
-  tempPassword: string;
   invitedBy: string;
-}): { subject: string; html: string; text: string } {
-  const subject = `Ha sido agregado a ${opts.tenantName} — NCI Logistics Control Tower`;
+  loginUrl?: string;
+  verifyUrl: string;
+  setPasswordUrl?: string;
+  setPasswordTtlHours?: number;
+}): EmailContent {
+  const subject = `Ha sido agregado a ${toSingleLine(opts.tenantName)} — NCI Logistics Control Tower`;
   const html = layout(`
-    <h1 style="margin:0 0 8px;font-size:22px;color:${TEXT_COLOR}">Hola, ${opts.userName}</h1>
+    <h1 style="margin:0 0 8px;font-size:22px;color:${TEXT_COLOR}">Hola, ${h(opts.userName)}</h1>
     <p style="margin:0 0 20px;font-size:15px;color:${MUTED_COLOR};line-height:1.6">
-      <strong>${opts.invitedBy}</strong> le ha agregado al equipo de <strong>${opts.tenantName}</strong>
-      en NCI Logistics Control Tower. Confirme su correo electronico para activar su cuenta.
+      <strong>${h(opts.invitedBy)}</strong> le ha agregado al equipo de <strong>${h(opts.tenantName)}</strong>
+      en NCI Logistics Control Tower.
     </p>
-    ${button("Verificar mi correo electronico", opts.verifyUrl)}
     ${infoBox([
       { label: "Empresa", value: opts.tenantName },
       { label: "Rol", value: opts.role },
-      { label: "Contrasena temporal", value: opts.tempPassword },
     ])}
+    ${accessBlock(opts)}
+    <p style="margin:0 0 4px;font-size:14px;color:${TEXT_COLOR};line-height:1.5">Confirme tambien su correo electronico:</p>
+    ${button("Verificar mi correo electronico", opts.verifyUrl)}
     <p style="margin:16px 0 0;font-size:13px;color:${MUTED_COLOR};line-height:1.5">
-      Inicie sesion despues de verificar su correo. Se recomienda configurar la autenticacion de dos factores
-      desde <strong>Seguridad</strong> en su perfil.
+      Se recomienda configurar la autenticacion de dos factores desde <strong>Seguridad</strong> en su perfil.
     </p>
     <hr style="border:none;border-top:1px solid ${BORDER_COLOR};margin:24px 0">
     <p style="margin:0;font-size:12px;color:${MUTED_COLOR}">
@@ -128,12 +207,13 @@ export function welcomeUserEmail(opts: {
     </p>
   `);
   const text = [
-    `Hola, ${opts.userName}`,
+    `Hola, ${toSingleLine(opts.userName)}`,
     ``,
-    `${opts.invitedBy} le ha agregado a ${opts.tenantName} con el rol ${opts.role}.`,
+    `${toSingleLine(opts.invitedBy)} le ha agregado a ${toSingleLine(opts.tenantName)} con el rol ${toSingleLine(opts.role)}.`,
+    ``,
+    ...accessText(opts),
     ``,
     `Verifique su correo: ${opts.verifyUrl}`,
-    `Contrasena temporal: ${opts.tempPassword}`,
   ].join("\n");
   return { subject, html, text };
 }
@@ -141,12 +221,12 @@ export function welcomeUserEmail(opts: {
 export function emailVerificationEmail(opts: {
   userName: string;
   verifyUrl: string;
-}): { subject: string; html: string; text: string } {
+}): EmailContent {
   const subject = "Verifique su correo — NCI Logistics Control Tower";
   const html = layout(`
     <h1 style="margin:0 0 8px;font-size:22px;color:${TEXT_COLOR}">Verificacion de correo</h1>
     <p style="margin:0 0 20px;font-size:15px;color:${MUTED_COLOR};line-height:1.6">
-      Hola ${opts.userName}, haga clic en el siguiente boton para confirmar su direccion de correo electronico.
+      Hola ${h(opts.userName)}, haga clic en el siguiente boton para confirmar su direccion de correo electronico.
     </p>
     ${button("Verificar correo electronico", opts.verifyUrl)}
     <p style="margin:16px 0 0;font-size:12px;color:${MUTED_COLOR}">
@@ -156,7 +236,7 @@ export function emailVerificationEmail(opts: {
   const text = [
     `Verificacion de correo`,
     ``,
-    `Hola ${opts.userName}, verifique su correo: ${opts.verifyUrl}`,
+    `Hola ${toSingleLine(opts.userName)}, verifique su correo: ${opts.verifyUrl}`,
   ].join("\n");
   return { subject, html, text };
 }
@@ -167,12 +247,12 @@ export function invitationEmail(opts: {
   invitedBy: string;
   inviteUrl: string;
   expiresInHours: number;
-}): { subject: string; html: string; text: string } {
-  const subject = `Invitacion a ${opts.tenantName} — NCI Logistics Control Tower`;
+}): EmailContent {
+  const subject = `Invitacion a ${toSingleLine(opts.tenantName)} — NCI Logistics Control Tower`;
   const html = layout(`
     <h1 style="margin:0 0 8px;font-size:22px;color:${TEXT_COLOR}">Invitacion al equipo</h1>
     <p style="margin:0 0 20px;font-size:15px;color:${MUTED_COLOR};line-height:1.6">
-      <strong>${opts.invitedBy}</strong> le invita a unirse a <strong>${opts.tenantName}</strong>
+      <strong>${h(opts.invitedBy)}</strong> le invita a unirse a <strong>${h(opts.tenantName)}</strong>
       en NCI Logistics Control Tower.
     </p>
     ${infoBox([
@@ -183,15 +263,15 @@ export function invitationEmail(opts: {
     ${button("Aceptar invitacion", opts.inviteUrl)}
     <hr style="border:none;border-top:1px solid ${BORDER_COLOR};margin:24px 0">
     <p style="margin:0;font-size:12px;color:${MUTED_COLOR}">
-      Este enlace expira en ${opts.expiresInHours} horas. Si no esperaba esta invitacion, puede ignorar este correo.
+      Este enlace expira en ${Number(opts.expiresInHours)} horas. Si no esperaba esta invitacion, puede ignorar este correo.
     </p>
   `);
   const text = [
-    `${opts.invitedBy} le invita a ${opts.tenantName} con el rol ${opts.role}.`,
+    `${toSingleLine(opts.invitedBy)} le invita a ${toSingleLine(opts.tenantName)} con el rol ${toSingleLine(opts.role)}.`,
     ``,
     `Acepte la invitacion: ${opts.inviteUrl}`,
     ``,
-    `Expira en ${opts.expiresInHours} horas.`,
+    `Expira en ${Number(opts.expiresInHours)} horas.`,
   ].join("\n");
   return { subject, html, text };
 }

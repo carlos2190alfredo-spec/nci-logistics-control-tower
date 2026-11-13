@@ -5,9 +5,17 @@ import { logger } from "@/lib/server/logger";
 import { enforceRateLimit } from "@/lib/server/rate-limit";
 import { clientIpFrom, verifyMutationOrigin } from "@/lib/server/http-security";
 import { processUploadThroughPipeline } from "@/lib/server/file-pipeline";
-import { getStorageBucket } from "@/lib/server/storage";
+import { EVIDENCE_DOCUMENT_VISIBILITY } from "@/lib/domain/proof-evidence";
+import {
+  MAX_UPLOAD_FILE_BYTES,
+  UploadRejectedError,
+  getStorageBucket,
+  validateUploadedFile,
+} from "@/lib/server/storage";
 
-const MAX_BODY_BYTES = 10 * 1024 * 1024;
+/** Margen del multipart (campos idempotencyKey/tripId/contentHash y delimitadores) sobre el archivo. */
+const MULTIPART_OVERHEAD_BYTES = 64 * 1024;
+const MAX_REQUEST_BYTES = MAX_UPLOAD_FILE_BYTES + MULTIPART_OVERHEAD_BYTES;
 
 function errorJson(code: string, message: string, status: number) {
   return NextResponse.json({ error: code, message }, { status });
@@ -26,6 +34,13 @@ export async function POST(request: Request, context: { params: Promise<{ tenant
 
   const origin = verifyMutationOrigin(request);
   if (!origin.ok) return errorJson("ORIGIN_MISMATCH", "Origin no permitido", 403);
+
+  // Rechaza antes de autenticar y de leer el cuerpo. En Vercel el limite de la plataforma
+  // (~4,5 MB) responde 413 por su cuenta; esto cubre el resto de despliegues.
+  const declaredLength = Number(request.headers.get("content-length") ?? "0");
+  if (declaredLength > MAX_REQUEST_BYTES) {
+    return errorJson("FILE_TOO_LARGE", "Archivo excede 3 MB", 413);
+  }
 
   const { user, tenant, membership } = await requireTenantRole(tenantSlug, ["DRIVER", "TENANT_OWNER", "DISPATCHER"]);
 
@@ -76,8 +91,8 @@ export async function POST(request: Request, context: { params: Promise<{ tenant
   if (!(file instanceof File)) {
     return errorJson("INVALID_PAYLOAD", "Falta archivo", 400);
   }
-  if (file.size > MAX_BODY_BYTES) {
-    return errorJson("FILE_TOO_LARGE", "Archivo excede 10 MB", 413);
+  if (file.size > MAX_UPLOAD_FILE_BYTES) {
+    return errorJson("FILE_TOO_LARGE", "Archivo excede 3 MB", 413);
   }
 
   const trip = await db.trip.findFirst({
@@ -130,9 +145,10 @@ export async function POST(request: Request, context: { params: Promise<{ tenant
   });
 
   try {
-    const buffer = Buffer.from(await file.arrayBuffer());
-    const mimeType = file.type || "application/octet-stream";
-    const filename = file.name || `photo-${Date.now()}.jpg`;
+    // Mismo control que la evidencia por formulario: MIME permitido, extension coherente y
+    // magic bytes reales. Nunca se confia en file.type / file.name del cliente (ni se usa el
+    // nombre crudo en la clave del objeto).
+    const { buffer, mimeType, filename } = await validateUploadedFile(file);
     const targetKey = `tenants/${tenantSlug}/trips/${trip.reference}/evidence/${Date.now()}-${filename}`;
 
     const result = await processUploadThroughPipeline({
@@ -166,7 +182,9 @@ export async function POST(request: Request, context: { params: Promise<{ tenant
           sizeBytes: buffer.length,
           bucket: getStorageBucket(),
           objectKey: result.objectKey,
-          visibility: "CUSTOMER_VISIBLE",
+          // La evidencia nace INTERNAL: operaciones la revisa y solo submitProofAction /
+          // approveProofAction la liga a la prueba y la publican al cliente.
+          visibility: EVIDENCE_DOCUMENT_VISIBILITY,
           uploadedById: user.id,
         },
       });
@@ -190,6 +208,10 @@ export async function POST(request: Request, context: { params: Promise<{ tenant
       where: { id: receipt.id },
       data: { status: "FAILED" },
     });
+
+    if (error instanceof UploadRejectedError) {
+      return errorJson("UPLOAD_REJECTED", error.message, 400);
+    }
 
     logger.error("attachment upload failed", {
       receiptId: receipt.id,

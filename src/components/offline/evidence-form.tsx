@@ -1,8 +1,14 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState, type ChangeEvent } from "react";
 import { AlertTriangle, PackageCheck } from "lucide-react";
 import { EvidencePhotoCapture } from "@/components/offline/evidence-photo-capture";
+import {
+  MAX_UPLOAD_BYTES,
+  PhotoTooLargeError,
+  formatMegabytes,
+  prepareEvidenceFile,
+} from "@/components/offline/photo-compress";
 import { SignaturePad } from "@/components/signature-pad";
 import { ActionForm, Alert, Field, SubmitButton, TextArea } from "@/components/ui";
 import { submitProofAction } from "@/lib/server/actions";
@@ -22,6 +28,48 @@ export function EvidenceForm({
   rejectionReason?: string | null;
 }) {
   const [photos, setPhotos] = useState<OfflinePhoto[]>([]);
+  const [fileError, setFileError] = useState<string | null>(null);
+  const [preparingFile, setPreparingFile] = useState(false);
+  const fileRequest = useRef(0);
+
+  /**
+   * El archivo del formulario viaja en la Server Action, que Vercel limita a ~4,5 MB:
+   * las fotos se reducen en el navegador y lo que no cabe se rechaza aqui, con un mensaje,
+   * en lugar de fallar en el servidor con una pagina de error.
+   */
+  async function handleEvidenceFileChange(event: ChangeEvent<HTMLElement>) {
+    const input = event.target;
+    if (!(input instanceof HTMLInputElement) || input.type !== "file" || input.name !== "evidenceFile") return;
+
+    const request = ++fileRequest.current;
+    const file = input.files?.[0];
+    setFileError(null);
+    if (!file) {
+      setPreparingFile(false);
+      return;
+    }
+
+    setPreparingFile(true);
+    try {
+      const prepared = await prepareEvidenceFile(file);
+      if (request !== fileRequest.current) return;
+      if (prepared !== file) {
+        try {
+          const transfer = new DataTransfer();
+          transfer.items.add(prepared);
+          input.files = transfer.files;
+        } catch {
+          throw new PhotoTooLargeError("Su navegador no pudo reducir la foto. Use el boton Capturar foto.");
+        }
+      }
+    } catch (error) {
+      if (request !== fileRequest.current) return;
+      input.value = "";
+      setFileError(error instanceof PhotoTooLargeError ? error.message : "No se pudo procesar el archivo. Intente con otro.");
+    } finally {
+      if (request === fileRequest.current) setPreparingFile(false);
+    }
+  }
 
   const availableIds = photos
     .filter((p) => p.status === "AVAILABLE" && p.fileAttachmentId)
@@ -61,17 +109,23 @@ export function EvidenceForm({
           tripId={tripId}
           onPhotosChange={setPhotos}
         />
-        <Field
-          accept="image/jpeg,image/png,image/webp,application/pdf"
-          help="Formatos: JPG, PNG, WEBP o PDF."
-          label="Fotografia o documento de evidencia"
-          name="evidenceFile"
-          type="file"
-        />
+        <div onChange={handleEvidenceFileChange}>
+          <Field
+            accept="image/jpeg,image/png,image/webp,application/pdf"
+            help={`Formatos: JPG, PNG, WEBP o PDF. Maximo ${formatMegabytes(MAX_UPLOAD_BYTES)}; las fotos se reducen automaticamente.`}
+            label="Fotografia o documento de evidencia"
+            name="evidenceFile"
+            type="file"
+          />
+        </div>
+        {fileError ? <Alert tone="danger">{fileError}</Alert> : null}
         <SignaturePad />
-        <SubmitButton size="lg" variant="success">
-          Registrar evidencia y firma
-        </SubmitButton>
+        {/* Bloquea el envio (tambien con Enter) mientras se reduce la foto elegida. */}
+        <fieldset className="min-w-0" disabled={preparingFile}>
+          <SubmitButton className="w-full" size="lg" variant="success">
+            Registrar evidencia y firma
+          </SubmitButton>
+        </fieldset>
       </ActionForm>
     </div>
   );

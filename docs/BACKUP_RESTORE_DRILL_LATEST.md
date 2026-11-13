@@ -54,3 +54,25 @@ Reporte JSON generado automaticamente en:
 - Base de datos `nci_logistics_restore_test` eliminada tras verificacion
 - Bucket `nci-logistics-restore-test` vaciado tras verificacion
 - Archivos descifrados temporales eliminados
+
+---
+
+# Verificacion del camino remoto (2026-11-13) — sintetica, no es un drill de Supabase
+
+Se ejecuto el flujo nuevo de `BACKUP_DATABASE_URL` / `RESTORE_DATABASE_URL` contra un Postgres 17
+descartable y **sintetico** (contenedor `postgres:17-alpine` local, 6 tablas de prueba con
+datos, una de ellas con RLS y un esquema extra para comprobar `--schema=public`). **No** se
+toco Supabase ni ninguna base real, y el contenido no es el de la aplicacion.
+
+| Paso | Resultado |
+|---|---|
+| `pg_dump` por `docker run` (sin binarios locales), URL solo por entorno | PASS |
+| Cifrado, manifiesto sin usuario ni contrasena, `verify-backup` | PASS |
+| Restore con `ON_ERROR_STOP` en `nci_logistics_restore_test` | PASS: 6 tablas, filas de las tablas criticas presentes |
+| `pnpm backup:postgres` + `backup:verify` + `backup:restore:postgres` por CLI | PASS |
+| Contrasena incorrecta | falla con el error de `pg_dump`, sin la contrasena, y sin `.sql` en claro en disco |
+| Pooler transaccional (6543) o `RESTORE_DATABASE_URL` remota | rechazados antes de conectar |
+
+Pendiente (requiere `BACKUP_DATABASE_URL` real del dueño): un drill completo del backup de la
+base de Supabase y de `pnpm backup:minio` contra su endpoint S3, y registrar aqui el resultado,
+el plan de backup de Supabase y los tiempos.

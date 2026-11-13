@@ -1,5 +1,6 @@
 import { config } from "dotenv";
 import { PrismaClient } from "../src/generated/prisma";
+import { guardDbTarget } from "./lib/db-target";
 
 // Precedencia: variables exportadas > .env.local > .env (dotenv no pisa lo ya definido).
 config({ path: ".env.local" });
@@ -8,6 +9,9 @@ config({ path: ".env" });
 const prisma = new PrismaClient();
 
 async function main() {
+  // Muestra el destino y se niega a correr el perfil local contra un host remoto (F4).
+  guardDbTarget("demo", "demo:reset");
+
   const tenants = await prisma.tenant.findMany({
     where: { isDemo: true },
     select: { id: true, slug: true, name: true },

@@ -1,12 +1,16 @@
-import nodemailer from "nodemailer";
 import { randomBytes } from "node:crypto";
+import { raiseAlert, resolveAlert } from "@/lib/observability/alerts";
+import { appUrl } from "@/lib/server/app-url";
 import { audit } from "@/lib/server/audit";
 import { hashPassword, hashToken, keyedHash } from "@/lib/server/crypto";
 import { getDb } from "@/lib/server/db";
 import { logger } from "@/lib/server/logger";
+import { describeMailError, sendMail } from "@/lib/server/mail";
 import { revokeAllUserSessions } from "@/lib/server/auth";
 
 const TOKEN_TTL_MINUTES = 20;
+/** Vigencia del enlace de "establecer contrasena" de cuentas nuevas (igual que la verificacion de correo). */
+export const SETUP_TOKEN_TTL_HOURS = 48;
 export const RESET_MIN_PASSWORD_LENGTH = 10;
 export const RESET_MAX_PASSWORD_LENGTH = 128;
 
@@ -18,17 +22,53 @@ function generateToken() {
   return randomBytes(32).toString("base64url");
 }
 
-function baseUrl() {
-  return process.env.APP_URL ?? "http://localhost:3000";
+/** Enlace del formulario de restablecimiento; sin fallback a localhost fuera de local. */
+export function passwordResetUrl(token: string) {
+  return appUrl(`/recuperar/${encodeURIComponent(token)}`);
+}
+
+/**
+ * Invalida los tokens vigentes del usuario y crea uno nuevo (solo se guarda el
+ * hash). Devuelve el token en claro para incluirlo en el correo.
+ */
+async function createResetToken(userId: string, ttlMs: number, requesterIp?: string): Promise<string> {
+  const db = getDb();
+  const now = new Date();
+  await db.passwordResetToken.updateMany({
+    where: { userId, usedAt: null, revokedAt: null, expiresAt: { gt: now } },
+    data: { revokedAt: now },
+  });
+
+  const token = generateToken();
+  const tokenHash = hashToken(token);
+  await db.passwordResetToken.create({
+    data: {
+      userId,
+      tokenHash,
+      expiresAt: new Date(now.getTime() + ttlMs),
+      requestedIpHash: requesterIp ? keyedHash(requesterIp, "reset-ip") : null,
+    },
+  });
+  return token;
+}
+
+/**
+ * Token de un solo uso para que una cuenta NUEVA defina su contrasena (alta de
+ * tenant o de usuario). Reemplaza el envio de contrasenas por correo: la cuenta
+ * nace con una contrasena aleatoria que nadie conoce y la persona entra por el
+ * mismo formulario `/recuperar/[token]`.
+ */
+export async function issuePasswordSetupToken(userId: string): Promise<string> {
+  return createResetToken(userId, SETUP_TOKEN_TTL_HOURS * 60 * 60 * 1000);
+}
+
+/** Contrasena aleatoria sin dueno, para cuentas que se activan con enlace. */
+export function generateUnusablePassword(): string {
+  return randomBytes(32).toString("base64url");
 }
 
 async function sendResetEmail(email: string, token: string) {
-  const link = `${baseUrl()}/recuperar/${encodeURIComponent(token)}`;
-  const transport = nodemailer.createTransport({
-    host: process.env.MAIL_HOST ?? "localhost",
-    port: Number(process.env.MAIL_PORT ?? 1025),
-    secure: false,
-  });
+  const link = passwordResetUrl(token);
   const body = [
     "Hola,",
     "",
@@ -44,12 +84,7 @@ async function sendResetEmail(email: string, token: string) {
     "",
     "NCI Automation",
   ].join("\n");
-  await transport.sendMail({
-    from: process.env.MAIL_FROM ?? "NCI Logistics Control Tower <no-reply@nci.local>",
-    to: email,
-    subject: "Restablecer su contrasena",
-    text: body,
-  });
+  await sendMail({ to: email, subject: "Restablecer su contrasena", text: body });
 }
 
 /**
@@ -66,23 +101,7 @@ export async function requestPasswordReset(email: string, requesterIp: string): 
     return;
   }
 
-  // Invalida cualquier token previo vigente del usuario.
-  const now = new Date();
-  await db.passwordResetToken.updateMany({
-    where: { userId: user.id, usedAt: null, revokedAt: null, expiresAt: { gt: now } },
-    data: { revokedAt: now },
-  });
-
-  const token = generateToken();
-  const tokenHash = hashToken(token);
-  await db.passwordResetToken.create({
-    data: {
-      userId: user.id,
-      tokenHash,
-      expiresAt: new Date(now.getTime() + TOKEN_TTL_MINUTES * 60 * 1000),
-      requestedIpHash: keyedHash(requesterIp, "reset-ip"),
-    },
-  });
+  const token = await createResetToken(user.id, TOKEN_TTL_MINUTES * 60 * 1000, requesterIp);
 
   await audit({
     actorId: user.id,
@@ -94,8 +113,27 @@ export async function requestPasswordReset(email: string, requesterIp: string): 
 
   try {
     await sendResetEmail(user.email, token);
+    // Si una alerta previa por fallo de correo sigue activa, el envio exitoso la cierra.
+    await resolveAlert("mail.password_reset.failed").catch(() => undefined);
   } catch (error) {
-    logger.error("password reset mail failed", { error: error instanceof Error ? error.message : "unknown" });
+    // La respuesta al usuario es siempre la misma (no revela si el correo existe),
+    // por eso el fallo se registra y se alerta: de lo contrario nadie se entera.
+    const failure = describeMailError(error);
+    logger.error("password reset mail failed", {
+      service: "mail",
+      component: "password-reset",
+      outcome: "FAILED",
+      errorCode: failure.code,
+      safeMessage: failure.message,
+    });
+    await raiseAlert({
+      severity: "P1",
+      source: "mail:password-reset",
+      title: "Fallo el envio del correo de restablecimiento de contrasena",
+      description: `Codigo ${failure.code}. Revise MAIL_HOST, MAIL_USER, MAIL_PASSWORD, MAIL_FROM y NEXT_PUBLIC_APP_URL.`,
+      dedupeKey: "mail.password_reset.failed",
+      notify: false,
+    }).catch(() => undefined);
   }
 }
 

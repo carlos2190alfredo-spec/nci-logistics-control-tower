@@ -3,9 +3,17 @@
 import { useCallback, useEffect, useState } from "react";
 import { Camera, ImageIcon, Trash2, Loader2 } from "lucide-react";
 import {
+  MAX_RAW_IMAGE_BYTES,
+  MAX_UPLOAD_BYTES,
+  PhotoTooLargeError,
+  formatMegabytes,
+  prepareImageForUpload,
+} from "@/components/offline/photo-compress";
+import {
   storePhoto,
   listPhotosForTrip,
   removePhoto,
+  updatePhoto,
   stripExifClient,
   computeContentHash,
   createThumbnailDataUrl,
@@ -13,7 +21,40 @@ import {
 } from "@/lib/offline/photo-store";
 
 const ACCEPTED_TYPES = ["image/jpeg", "image/png", "image/webp"];
-const MAX_FILE_SIZE = 10 * 1024 * 1024;
+
+/** Fotos guardadas antes del limite de 3 MB que aun esperan subir (el servidor las rechazaria). */
+function isOversizedPending(photo: OfflinePhoto) {
+  return photo.sizeBytes > MAX_UPLOAD_BYTES && ["READY_TO_UPLOAD", "LOCAL_PENDING"].includes(photo.status);
+}
+
+/**
+ * Reduce en el sitio las fotos pendientes que quedaron guardadas por encima del limite de
+ * subida; las que no se pueden reducir se marcan como fallidas (con motivo) para que el
+ * chofer las elimine y vuelva a capturar en vez de reintentar para siempre.
+ */
+async function shrinkOversizedPhotos(photos: OfflinePhoto[]) {
+  for (const photo of photos.filter(isOversizedPending)) {
+    try {
+      const source = new File([photo.blob], photo.filename, { type: photo.mimeType });
+      // Pesa mas que el limite: o se reduce (reencoded) o lanza PhotoTooLargeError.
+      const prepared = await prepareImageForUpload(source);
+      await updatePhoto(photo.localPhotoId, {
+        blob: prepared.blob,
+        filename: prepared.filename,
+        mimeType: prepared.mimeType,
+        sizeBytes: prepared.blob.size,
+        contentHash: await computeContentHash(await prepared.blob.arrayBuffer()),
+        attempts: 0,
+        errorDetail: undefined,
+      });
+    } catch {
+      await updatePhoto(photo.localPhotoId, {
+        status: "FAILED",
+        errorDetail: `Foto demasiado pesada (maximo ${formatMegabytes(MAX_UPLOAD_BYTES)}). Eliminela y capture otra.`,
+      });
+    }
+  }
+}
 
 function generateId() {
   if ("randomUUID" in crypto) return crypto.randomUUID();
@@ -36,10 +77,17 @@ export function EvidencePhotoCapture({
 
   useEffect(() => {
     let cancelled = false;
-    listPhotosForTrip(ownerKey, tripId).then((list) => {
+    (async () => {
+      let list = await listPhotosForTrip(ownerKey, tripId);
+      if (list.some(isOversizedPending)) {
+        await shrinkOversizedPhotos(list);
+        list = await listPhotosForTrip(ownerKey, tripId);
+      }
       if (cancelled) return;
       setPhotos(list);
       onPhotosChange?.(list);
+    })().catch(() => {
+      // IndexedDB no disponible: la lista queda vacia y la captura sigue mostrando su error propio.
     });
     return () => { cancelled = true; };
   }, [ownerKey, tripId, onPhotosChange, refreshKey]);
@@ -58,8 +106,8 @@ export function EvidencePhotoCapture({
         setError("Formato no soportado. Use JPG, PNG o WEBP.");
         return;
       }
-      if (file.size > MAX_FILE_SIZE) {
-        setError("La foto excede el limite de 10 MB.");
+      if (file.size > MAX_RAW_IMAGE_BYTES) {
+        setError(`La foto excede el limite de ${formatMegabytes(MAX_RAW_IMAGE_BYTES)}.`);
         return;
       }
 
@@ -67,13 +115,21 @@ export function EvidencePhotoCapture({
       setProcessing(true);
 
       try {
-        let buffer = await file.arrayBuffer();
+        // Reduce la foto para que quepa en el limite de subida (Vercel ~4,5 MB por peticion).
+        const prepared = await prepareImageForUpload(file);
+        let buffer = await prepared.blob.arrayBuffer();
 
-        if (file.type === "image/jpeg") {
+        // Una foto recodificada ya no trae EXIF; el original se limpia a nivel de bytes.
+        if (prepared.mimeType === "image/jpeg" && !prepared.reencoded) {
           buffer = stripExifClient(buffer);
         }
 
-        const blob = new Blob([buffer], { type: file.type });
+        const blob = new Blob([buffer], { type: prepared.mimeType });
+        if (blob.size > MAX_UPLOAD_BYTES) {
+          throw new PhotoTooLargeError(
+            `La foto es demasiado pesada (maximo ${formatMegabytes(MAX_UPLOAD_BYTES)}). Tome otra foto con menor resolucion.`,
+          );
+        }
         const [contentHash, thumbnailDataUrl] = await Promise.all([
           computeContentHash(buffer),
           createThumbnailDataUrl(blob),
@@ -84,8 +140,8 @@ export function EvidencePhotoCapture({
           localPhotoId: generateId(),
           ownerKey,
           tripId,
-          filename: file.name,
-          mimeType: file.type,
+          filename: prepared.filename,
+          mimeType: prepared.mimeType,
           sizeBytes: blob.size,
           blob,
           thumbnailDataUrl,
@@ -116,6 +172,7 @@ export function EvidencePhotoCapture({
   );
 
   const uploadable = photos.filter((p) => !["AVAILABLE", "CONFLICT"].includes(p.status));
+  const failedDetail = photos.find((p) => p.status === "FAILED" && p.errorDetail)?.errorDetail;
 
   return (
     <div className="grid gap-2">
@@ -158,6 +215,9 @@ export function EvidencePhotoCapture({
 
       {error && (
         <p className="text-xs font-medium text-danger-strong">{error}</p>
+      )}
+      {!error && failedDetail && (
+        <p className="text-xs font-medium text-danger-strong">{failedDetail}</p>
       )}
 
       <label className="inline-flex min-h-10 cursor-pointer items-center justify-center gap-2 rounded-lg border border-border bg-surface px-3 text-sm font-semibold text-foreground shadow-xs transition-colors hover:bg-muted">

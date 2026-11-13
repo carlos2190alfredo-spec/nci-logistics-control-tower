@@ -3,6 +3,7 @@ import { isLocalEnv } from "@/lib/app-env";
 import { getAntivirusProvider } from "@/lib/server/antivirus";
 import { getDb } from "@/lib/server/db";
 import { getStorageBucket, getStorageClient } from "@/lib/server/storage";
+import { createSingleFlightTtlCache } from "@/lib/server/ttl-cache";
 import { logger } from "./logger";
 
 export type ServiceStatus = "HEALTHY" | "DEGRADED" | "UNHEALTHY" | "UNKNOWN";
@@ -127,15 +128,28 @@ export async function checkMinio(): Promise<HealthCheckResult> {
 export async function checkClamAV(): Promise<HealthCheckResult> {
   const checkedAt = new Date().toISOString();
   if (process.env.ANTIVIRUS_URL) {
-    const { result: healthy, durationMs } = await timed(() => getAntivirusProvider().ping());
-    return {
-      name: "clamav",
-      status: healthy ? "HEALTHY" : "UNHEALTHY",
-      durationMs,
-      checkedAt,
-      severity: "critical",
-      ...(healthy ? {} : { message: "Gateway ClamAV no responde", remediation: "Verificar la app de Fly.io y ANTIVIRUS_TOKEN" }),
-    };
+    try {
+      const { result: healthy, durationMs } = await timed(() => getAntivirusProvider().ping());
+      return {
+        name: "clamav",
+        status: healthy ? "HEALTHY" : "UNHEALTHY",
+        durationMs,
+        checkedAt,
+        severity: "critical",
+        ...(healthy ? {} : { message: "Gateway ClamAV no responde", remediation: "Verificar la app de Fly.io y ANTIVIRUS_TOKEN" }),
+      };
+    } catch (err) {
+      // Por ejemplo ANTIVIRUS_URL sin ANTIVIRUS_TOKEN: no debe tumbar el resto de chequeos.
+      return {
+        name: "clamav",
+        status: "UNHEALTHY",
+        durationMs: 0,
+        checkedAt,
+        message: err instanceof Error ? err.message.slice(0, 200) : "Gateway ClamAV no configurado",
+        remediation: "Verificar ANTIVIRUS_URL y ANTIVIRUS_TOKEN",
+        severity: "critical",
+      };
+    }
   }
   try {
     const { result, durationMs } = await timed(async () => {
@@ -265,6 +279,25 @@ export async function runHealthChecks(): Promise<HealthSummary> {
     nodeVersion: process.version,
     checks,
   };
+}
+
+/**
+ * Vigencia del resumen que sirve el endpoint publico `/api/internal/health`.
+ * Ese endpoint no exige sesion: sin cache cada GET lanzaria 2 consultas a Postgres, un
+ * HeadBucket a S3 y un ping al gateway de Fly (hasta 5 s cada uno), y cualquiera podria
+ * usarlo para saturar el pool de conexiones o los servicios externos.
+ */
+export const PUBLIC_HEALTH_CACHE_TTL_MS = 20_000;
+
+const publicHealthCache = createSingleFlightTtlCache<HealthSummary>(PUBLIC_HEALTH_CACHE_TTL_MS);
+
+/**
+ * Igual que `runHealthChecks` pero con cache en memoria por instancia (~20 s) y un solo
+ * calculo compartido entre peticiones concurrentes. Solo para el endpoint publico:
+ * `/readiness` (con rol de plataforma) y el cron de mantenimiento usan datos frescos.
+ */
+export function runHealthChecksCached(): Promise<HealthSummary> {
+  return publicHealthCache.get(runHealthChecks);
 }
 
 export async function runLivenessCheck(): Promise<{ alive: boolean }> {

@@ -7,7 +7,7 @@ import { timingSafeEqual } from "node:crypto";
 
 const TOKEN = process.env.GATEWAY_TOKEN ?? "";
 const PORT = Number(process.env.PORT ?? 8080);
-const MAX_BYTES = 6 * 1024 * 1024; // la app limita archivos a 5 MB
+const MAX_BYTES = 6 * 1024 * 1024; // la app limita archivos a 3 MiB (Vercel ~4,5 MB por peticion); margen holgado
 const CLAMD = { host: "127.0.0.1", port: 3310 };
 
 if (TOKEN.length < 32) {

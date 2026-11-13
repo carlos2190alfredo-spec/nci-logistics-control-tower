@@ -153,3 +153,15 @@
 - Corregido: `override: true` de dotenv que redirigía `DATABASE_URL` a local en silencio.
 - Rediseño aplicado y revisado en el navegador; corregidos 3 defectos visuales. Suite E2E
   101 + 2 flaky / 103.
+
+## 2026-11-13 Auditoría de producción y endurecimiento (ADR-037)
+
+- Auditoría de solo lectura con 6 lentes y verificación adversarial; 5 grupos de agentes
+  implementaron las correcciones en archivos disjuntos y 2 revisores por grupo las revisaron.
+- Integración: corregidos 28 problemas de revisión (test de MFA, bypass de creación de usuarios,
+  guard de `db:reset`, visibilidad de documentos del cron y de las fotos offline, detección del POD
+  por clave, avisos de invitaciones y usuarios, semilla coherente con el flujo de evidencia).
+- Respaldo cifrado de Supabase staging y simulacro de restauración real en un Postgres local.
+- Verificación: typecheck, lint, 596 unitarios, build, E2E 102 + 1 intermitente de 103.
+- Las conexiones de Vercel, Supabase y Resend se desconectaron de la sesión; las claves de terceros
+  quedaron pendientes del dueño.

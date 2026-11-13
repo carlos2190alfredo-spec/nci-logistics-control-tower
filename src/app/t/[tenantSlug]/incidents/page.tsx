@@ -3,7 +3,7 @@ import { AppShell } from "@/components/shell/app-shell";
 import { Card, CardHeader, EmptyState, PageHeader } from "@/components/ui";
 import { IncidentCard } from "@/components/tenant/incident-card";
 import { ExportCsvButton } from "@/components/tenant/export-csv-button";
-import { requireTenantMembership } from "@/lib/server/auth";
+import { requireTenantPermission } from "@/lib/server/auth";
 import { getTenantIncidents } from "@/lib/server/tenant-dashboard-data";
 import { getTenantNavGroups } from "@/lib/ui/tenant-nav";
 import { tenantRoleLabel } from "@/lib/ui/status";
@@ -16,8 +16,8 @@ export default async function TenantIncidentsPage({
   params: Promise<{ tenantSlug: string }>;
 }) {
   const { tenantSlug } = await params;
-  const { user, tenant, membership } = await requireTenantMembership(tenantSlug);
-  const incidents = await getTenantIncidents(tenant.id, 100);
+  const { user, tenant, membership } = await requireTenantPermission(tenantSlug, "tenant.view");
+  const incidents = await getTenantIncidents({ tenantId: tenant.id, role: membership.role }, 100);
 
   return (
     <AppShell

@@ -2,7 +2,7 @@ import { Bell } from "lucide-react";
 import { AppShell } from "@/components/shell/app-shell";
 import { Card, CardHeader, EmptyState, PageHeader } from "@/components/ui";
 import { ActivityItem } from "@/components/tenant/activity-item";
-import { requireTenantMembership } from "@/lib/server/auth";
+import { requireTenantPermission } from "@/lib/server/auth";
 import { getTenantNotifications } from "@/lib/server/tenant-dashboard-data";
 import { getTenantNavGroups } from "@/lib/ui/tenant-nav";
 import { tenantRoleLabel } from "@/lib/ui/status";
@@ -15,8 +15,8 @@ export default async function TenantActivityPage({
   params: Promise<{ tenantSlug: string }>;
 }) {
   const { tenantSlug } = await params;
-  const { user, tenant, membership } = await requireTenantMembership(tenantSlug);
-  const notifications = await getTenantNotifications(tenant.id, 100);
+  const { user, tenant, membership } = await requireTenantPermission(tenantSlug, "tenant.view");
+  const notifications = await getTenantNotifications({ tenantId: tenant.id, role: membership.role }, 100);
 
   return (
     <AppShell

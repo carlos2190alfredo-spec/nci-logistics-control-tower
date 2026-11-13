@@ -7,7 +7,7 @@ import { type BackupManifest, addEntry } from "./manifest";
 function getS3Client(): S3Client {
   return new S3Client({
     endpoint: process.env.MINIO_ENDPOINT || "http://localhost:9000",
-    region: "us-east-1",
+    region: process.env.STORAGE_REGION || "us-east-1",
     forcePathStyle: true,
     credentials: {
       accessKeyId: process.env.MINIO_ACCESS_KEY || "nci_minio",

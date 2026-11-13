@@ -1,15 +1,22 @@
 import { cookies, headers } from "next/headers";
 import { redirect } from "next/navigation";
-import type { CustomerRole, PlatformRole, TenantRole } from "@/generated/prisma";
+import type { CustomerRole, PlatformRole, TenantMembership, TenantRole } from "@/generated/prisma";
 import { createOpaqueToken, hashToken, keyedHash, verifyPassword } from "@/lib/server/crypto";
 import { getDb } from "@/lib/server/db";
 import { audit } from "@/lib/server/audit";
 import { logger } from "@/lib/server/logger";
+import {
+  MFA_REQUIRED_TENANT_ROLES,
+  evaluateTenantAccess,
+  getRolesForPermission,
+  tenantAccessRedirect,
+  type TenantAccessDenialReason,
+  type TenantPermission,
+} from "@/lib/server/tenant-permissions";
 
 export type AuthLevel = "PASSWORD_ONLY" | "MFA_VERIFIED" | "PARTIAL_MFA_PENDING";
 
 const MFA_REQUIRED_PLATFORM_ROLES: PlatformRole[] = ["PLATFORM_SUPER_ADMIN", "PLATFORM_SUPPORT"];
-const MFA_REQUIRED_TENANT_ROLES: TenantRole[] = ["TENANT_OWNER", "TENANT_ADMIN"];
 
 const SESSION_DAYS = 7;
 
@@ -28,7 +35,14 @@ async function collectRequestMetadata() {
       userAgent: truncateUserAgent(store.get("user-agent")),
       ipHash: keyedHash(rawIp, "session-ip"),
     };
-  } catch {
+  } catch (error) {
+    // Fuera de local keyedHash exige SESSION_METADATA_KEY: si falta, el metadato se omite
+    // (no se bloquea el login) pero queda en el log para que la mala configuracion se vea.
+    logger.error("session metadata unavailable", {
+      service: "auth",
+      outcome: "DEGRADED",
+      reason: error instanceof Error ? error.message : "unknown",
+    });
     return { userAgent: null, ipHash: null };
   }
 }
@@ -174,6 +188,17 @@ export async function requireAuthenticatedUser() {
   return session.user;
 }
 
+/**
+ * Usuario de la sesion completa para endpoints API: devuelve null (el llamador
+ * responde 401 JSON) cuando no hay sesion o el MFA sigue pendiente, en lugar de
+ * la redireccion HTML que `requireAuthenticatedUser` emite para paginas.
+ */
+export async function getApiSessionUser() {
+  const session = await getSession();
+  if (!session || session.authLevel === "PARTIAL_MFA_PENDING") return null;
+  return session.user;
+}
+
 export async function getPartialSession() {
   const cookieStore = await cookies();
   const token = cookieStore.get(sessionCookieName)?.value;
@@ -271,16 +296,75 @@ export async function requireTenantAccess(tenantSlug: string) {
   return { user, tenant };
 }
 
-export async function requireTenantRole(tenantSlug: string, roles: TenantRole[]) {
-  const context = await requireTenantMembership(tenantSlug);
-  if (!roles.includes(context.membership.role)) redirect(`/t/${tenantSlug}`);
+export type TenantAccessResult =
+  | {
+      ok: true;
+      tenant: NonNullable<Awaited<ReturnType<typeof resolveActiveTenant>>>;
+      membership: TenantMembership;
+    }
+  | { ok: false; reason: TenantAccessDenialReason; role: TenantRole | null };
 
-  if (MFA_REQUIRED_TENANT_ROLES.includes(context.membership.role)) {
-    const mfaSecret = await getDb().userMfaSecret.findUnique({ where: { userId: context.user.id } });
-    if (!mfaSecret?.verified) redirect("/account/security/mfa/setup");
+/**
+ * Nucleo de acceso a un tenant, sin redirecciones: resuelve el tenant desde el
+ * slug de la ruta (debe estar ACTIVE), la membresia activa del usuario ya
+ * autenticado y, para los roles que lo exigen, el MFA verificado. Nunca usa un
+ * identificador de tenant enviado por el navegador.
+ *
+ * `requireTenantRole` (paginas, redirige) y los endpoints API (responden 403)
+ * comparten esta regla para no divergir.
+ */
+export async function resolveTenantAccess(
+  userId: string,
+  tenantSlug: string,
+  allowedRoles?: readonly TenantRole[],
+): Promise<TenantAccessResult> {
+  const db = getDb();
+  const tenant = await resolveActiveTenant(tenantSlug);
+  if (!tenant) return { ok: false, reason: "TENANT_INACTIVE", role: null };
+
+  const membership = await db.tenantMembership.findFirst({
+    where: { tenantId: tenant.id, userId, active: true },
+  });
+  const hasCustomerMembership = membership
+    ? false
+    : (await db.customerMembership.findFirst({
+        where: { tenantId: tenant.id, userId, active: true },
+        select: { id: true },
+      })) !== null;
+  const mfaVerified =
+    membership && MFA_REQUIRED_TENANT_ROLES.includes(membership.role)
+      ? (await db.userMfaSecret.findUnique({ where: { userId } }))?.verified === true
+      : false;
+
+  const decision = evaluateTenantAccess({
+    tenantActive: true,
+    role: membership?.role ?? null,
+    hasCustomerMembership,
+    allowedRoles,
+    mfaVerified,
+  });
+  // `!membership` con decision.ok es inalcanzable (la regla exige rol), pero se
+  // falla cerrado para que el tipo garantice la membresia al llamador.
+  if (!decision.ok || !membership) {
+    return { ok: false, reason: decision.ok ? "NO_MEMBERSHIP" : decision.reason, role: membership?.role ?? null };
   }
+  return { ok: true, tenant, membership };
+}
 
-  return context;
+export async function requireTenantRole(tenantSlug: string, roles: TenantRole[]) {
+  const user = await requireAuthenticatedUser();
+  const access = await resolveTenantAccess(user.id, tenantSlug, roles);
+  if (!access.ok) redirect(tenantAccessRedirect(access.reason, tenantSlug, access.role));
+  return { user, tenant: access.tenant, membership: access.membership };
+}
+
+/**
+ * Exige que el rol del usuario tenga el permiso indicado en el mapa de
+ * permisos (misma fuente que la navegacion). Un conductor que abre una vista
+ * operativa por URL termina en su app, no en el centro de control.
+ */
+export async function requireTenantPermission(tenantSlug: string, permission: TenantPermission) {
+  return requireTenantRole(tenantSlug, getRolesForPermission(permission));
 }
 
 export async function requireCustomerMembership(tenantSlug: string, roles?: CustomerRole[]) {

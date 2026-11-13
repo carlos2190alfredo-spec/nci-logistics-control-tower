@@ -2,7 +2,7 @@ import { Inbox } from "lucide-react";
 import { AppShell } from "@/components/shell/app-shell";
 import { Card, CardHeader, EmptyState, PageHeader } from "@/components/ui";
 import { RequestCard } from "@/components/tenant/request-card";
-import { requireTenantMembership } from "@/lib/server/auth";
+import { requireTenantPermission } from "@/lib/server/auth";
 import { getTenantRequests } from "@/lib/server/tenant-dashboard-data";
 import { getTenantNavGroups } from "@/lib/ui/tenant-nav";
 import { tenantRoleLabel } from "@/lib/ui/status";
@@ -15,8 +15,8 @@ export default async function TenantRequestsPage({
   params: Promise<{ tenantSlug: string }>;
 }) {
   const { tenantSlug } = await params;
-  const { user, tenant, membership } = await requireTenantMembership(tenantSlug);
-  const requests = await getTenantRequests(tenant.id);
+  const { user, tenant, membership } = await requireTenantPermission(tenantSlug, "tenant.view");
+  const requests = await getTenantRequests({ tenantId: tenant.id, role: membership.role });
 
   return (
     <AppShell

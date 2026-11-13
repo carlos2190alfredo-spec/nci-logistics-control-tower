@@ -50,4 +50,9 @@ describe("file-pipeline (compilation surface)", () => {
     expect(source).toContain('"INFECTED"');
     expect(source).toContain('status: "AVAILABLE"');
   });
+
+  it("devuelve el archivo a PENDING_SCAN si el escaneo falla tras marcar SCANNING", () => {
+    expect(source).toContain('where: { id: fileAttachmentId, status: "SCANNING" }');
+    expect(source).toContain('data: { status: "PENDING_SCAN" }');
+  });
 });

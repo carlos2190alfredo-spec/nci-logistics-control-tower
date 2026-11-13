@@ -121,8 +121,8 @@ test.describe("PWA-E2E PWA installability and service worker", () => {
     });
 
     const offlineCached = await page.evaluate(async () => {
-      const cache = await caches.open("nci-lct-v3");
-      const response = await cache.match("/offline");
+      // Busca en todos los caches del origen: no depende del nombre de la version del SW.
+      const response = await caches.match("/offline");
       return response !== undefined;
     });
     expect(offlineCached).toBe(true);

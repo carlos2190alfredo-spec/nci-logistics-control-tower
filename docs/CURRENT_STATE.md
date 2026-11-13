@@ -2,6 +2,27 @@
 
 Fecha: 2026-11-13
 
+## Endurecimiento para producción (ADR-037)
+
+Una auditoría de solo lectura (6 lentes, verificación adversarial; 46 hallazgos, 40 confirmados,
+ninguno crítico) se corrigió y se revisó con revisores independientes:
+
+- **Correo único** (Resend por SMTP, con timeouts); nunca aborta una acción ya confirmada ni lleva
+  contraseñas (enlace de un solo uso). `getAppBaseUrl()` sin fallback a `localhost` fuera de local.
+- **Autorización:** regla de roles de propietario, páginas operativas con `tenant.view` (el
+  conductor ya no abre el centro de control), la API de sincronización exige tenant activo y MFA,
+  la evidencia nace `INTERNAL` y solo la publica la aprobación, las transiciones de evidencia solo
+  existen por sus flujos dedicados.
+- **Subidas:** 3 MiB por archivo y `bodySizeLimit` 4 mb (tope de Vercel ~4,5 MB); el navegador
+  recodifica las fotos.
+- **Cron diario** de mantenimiento (`CRON_SECRET`), caché del health público y límite de uso atómico.
+- **Entorno fail-closed** (`APP_ENV` inválido lanza), guards de host en seed y `db:reset`,
+  `prod:bootstrap`, `db:deploy`, `demo:purge`, respaldos contra Supabase (simulacro real hecho).
+- **Frontend:** service worker con lista blanca, `robots`/`sitemap`/metadatos (indexable solo con
+  `APP_ENV=production`), contraste AA, acentos y páginas 404 y de error en español.
+- **Pendiente de credenciales del dueño:** `MINIO_ACCESS_KEY`/`MINIO_SECRET_KEY`, `MAIL_PASSWORD`,
+  `CRON_SECRET`, `OPS_ALERT_EMAIL` y, para indexar, `APP_ENV=production`.
+
 ## Staging en la nube (ADR-036) y rediseño de la cara pública
 
 - **Perfiles `APP_ENV` (local | staging | production).** Fuera de local:

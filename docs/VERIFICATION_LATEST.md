@@ -1,5 +1,30 @@
 # VERIFICATION LATEST
 
+Fecha: 2026-11-13 (Auditoría de producción y endurecimiento — ADR-037)
+
+## Auditoría y correcciones
+
+| Verificación | Resultado |
+| --- | --- |
+| Auditoría de solo lectura (6 lentes, 98 agentes) | 46 hallazgos: 40 confirmados por 2 verificadores, 2 en disputa, 4 descartados. Ninguno crítico |
+| Correcciones (5 grupos de archivos disjuntos) + 2 revisores por grupo | 28 observaciones de revisión; corregidas todas las bloqueantes y mayores y la mayoría de las menores |
+| `pnpm typecheck`, `pnpm lint` | Pasan |
+| `pnpm test` | 59 archivos, 596 tests pasan |
+| `pnpm security:check` | Pasa |
+| `pnpm build` | Pasa |
+| **E2E completa (local, ClamAV activo)** | **102 pasan + 1 intermitente (pasa al reintentar), 0 fallos, 0 omitidos (8,3 min)**. Intermitente: Panamá — cumplimiento (carga de `/t/…/compliance`) |
+| Respaldo cifrado de Supabase staging (`pnpm backup:postgres` con `BACKUP_DATABASE_URL`) | 235,2 KB; checksum verificado (`backup:verify`) |
+| **Simulacro de restauración** (`backup:restore:postgres` en un Postgres local descartable) | **70 tablas restauradas**; users 8, tenants 2, trips 15, service_requests 15, audit_logs 2; base descartable eliminada |
+
+## No ejecutado
+
+- Pruebas contra el sitio desplegado con sesión (no se introducen credenciales en una URL no local).
+- Envío real de correo y subida real de evidencia en staging: faltan `MAIL_PASSWORD` y las claves S3.
+- Cron en Vercel: requiere `CRON_SECRET`.
+
+---
+
+
 Fecha: 2026-11-13 (Staging en la nube — ADR-036 — y rediseño "Manifiesto del istmo")
 
 ## Staging en la nube y rediseño

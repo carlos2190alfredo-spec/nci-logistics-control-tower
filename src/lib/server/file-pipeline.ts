@@ -76,12 +76,15 @@ export async function scanFile(fileAttachmentId: string): Promise<ScanResult> {
     throw new FilePipelineError("INVALID_STATE", `Cannot scan file in status ${attachment.status}`);
   }
 
+  // El proveedor se resuelve ANTES de marcar SCANNING: si la configuracion es invalida
+  // (p. ej. ANTIVIRUS_URL sin ANTIVIRUS_TOKEN) el archivo queda como estaba y no atascado.
+  const av = getAntivirusProvider();
+
   await db.fileAttachment.update({
     where: { id: fileAttachmentId },
     data: { status: "SCANNING" },
   });
 
-  const av = getAntivirusProvider();
   const isAvailable = await av.ping();
   if (!isAvailable) {
     await db.fileAttachment.update({
@@ -91,55 +94,67 @@ export async function scanFile(fileAttachmentId: string): Promise<ScanResult> {
     throw new FilePipelineError("AV_UNAVAILABLE", "ClamAV is not available — fail closed");
   }
 
-  const { GetObjectCommand } = await import("@aws-sdk/client-s3");
-  const client = getStorageClient();
-  const response = await client.send(
-    new GetObjectCommand({
-      Bucket: attachment.bucket,
-      Key: attachment.quarantineKey,
-    }),
-  );
-  const bodyBytes = await response.Body?.transformToByteArray();
-  if (!bodyBytes) {
-    throw new FilePipelineError("STORAGE_ERROR", "Failed to read quarantined file");
+  // Cualquier fallo tras marcar SCANNING (lectura de S3, gateway, DB) deja el archivo en
+  // PENDING_SCAN para que el cron de mantenimiento lo reintente; si no, quedaria en SCANNING
+  // para siempre porque `scanFile` solo acepta QUARANTINE o PENDING_SCAN.
+  let result: ScanResult;
+  let durationMs: number;
+  try {
+    const { GetObjectCommand } = await import("@aws-sdk/client-s3");
+    const client = getStorageClient();
+    const response = await client.send(
+      new GetObjectCommand({
+        Bucket: attachment.bucket,
+        Key: attachment.quarantineKey,
+      }),
+    );
+    const bodyBytes = await response.Body?.transformToByteArray();
+    if (!bodyBytes) {
+      throw new FilePipelineError("STORAGE_ERROR", "Failed to read quarantined file");
+    }
+    const buffer = Buffer.from(bodyBytes);
+
+    const startMs = Date.now();
+    result = await av.scan(buffer);
+    durationMs = Date.now() - startMs;
+
+    const verdictMap: Record<string, PrismaScanVerdict> = {
+      CLEAN: "CLEAN",
+      INFECTED: "INFECTED",
+      ERROR: "ERROR",
+    };
+
+    const prismaVerdict = verdictMap[result.verdict] ?? "ERROR";
+
+    await db.$transaction(async (tx) => {
+      await tx.fileScanEvent.create({
+        data: {
+          fileAttachmentId,
+          verdict: prismaVerdict,
+          detail: result.detail,
+          durationMs,
+        },
+      });
+
+      const newStatus: FileStatus =
+        result.verdict === "CLEAN" ? "CLEAN" : result.verdict === "INFECTED" ? "INFECTED" : "PENDING_SCAN";
+
+      await tx.fileAttachment.update({
+        where: { id: fileAttachmentId },
+        data: {
+          status: newStatus,
+          scanVerdict: prismaVerdict,
+          scanDetail: result.detail,
+          scannedAt: new Date(),
+        },
+      });
+    });
+  } catch (error) {
+    await db.fileAttachment
+      .updateMany({ where: { id: fileAttachmentId, status: "SCANNING" }, data: { status: "PENDING_SCAN" } })
+      .catch(() => undefined);
+    throw error;
   }
-  const buffer = Buffer.from(bodyBytes);
-
-  const startMs = Date.now();
-  const result = await av.scan(buffer);
-  const durationMs = Date.now() - startMs;
-
-  const verdictMap: Record<string, PrismaScanVerdict> = {
-    CLEAN: "CLEAN",
-    INFECTED: "INFECTED",
-    ERROR: "ERROR",
-  };
-
-  const prismaVerdict = verdictMap[result.verdict] ?? "ERROR";
-
-  await db.$transaction(async (tx) => {
-    await tx.fileScanEvent.create({
-      data: {
-        fileAttachmentId,
-        verdict: prismaVerdict,
-        detail: result.detail,
-        durationMs,
-      },
-    });
-
-    const newStatus: FileStatus =
-      result.verdict === "CLEAN" ? "CLEAN" : result.verdict === "INFECTED" ? "INFECTED" : "PENDING_SCAN";
-
-    await tx.fileAttachment.update({
-      where: { id: fileAttachmentId },
-      data: {
-        status: newStatus,
-        scanVerdict: prismaVerdict,
-        scanDetail: result.detail,
-        scannedAt: new Date(),
-      },
-    });
-  });
 
   logger.info("file scan complete", {
     fileAttachmentId,

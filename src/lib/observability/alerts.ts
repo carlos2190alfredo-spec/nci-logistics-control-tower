@@ -1,4 +1,6 @@
+import { isLocalEnv } from "@/lib/app-env";
 import { getDb } from "@/lib/server/db";
+import { describeMailError, sendMail } from "@/lib/server/mail";
 import { logger } from "./logger";
 
 export type AlertInput = {
@@ -9,7 +11,21 @@ export type AlertInput = {
   dedupeKey: string;
   tenantId?: string;
   metadata?: Record<string, unknown>;
+  /**
+   * `false` registra la alerta sin enviar correo. Para alertas del propio
+   * canal de correo: reintentar por SMTP solo sumaria otro timeout.
+   */
+  notify?: boolean;
 };
+
+/** Destinatario de desarrollo (Mailpit). Fuera de `local` solo se usa `OPS_ALERT_EMAIL`. */
+const LOCAL_ALERT_RECIPIENT = "admin@nci-lct.local";
+
+function resolveAlertRecipient(): string | null {
+  const configured = process.env.OPS_ALERT_EMAIL?.trim();
+  if (configured) return configured;
+  return isLocalEnv() ? LOCAL_ALERT_RECIPIENT : null;
+}
 
 const COOLDOWN_MINUTES: Record<string, number> = {
   P0: 5,
@@ -107,15 +123,22 @@ export async function getActiveAlerts() {
 }
 
 async function sendAlertNotification(input: AlertInput) {
-  try {
-    const mailHost = process.env.MAIL_HOST ?? "localhost";
-    const mailPort = Number(process.env.MAIL_PORT ?? "1025");
-    const nodemailer = await import("nodemailer");
-    const transport = nodemailer.createTransport({ host: mailHost, port: mailPort, secure: false });
+  if (input.notify === false) return;
 
-    await transport.sendMail({
-      from: '"NCI LCT Ops" <ops@nci-lct.local>',
-      to: "admin@nci-lct.local",
+  const recipient = resolveAlertRecipient();
+  if (!recipient) {
+    logger.warn("alert.notification.skipped", {
+      service: "alerts",
+      component: input.source,
+      safeMessage: "OPS_ALERT_EMAIL no esta definido: la alerta se registro pero no se envio correo.",
+    });
+    return;
+  }
+
+  try {
+    // Mismo transporte que el resto de la app (MAIL_USER/MAIL_PASSWORD/MAIL_SECURE, timeouts).
+    await sendMail({
+      to: recipient,
       subject: `[${input.severity}] ${input.title}`,
       text: [
         `Severidad: ${input.severity}`,
@@ -129,9 +152,11 @@ async function sendAlertNotification(input: AlertInput) {
       ].join("\n"),
     });
   } catch (err) {
+    const failure = describeMailError(err);
     logger.warn("alert.notification.failed", {
       service: "alerts",
-      safeMessage: err instanceof Error ? err.message.slice(0, 200) : "email send failed",
+      errorCode: failure.code,
+      safeMessage: failure.message,
     });
   }
 }

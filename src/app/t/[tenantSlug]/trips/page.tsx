@@ -2,7 +2,7 @@ import { Route } from "lucide-react";
 import { AppShell } from "@/components/shell/app-shell";
 import { EmptyState, PageHeader, StatusBadge } from "@/components/ui";
 import { TripOperationsCard } from "@/components/operations/trip-operations-card";
-import { requireTenantMembership } from "@/lib/server/auth";
+import { requireTenantPermission } from "@/lib/server/auth";
 import {
   getTenantActiveTrips,
   getTenantDrivers,
@@ -22,12 +22,13 @@ export default async function TenantTripsPage({
   params: Promise<{ tenantSlug: string }>;
 }) {
   const { tenantSlug } = await params;
-  const { user, tenant, membership } = await requireTenantMembership(tenantSlug);
+  const { user, tenant, membership } = await requireTenantPermission(tenantSlug, "tenant.view");
+  const viewer = { tenantId: tenant.id, role: membership.role };
   const [trips, vehicles, equipment, drivers, blockedAssets] = await Promise.all([
-    getTenantActiveTrips(tenant.id),
-    getTenantVehicles(tenant.id),
-    getTenantEquipment(tenant.id),
-    getTenantDrivers(tenant.id),
+    getTenantActiveTrips(viewer),
+    getTenantVehicles(viewer),
+    getTenantEquipment(viewer),
+    getTenantDrivers(viewer),
     getBlockedAssets(tenant.id),
   ]);
 

@@ -23,7 +23,7 @@ export default async function EditTenantUserPage({
   params: Promise<{ tenantSlug: string; membershipId: string }>;
 }) {
   const { tenantSlug, membershipId } = await params;
-  const { user, tenant } = await requireTenantRole(tenantSlug, ["TENANT_OWNER", "TENANT_ADMIN"]);
+  const { user, tenant, membership: viewer } = await requireTenantRole(tenantSlug, ["TENANT_OWNER", "TENANT_ADMIN"]);
   const db = getDb();
 
   const membership = await db.tenantMembership.findFirst({
@@ -62,6 +62,11 @@ export default async function EditTenantUserPage({
           <form action={boundAction} className="mt-4 grid gap-4">
             <Field defaultValue={membership.user.name} label="Nombre completo" name="name" />
             <SelectField defaultValue={membership.role} label="Rol" name="role">
+              {/* Sin esta opcion el navegador enviaria TENANT_ADMIN al editar a un propietario.
+                  Solo un propietario puede verla/asignarla; el servidor lo vuelve a exigir. */}
+              {membership.role === "TENANT_OWNER" || viewer.role === "TENANT_OWNER" ? (
+                <option value="TENANT_OWNER">Propietario</option>
+              ) : null}
               <option value="TENANT_ADMIN">Administrador</option>
               <option value="OPERATIONS_MANAGER">Gerente de operaciones</option>
               <option value="DISPATCHER">Despachador</option>

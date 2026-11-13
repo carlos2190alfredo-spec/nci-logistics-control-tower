@@ -276,6 +276,6 @@ function formatUptime(seconds: number): string {
 export const dynamic = "force-dynamic";
 
 export const metadata = {
-  title: "Estado del Sistema — NCI LCT",
+  title: "Estado del Sistema",
   robots: { index: false, follow: false },
 };

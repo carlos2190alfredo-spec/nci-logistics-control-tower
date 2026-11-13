@@ -1,7 +1,19 @@
+import type { Metadata } from "next";
 import Link from "next/link";
 import { ArrowRight, ArrowUpRight } from "lucide-react";
 import { IsthmusRoute } from "@/components/brand/isthmus-route";
+import { SITE_NAME, siteOpenGraph, siteTwitter } from "@/components/brand/site";
 import { isLocalEnv } from "@/lib/app-env";
+
+const pageTitle = `${SITE_NAME} · Torre de control para transporte de carga`;
+
+// Titulo propio (absoluto, sin plantilla) y canonica relativa a metadataBase.
+export const metadata: Metadata = {
+  title: { absolute: pageTitle },
+  alternates: { canonical: "/" },
+  openGraph: siteOpenGraph({ title: pageTitle, url: "/" }),
+  twitter: siteTwitter({ title: pageTitle }),
+};
 
 /*
  * Landing — direccion "Manifiesto del istmo" (docs/design/CREATIVE_DIRECTION.md).
@@ -17,7 +29,7 @@ const milestones = [
   },
   {
     name: "Asignación",
-    text: "Vehiculo, equipo y conductor se validan contra cumplimiento, mantenimiento y agenda antes de confirmar. Si algo bloquea, la pantalla dice qué.",
+    text: "Vehículo, equipo y conductor se validan contra cumplimiento, mantenimiento y agenda antes de confirmar. Si algo bloquea, la pantalla dice qué.",
     who: "Operaciones",
   },
   {
@@ -63,8 +75,8 @@ const controls = [
     "Cada consulta se filtra por la empresa de la ruta y una membresía verificada en el servidor.",
   ],
   [
-    "MFA para cuentas criticas",
-    "Dueños y administracion de plataforma entran con contraseña y código TOTP.",
+    "MFA para cuentas críticas",
+    "Propietarios y administradores de empresa, y el personal de plataforma, entran con contraseña y código TOTP.",
   ],
   [
     "Archivos en cuarentena",
@@ -132,7 +144,7 @@ export default function HomePage() {
             </span>
           </Link>
           <nav
-            aria-label="Capitulos"
+            aria-label="Capítulos"
             className="hidden items-center gap-6 md:flex"
           >
             {chapters.map((chapter, index) => (
@@ -141,7 +153,7 @@ export default function HomePage() {
                 href={`#${chapter.id}`}
                 key={chapter.id}
               >
-                <Numeral className="text-signal" value={index + 1} />
+                <Numeral className="text-signal-strong" value={index + 1} />
                 {chapter.label}
               </a>
             ))}
@@ -170,7 +182,7 @@ export default function HomePage() {
               <span className="block font-mono text-xs font-bold tracking-[0.3em] text-signal">
                 LOGISTICS CONTROL TOWER
               </span>
-              <span className="mt-4 block font-display text-[clamp(2.6rem,6.4vw,5.4rem)] leading-[0.92] font-black tracking-[-0.02em] text-balance [font-stretch:112%]">
+              <span className="mt-4 block font-display text-[clamp(2rem,10vw,4rem)] leading-[0.92] font-black tracking-[-0.02em] text-balance [font-stretch:112%] max-sm:[overflow-wrap:anywhere] lg:text-[clamp(2.6rem,6.4vw,5.4rem)]">
                 Cada carga, documentada de origen a entrega.
               </span>
             </h1>
@@ -205,7 +217,7 @@ export default function HomePage() {
                   <dt className="font-mono text-[11px] tracking-[0.16em] text-ink-muted">
                     {term.toUpperCase()}
                   </dt>
-                  <dd className="mt-1 font-display text-lg font-bold [font-stretch:110%]">
+                  <dd className="mt-1 font-display text-base font-bold [font-stretch:110%] sm:text-lg">
                     {detail}
                   </dd>
                 </div>
@@ -230,7 +242,7 @@ export default function HomePage() {
         <section className="scroll-mt-16 border-t border-ink/10" id="recorrido">
           <div className="mx-auto grid max-w-7xl gap-10 px-4 py-20 md:px-8 lg:grid-cols-[0.8fr_1.2fr] lg:gap-16">
             <div className="lg:sticky lg:top-28 lg:self-start">
-              <Numeral className="text-signal" value={1} />
+              <Numeral className="text-signal-strong" value={1} />
               <h2 className="mt-3 font-display text-4xl leading-none font-black tracking-tight text-balance [font-stretch:115%] md:text-5xl">
                 Un servicio, seis hitos sellados.
               </h2>
@@ -270,7 +282,7 @@ export default function HomePage() {
           <div className="mx-auto max-w-7xl px-4 py-20 md:px-8">
             <div className="flex flex-wrap items-end justify-between gap-6">
               <div>
-                <Numeral className="text-signal" value={2} />
+                <Numeral className="text-signal-strong" value={2} />
                 <h2 className="mt-3 max-w-2xl font-display text-4xl leading-none font-black tracking-tight text-balance [font-stretch:115%] md:text-5xl">
                   Tres vistas de la misma operación.
                 </h2>
@@ -289,7 +301,7 @@ export default function HomePage() {
                     VISTA {String(index + 1).padStart(2, "0")}
                   </p>
                   <h3
-                    className={`mt-4 font-display font-black tracking-tight [font-stretch:115%] ${index === 0 ? "text-4xl" : "text-3xl"}`}
+                    className={`mt-4 font-display font-black tracking-tight break-words [font-stretch:115%] ${index === 0 ? "text-2xl sm:text-4xl" : "text-2xl sm:text-3xl"}`}
                   >
                     {view.role}
                   </h3>
@@ -310,7 +322,8 @@ export default function HomePage() {
               </h2>
               <p className="mt-5 max-w-md leading-7 text-fog">
                 Ocultar un botón no es seguridad. Permisos, aislamiento y
-                validaciones viven en el servidor y en la base de datos.
+                validaciones se verifican en el servidor en cada consulta, a
+                partir de la ruta, la sesión y una membresía comprobada.
               </p>
             </div>
             <dl className="grid gap-px overflow-hidden rounded-3xl bg-fog/15 sm:grid-cols-2">

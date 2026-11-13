@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { requireCustomerMembership } from "@/lib/server/auth";
 import { getDb } from "@/lib/server/db";
-import { getSignedReadUrl } from "@/lib/server/storage";
+import { safeFilename, getSignedReadUrl } from "@/lib/server/storage";
 import { enforceRateLimit } from "@/lib/server/rate-limit";
 import { clientIpFrom } from "@/lib/server/http-security";
 import { ErrorCodes, errorMessages } from "@/lib/server/errors";
@@ -33,7 +33,8 @@ export async function GET(
     include: { proof: true },
   });
 
-  if (!trip || !trip.proofReady || !trip.proof) {
+  // El POD solo se entrega con la evidencia aprobada por operaciones.
+  if (!trip || !trip.proofReady || !trip.proof || trip.proof.status !== "APPROVED") {
     return new NextResponse("No encontrado", { status: 404 });
   }
 
@@ -73,7 +74,7 @@ export async function GET(
 
   const signed = await getSignedReadUrl(document.objectKey, {
     expiresIn: 60,
-    contentDisposition: `attachment; filename="${document.filename}"`,
+    contentDisposition: `attachment; filename="${safeFilename(document.filename)}"`,
   });
   return NextResponse.redirect(signed, {
     status: 303,

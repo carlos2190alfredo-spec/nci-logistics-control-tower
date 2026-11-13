@@ -4,7 +4,7 @@ import { verifyEmailToken } from "@/lib/server/email-verification";
 
 export const dynamic = "force-dynamic";
 export const metadata = {
-  title: "Verificacion de correo — NCI Logistics Control Tower",
+  title: "Verificación de correo",
   robots: { index: false },
 };
 

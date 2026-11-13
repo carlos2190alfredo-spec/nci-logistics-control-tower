@@ -6,7 +6,10 @@ import { envOrLocalDefault } from "@/lib/app-env";
  * Contrato de uploads:
  * - MIME declarado por el navegador se valida contra whitelist.
  * - Magic bytes se verifican en el servidor (los primeros bytes reales del archivo).
- * - Tamaño máximo 5 MB.
+ * - Tamaño máximo `MAX_UPLOAD_FILE_BYTES` (3 MB). Vercel rechaza cuerpos de más de ~4,5 MB y el
+ *   límite de Server Actions (`next.config.ts`, `bodySizeLimit: "4mb"`) cuenta todo el multipart,
+ *   así que el archivo deja margen para la firma (data URL) y los demás campos del formulario.
+ *   El cliente reduce las fotos antes de enviarlas (`photo-compress.ts`).
  * - Nombre se normaliza; la ruta final la construye el servidor con prefijo por tenant.
  * - Firma se persiste como data URL PNG en DB con validación de longitud mínima.
  */
@@ -18,7 +21,12 @@ const allowedMimeTypes = new Map([
   ["application/pdf", [".pdf"]],
 ]);
 
-const maxFileBytes = 5 * 1024 * 1024;
+/**
+ * Tope por archivo subido. Debe coincidir con `MAX_UPLOAD_BYTES` de
+ * `src/components/offline/photo-compress.ts` (hay una prueba que lo verifica) y quedar
+ * al menos ~1 MB por debajo de `bodySizeLimit` en `next.config.ts`.
+ */
+export const MAX_UPLOAD_FILE_BYTES = 3 * 1024 * 1024;
 const minFileBytes = 32;
 const DEFAULT_SIGNED_TTL = 60;
 
@@ -92,8 +100,11 @@ export async function validateUploadedFile(file: File): Promise<{ filename: stri
   if (!allowedExtensions) {
     throw new UploadRejectedError("UPLOAD_REJECTED", "Tipo de archivo no permitido.");
   }
-  if (file.size < minFileBytes || file.size > maxFileBytes) {
-    throw new UploadRejectedError("UPLOAD_REJECTED", `El archivo debe pesar entre ${minFileBytes} bytes y 5 MB.`);
+  if (file.size < minFileBytes || file.size > MAX_UPLOAD_FILE_BYTES) {
+    throw new UploadRejectedError(
+      "UPLOAD_REJECTED",
+      `El archivo debe pesar entre ${minFileBytes} bytes y ${MAX_UPLOAD_FILE_BYTES / 1024 / 1024} MB.`,
+    );
   }
 
   const filename = safeFilename(file.name);

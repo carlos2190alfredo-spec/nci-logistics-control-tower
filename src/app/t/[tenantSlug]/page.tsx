@@ -24,7 +24,7 @@ import {
 import { ActivityItem } from "@/components/tenant/activity-item";
 import { IncidentCard } from "@/components/tenant/incident-card";
 import { RequestCard } from "@/components/tenant/request-card";
-import { requireTenantMembership } from "@/lib/server/auth";
+import { requireTenantPermission } from "@/lib/server/auth";
 import { getTenantOverview } from "@/lib/server/tenant-dashboard-data";
 import { getComplianceOverview } from "@/lib/server/compliance-data";
 import { getContainers, summarizeContainers } from "@/lib/server/container-data";
@@ -46,7 +46,8 @@ export default async function TenantControlTowerPage({
   params: Promise<{ tenantSlug: string }>;
 }) {
   const { tenantSlug } = await params;
-  const { user, tenant, membership } = await requireTenantMembership(tenantSlug);
+  // Vista operativa: el conductor (sin `tenant.view`) es redirigido a su app.
+  const { user, tenant, membership } = await requireTenantPermission(tenantSlug, "tenant.view");
   const {
     requests,
     activeTrips,
@@ -57,7 +58,7 @@ export default async function TenantControlTowerPage({
     openIncidentCount,
     notifications,
     pendingProofs,
-  } = await getTenantOverview(tenant.id);
+  } = await getTenantOverview({ tenantId: tenant.id, role: membership.role });
 
   // Señales cross-módulo de la capa logística Panamá (cumplimiento/contenedores/hazmat).
   const [compliance, containers, hazmat] = await Promise.all([

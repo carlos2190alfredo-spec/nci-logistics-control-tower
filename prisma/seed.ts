@@ -1,7 +1,10 @@
 import { config } from "dotenv";
 import { PrismaClient } from "../src/generated/prisma";
+import { getAppEnv } from "../src/lib/app-env";
 import { hashPassword } from "../src/lib/server/crypto";
 import { encryptSecret } from "../src/lib/server/mfa-crypto";
+import { guardDbTarget } from "../scripts/lib/db-target";
+import { upsertTenantPlans } from "./plans";
 
 // Precedencia: variables exportadas > .env.local > .env (dotenv no pisa lo ya definido).
 config({ path: ".env.local" });
@@ -30,8 +33,12 @@ const credentials = [
  * valores son publicos, asi que se exigen por entorno y se rechazan los demo:
  * - SEED_PASSWORD: contraseña de todas las cuentas demo (>= 16 caracteres).
  * - SEED_TOTP_SECRET: secreto TOTP base32 de las cuentas con MFA (>= 32 caracteres).
+ *
+ * Ademas, con el perfil local el seed se niega a correr contra un host de base de datos
+ * remoto salvo ALLOW_REMOTE_SEED=true (ver `scripts/lib/db-target.ts`).
  */
-const APP_ENV = process.env.APP_ENV ?? "local";
+// Falla cerrado: un APP_ENV invalido lanza, y sin APP_ENV con NODE_ENV=production resuelve a production.
+const APP_ENV = getAppEnv();
 const LOCAL_TOTP_SECRET = "JBSWY3DPEHPK3PXP4567ABCDEFGHIJKL";
 
 function requiredSeedSecret(name: string, minLength: number, pattern?: RegExp) {
@@ -42,9 +49,10 @@ function requiredSeedSecret(name: string, minLength: number, pattern?: RegExp) {
   return value;
 }
 
-const seedPasswordOverride = APP_ENV === "local" ? null : requiredSeedSecret("SEED_PASSWORD", 16);
-const seedTotpSecret =
-  APP_ENV === "local" ? LOCAL_TOTP_SECRET : requiredSeedSecret("SEED_TOTP_SECRET", 32, /^[A-Z2-7]+$/);
+// Se resuelven en main(), despues de las guardas de destino y de produccion, para que un
+// bloqueo muestre su motivo antes que un "falta SEED_PASSWORD".
+let seedPasswordOverride: string | null = null;
+let seedTotpSecret = LOCAL_TOTP_SECRET;
 
 async function user(email: string, password: string, name: string, platformRole?: "PLATFORM_SUPER_ADMIN") {
   password = seedPasswordOverride ?? password;
@@ -61,6 +69,10 @@ async function user(email: string, password: string, name: string, platformRole?
 }
 
 async function main() {
+  // Muestra el destino (host, puerto y base; nunca la contraseña) y se niega a sembrar el
+  // perfil local contra un host remoto: publicaria las credenciales demo del repositorio.
+  guardDbTarget("seed", "seed");
+
   // Guarda de producción: este seed crea tenants demo con contraseñas
   // conocidas y publicadas. NUNCA debe correr en producción salvo que se
   // fuerce explícitamente (por ejemplo, para bootstrapping controlado).
@@ -68,51 +80,21 @@ async function main() {
     console.error(
       "\n[seed] BLOQUEADO: NODE_ENV=production.\n" +
         "Este seed crea tenants demo con contraseñas publicas y NO debe\n" +
-        "ejecutarse en produccion. Para el arranque de produccion use un\n" +
-        "seed de administrador dedicado. Si realmente necesita este seed,\n" +
-        "exporte ALLOW_PROD_SEED=true de forma explicita.\n",
+        "ejecutarse en produccion. Para el arranque de produccion use\n" +
+        "`pnpm prod:bootstrap` (planes + primer administrador de plataforma).\n" +
+        "Si realmente necesita este seed, exporte ALLOW_PROD_SEED=true de\n" +
+        "forma explicita.\n",
     );
     process.exit(1);
   }
 
-  await prisma.tenantPlan.upsert({
-    where: { code: "DEMO" },
-    update: {},
-    create: { code: "DEMO", name: "Demo", maxUsers: 5, maxDrivers: 5, maxVehicles: 5, maxCustomers: 3, maxDocuments: 50 },
-  });
-  const starter = await prisma.tenantPlan.upsert({
-    where: { code: "STARTER" },
-    update: {},
-    create: { code: "STARTER", name: "Starter", maxUsers: 12, maxDrivers: 10, maxVehicles: 10, maxCustomers: 6, maxDocuments: 250 },
-  });
-  const professional = await prisma.tenantPlan.upsert({
-    where: { code: "PROFESSIONAL" },
-    update: {},
-    create: {
-      code: "PROFESSIONAL",
-      name: "Professional",
-      maxUsers: 40,
-      maxDrivers: 50,
-      maxVehicles: 50,
-      maxCustomers: 30,
-      maxDocuments: 2500,
-      integrationsEnabled: true,
-    },
-  });
-  await prisma.tenantPlan.upsert({
-    where: { code: "ENTERPRISE" },
-    update: {},
-    create: {
-      code: "ENTERPRISE",
-      name: "Enterprise",
-      maxUsers: 200,
-      maxDrivers: 400,
-      maxVehicles: 400,
-      maxCustomers: 200,
-      maxDocuments: 25000,
-      integrationsEnabled: true,
-    },
-  });
+  if (APP_ENV !== "local") {
+    seedPasswordOverride = requiredSeedSecret("SEED_PASSWORD", 16);
+    seedTotpSecret = requiredSeedSecret("SEED_TOTP_SECRET", 32, /^[A-Z2-7]+$/);
+  }
+
+  // Los planes viven en prisma/plans.ts, compartido con el bootstrap de produccion.
+  const { STARTER: starter, PROFESSIONAL: professional } = await upsertTenantPlans(prisma);
 
   const users = Object.fromEntries(
     await Promise.all(credentials.map(async ([email, password, name]) => [email, await user(email, password, name)])),
@@ -359,17 +341,25 @@ async function main() {
         });
       }
 
-      if (status === "CLOSED") {
+      // Prueba de entrega coherente con el estado del viaje: desde AT-06 el viaje en
+      // EVIDENCE_SUBMITTED solo avanza por approveProofAction (necesita una prueba SUBMITTED) y
+      // el CERRADO debe tener su prueba APPROVED.
+      if (status === "CLOSED" || status === "EVIDENCE_SUBMITTED") {
+        const demoSignature =
+          "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"360\" height=\"120\"><path d=\"M20 80 C 80 20, 160 120, 240 55 S 330 70, 345 42\" fill=\"none\" stroke=\"#0f2d46\" stroke-width=\"5\"/></svg>";
+        const approved = status === "CLOSED";
         await prisma.proofOfDelivery.upsert({
           where: { tripId: trip.id },
-          update: {},
+          // Re-sembrar corrige filas antiguas que nacieron SUBMITTED en viajes cerrados.
+          update: approved ? { status: "APPROVED", approvedAt: new Date() } : {},
           create: {
             tenantId: tenant.id,
             tripId: trip.id,
             receiverName: "Receptor Demo",
-            observation: "Entrega demo validada.",
-            approvedAt: new Date(),
-            signatureSvg: "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"360\" height=\"120\"><path d=\"M20 80 C 80 20, 160 120, 240 55 S 330 70, 345 42\" fill=\"none\" stroke=\"#0f2d46\" stroke-width=\"5\"/></svg>",
+            observation: approved ? "Entrega demo validada." : "Entrega demo pendiente de revision.",
+            status: approved ? "APPROVED" : "SUBMITTED",
+            approvedAt: approved ? new Date() : null,
+            signatureSvg: demoSignature,
           },
         });
       }
@@ -574,7 +564,11 @@ async function main() {
     });
   }
 
-  console.log("Seed completed. Demo credentials are documented in README.md.");
+  console.log(
+    APP_ENV === "local"
+      ? "Seed completed. Demo credentials are documented in README.md."
+      : `Seed completed (APP_ENV=${APP_ENV}). Las cuentas demo usan SEED_PASSWORD y SEED_TOTP_SECRET del entorno.`,
+  );
 }
 
 main()

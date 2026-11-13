@@ -6,6 +6,12 @@ import { MANIFEST_STAGES } from "@/lib/ui/manifest";
  * hitos del manifiesto sellados en orden. Las coordenadas de los extremos son
  * las de las rutas demo del sistema. Decorativo: el contenido equivalente esta
  * en texto en la pagina (aria-hidden).
+ *
+ * Legibilidad: el viewBox mide 600 unidades de ancho, asi que en un telefono
+ * (SVG de ~250-350 px) cada unidad rinde ~0,43-0,6 px. Los tamanos de texto se
+ * suben bajo `sm` (clases `max-sm:`) para que las etiquetas rindan ~9-12 px, y
+ * las etiquetas secundarias (coordenadas y orillas) se ocultan ahi porque no
+ * caben a ese tamano; los hitos conservan numero y nombre.
  */
 const stops = [
   { x: 150, y: 74 },
@@ -55,21 +61,21 @@ export function IsthmusRoute({ className }: { className?: string }) {
       </g>
 
       <text
-        className="fill-fog font-mono text-[10px] tracking-[0.2em]"
+        className="fill-fog font-mono text-[11px] tracking-[0.2em] max-sm:text-[20px]"
         x="24"
         y="28"
       >
         MAR CARIBE
       </text>
       <text
-        className="fill-fog font-mono text-[10px] tracking-[0.2em]"
+        className="fill-fog font-mono text-[11px] tracking-[0.2em] max-sm:text-[20px]"
         x="24"
         y="364"
       >
         OCÉANO PACÍFICO
       </text>
       <text
-        className="fill-fog font-mono text-[11px]"
+        className="fill-fog font-mono text-[11px] max-sm:hidden"
         textAnchor="end"
         x="124"
         y="78"
@@ -77,7 +83,7 @@ export function IsthmusRoute({ className }: { className?: string }) {
         COLÓN 9.36N 79.88W
       </text>
       <text
-        className="fill-fog font-mono text-[11px]"
+        className="fill-fog font-mono text-[11px] max-sm:hidden"
         textAnchor="end"
         x="424"
         y="322"
@@ -85,7 +91,7 @@ export function IsthmusRoute({ className }: { className?: string }) {
         BALBOA
       </text>
       <text
-        className="fill-fog font-mono text-[11px]"
+        className="fill-fog font-mono text-[11px] max-sm:hidden"
         textAnchor="end"
         x="424"
         y="336"
@@ -122,16 +128,18 @@ export function IsthmusRoute({ className }: { className?: string }) {
               strokeWidth="1"
             />
             <text
-              className="fill-paper font-mono text-[11px] font-bold"
+              className="fill-paper font-mono text-[12px] font-bold max-sm:text-[19px]"
+              dominantBaseline="central"
               textAnchor="middle"
-              y="4"
+              y="0"
             >
               {String(index + 1).padStart(2, "0")}
             </text>
             <text
-              className="fill-paper font-mono text-[12px] tracking-[0.12em]"
+              className="fill-paper font-mono text-[13px] tracking-[0.12em] max-sm:text-[21px]"
+              dominantBaseline="central"
               x="28"
-              y="4"
+              y="0"
             >
               {MANIFEST_STAGES[index].toUpperCase()}
             </text>

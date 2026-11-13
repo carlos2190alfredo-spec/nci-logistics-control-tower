@@ -137,6 +137,9 @@ async function processTransition(ctx: SyncContext, command: OfflineCommand): Pro
     };
   }
 
+  // `canTransition` solo acepta cambios de estado genericos: aunque la whitelist
+  // del conductor creciera, la evidencia enviada/aprobada y el cierre siguen
+  // reservados a submitProofAction / approveProofAction / operaciones.
   if (!canTransition(trip.status, nextStatus, ctx.role)) {
     await recordConflictReceipt(ctx, command, tripId, payloadHash);
     return reject(command, ErrorCodes.STATE_CONFLICT, false, {

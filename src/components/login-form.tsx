@@ -17,8 +17,8 @@ export function LoginForm({ demoDefaults }: { demoDefaults?: { email: string; pa
   return (
     <form action={action} className="grid gap-4">
       {passwordResetOk ? (
-        <Alert tone="success" title="Contrasena restablecida">
-          Ya puede iniciar sesion con la nueva contrasena.
+        <Alert tone="success" title="Contraseña restablecida">
+          Ya puede iniciar sesión con la nueva contraseña.
         </Alert>
       ) : null}
       <Field autoComplete="username" defaultValue={demoDefaults?.email} label="Correo" name="email" required type="email" />

@@ -1,4 +1,4 @@
-import type { TenantRole, TripStatus } from "@/generated/prisma";
+import type { ProofStatus, TenantRole, TripStatus } from "@/generated/prisma";
 
 export const customerVisibleStatus: Record<TripStatus, string> = {
   REQUESTED: "Solicitud recibida",
@@ -33,7 +33,17 @@ type Transition = {
    * normal de "Avanzar" ni en la cola offline del conductor.
    */
   requiresReason?: boolean;
+  /**
+   * Transicion que NO es un cambio de estado generico: solo la ejecuta el flujo
+   * dedicado indicado, porque exige datos verificados (firma, archivo escaneado,
+   * POD generado). Queda fuera de `canTransition` y `nextStatuses`: ni el
+   * "Avanzar" de operaciones ni la cola offline del conductor pueden alcanzarla.
+   */
+  dedicatedFlow?: DedicatedTripFlow;
 };
+
+/** Flujos con logica propia que mueven el viaje por los estados de evidencia. */
+export type DedicatedTripFlow = "SUBMIT_PROOF" | "APPROVE_PROOF";
 
 /**
  * Próximo hito, en lenguaje natural, para mostrar al cliente en el portal.
@@ -123,8 +133,23 @@ export const tripTransitions: Transition[] = [
   { from: "ARRIVED_AT_DESTINATION", to: "DELIVERY_IN_PROGRESS", roles: DRIVER_FLOW_ROLES },
   { from: "DELIVERY_IN_PROGRESS", to: "DELIVERED", roles: DRIVER_FLOW_ROLES },
   { from: "DELIVERED", to: "EVIDENCE_PENDING", roles: ["DRIVER", "OPERATIONS_MANAGER", "TENANT_OWNER"] },
-  { from: "EVIDENCE_PENDING", to: "EVIDENCE_SUBMITTED", roles: ["DRIVER", "OPERATIONS_MANAGER", "TENANT_OWNER"] },
-  { from: "EVIDENCE_SUBMITTED", to: "EVIDENCE_APPROVED", roles: ["OPERATIONS_MANAGER", "TENANT_OWNER"] },
+  // Los estados de evidencia solo se alcanzan por sus flujos dedicados
+  // (submitProofAction / approveProofAction): sin firma, archivo ni POD no hay
+  // evidencia que registrar ni aprobar.
+  {
+    from: "EVIDENCE_PENDING",
+    to: "EVIDENCE_SUBMITTED",
+    roles: ["DRIVER", "OPERATIONS_MANAGER", "TENANT_OWNER"],
+    dedicatedFlow: "SUBMIT_PROOF",
+  },
+  {
+    from: "EVIDENCE_SUBMITTED",
+    to: "EVIDENCE_APPROVED",
+    roles: ["OPERATIONS_MANAGER", "TENANT_OWNER"],
+    dedicatedFlow: "APPROVE_PROOF",
+  },
+  // El cierre es un cambio de estado generico, pero `canCloseTrip` exige ademas
+  // la evidencia aprobada (y su POD) antes de ejecutarlo.
   { from: "EVIDENCE_APPROVED", to: "CLOSED", roles: ["OPERATIONS_MANAGER", "TENANT_OWNER"] },
 
   // --- Excepciones (exigen motivo) ---
@@ -140,12 +165,39 @@ export const tripTransitions: Transition[] = [
 
 function findTransition(from: TripStatus, to: TripStatus, role: TenantRole) {
   return tripTransitions.find(
-    (transition) => transition.from === from && transition.to === to && transition.roles.includes(role),
+    (transition) =>
+      transition.from === from &&
+      transition.to === to &&
+      !transition.dedicatedFlow &&
+      transition.roles.includes(role),
   );
 }
 
+/**
+ * Cambio de estado generico permitido para el rol. Excluye las transiciones de
+ * flujo dedicado (evidencia enviada / aprobada): esas solo las ejecutan
+ * `submitProofAction` y `approveProofAction`.
+ */
 export function canTransition(from: TripStatus, to: TripStatus, role: TenantRole) {
   return findTransition(from, to, role) !== undefined;
+}
+
+/** Estados que solo se alcanzan por un flujo dedicado, nunca por un cambio generico. */
+export const DEDICATED_FLOW_TARGET_STATUSES: readonly TripStatus[] = tripTransitions
+  .filter((transition) => transition.dedicatedFlow)
+  .map((transition) => transition.to);
+
+/** true si `to` solo se alcanza por un flujo dedicado (evidencia enviada o aprobada). */
+export function requiresDedicatedFlow(to: TripStatus) {
+  return DEDICATED_FLOW_TARGET_STATUSES.includes(to);
+}
+
+/**
+ * Un viaje solo se cierra con la evidencia aprobada y su POD generado
+ * (`proofReady` lo fija unicamente `approveProofAction`).
+ */
+export function canCloseTrip(trip: { proofReady: boolean; proof: { status: ProofStatus } | null }) {
+  return trip.proofReady && trip.proof?.status === "APPROVED";
 }
 
 /** true si la transicion existe y exige motivo escrito. */
@@ -153,10 +205,19 @@ export function transitionRequiresReason(from: TripStatus, to: TripStatus, role:
   return findTransition(from, to, role)?.requiresReason === true;
 }
 
-/** Siguientes estados del flujo normal (sin excepciones). */
+/**
+ * Siguientes estados del flujo normal (sin excepciones ni flujos dedicados).
+ * Es la lista que ofrecen el "Avanzar" de operaciones y la app del conductor.
+ */
 export function nextStatuses(from: TripStatus, role: TenantRole) {
   return tripTransitions
-    .filter((transition) => transition.from === from && transition.roles.includes(role) && !transition.requiresReason)
+    .filter(
+      (transition) =>
+        transition.from === from &&
+        transition.roles.includes(role) &&
+        !transition.requiresReason &&
+        !transition.dedicatedFlow,
+    )
     .map((transition) => transition.to);
 }
 

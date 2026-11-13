@@ -36,10 +36,23 @@ const securityHeaders = [
     : [{ key: "Strict-Transport-Security", value: "max-age=63072000; includeSubDomains; preload" }]),
 ];
 
+/**
+ * Limite del cuerpo de las Server Actions (por defecto 1 MB, lo que rompia la evidencia de entrega
+ * con cualquier foto mayor). Vercel rechaza cuerpos de mas de ~4,5 MB antes de llegar a la funcion,
+ * asi que este valor debe quedar por debajo. El multipart incluye la firma (data URL) y los demas
+ * campos, por eso `MAX_UPLOAD_FILE_BYTES` (src/lib/server/storage.ts) es 3 MB: ~1 MB de margen.
+ */
+const SERVER_ACTIONS_BODY_LIMIT = "4mb";
+
 const nextConfig: NextConfig = {
   poweredByHeader: false,
   turbopack: {
     root: __dirname,
+  },
+  experimental: {
+    serverActions: {
+      bodySizeLimit: SERVER_ACTIONS_BODY_LIMIT,
+    },
   },
   async headers() {
     return [

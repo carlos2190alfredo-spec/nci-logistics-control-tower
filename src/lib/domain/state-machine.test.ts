@@ -1,16 +1,23 @@
 import { describe, expect, it } from "vitest";
+import type { TenantRole, TripStatus } from "@/generated/prisma";
 import {
   ASSIGNABLE_TRIP_STATUSES,
+  DEDICATED_FLOW_TARGET_STATUSES,
   TERMINAL_TRIP_STATUSES,
+  canCloseTrip,
   canTransition,
   customerNextStep,
   customerVisibleStatus,
   exceptionStatuses,
   nextStatuses,
+  requiresDedicatedFlow,
   transitionRequiresReason,
   tripTransitions,
 } from "@/lib/domain/state-machine";
 import { DRIVER_ALLOWED_TRANSITIONS } from "@/lib/offline/protocol";
+
+const ALL_ROLES: TenantRole[] = ["TENANT_OWNER", "TENANT_ADMIN", "OPERATIONS_MANAGER", "DISPATCHER", "SAFETY_MANAGER", "DRIVER"];
+const ALL_STATUSES = Object.keys(customerVisibleStatus) as TripStatus[];
 
 describe("trip state machine", () => {
   it("allows only role-approved transitions", () => {
@@ -91,5 +98,89 @@ describe("trip state machine", () => {
   it("allows reassignment until the driver departs", () => {
     expect(ASSIGNABLE_TRIP_STATUSES).toContain("DRIVER_CONFIRMED");
     expect(ASSIGNABLE_TRIP_STATUSES).not.toContain("EN_ROUTE_TO_ORIGIN");
+  });
+
+  describe("evidence pipeline (AT-06)", () => {
+    it("never lets a plain status change reach EVIDENCE_SUBMITTED or EVIDENCE_APPROVED", () => {
+      expect(DEDICATED_FLOW_TARGET_STATUSES).toEqual(["EVIDENCE_SUBMITTED", "EVIDENCE_APPROVED"]);
+      for (const role of ALL_ROLES) {
+        expect(canTransition("EVIDENCE_PENDING", "EVIDENCE_SUBMITTED", role), `${role} submit`).toBe(false);
+        expect(canTransition("EVIDENCE_SUBMITTED", "EVIDENCE_APPROVED", role), `${role} approve`).toBe(false);
+        // Tampoco saltando estados: ningun origen llega a un estado de evidencia por cambio generico.
+        for (const from of ALL_STATUSES) {
+          expect(canTransition(from, "EVIDENCE_SUBMITTED", role), `${from} -> EVIDENCE_SUBMITTED (${role})`).toBe(false);
+          expect(canTransition(from, "EVIDENCE_APPROVED", role), `${from} -> EVIDENCE_APPROVED (${role})`).toBe(false);
+        }
+      }
+    });
+
+    it("keeps the evidence targets out of every advance list (ops Avanzar, driver app, offline hints)", () => {
+      for (const role of ALL_ROLES) {
+        for (const from of ALL_STATUSES) {
+          const next = nextStatuses(from, role);
+          expect(next, `${from} (${role})`).not.toContain("EVIDENCE_SUBMITTED");
+          expect(next, `${from} (${role})`).not.toContain("EVIDENCE_APPROVED");
+          expect(exceptionStatuses(from, role)).not.toContain("EVIDENCE_SUBMITTED");
+          expect(exceptionStatuses(from, role)).not.toContain("EVIDENCE_APPROVED");
+        }
+      }
+      expect(nextStatuses("EVIDENCE_PENDING", "DRIVER")).toEqual([]);
+      expect(nextStatuses("EVIDENCE_PENDING", "OPERATIONS_MANAGER")).toEqual([]);
+      expect(nextStatuses("EVIDENCE_SUBMITTED", "OPERATIONS_MANAGER")).toEqual([]);
+      expect(nextStatuses("EVIDENCE_SUBMITTED", "TENANT_OWNER")).toEqual([]);
+    });
+
+    it("flags exactly the evidence states as dedicated-flow targets", () => {
+      expect(requiresDedicatedFlow("EVIDENCE_SUBMITTED")).toBe(true);
+      expect(requiresDedicatedFlow("EVIDENCE_APPROVED")).toBe(true);
+      for (const status of ALL_STATUSES.filter((s) => s !== "EVIDENCE_SUBMITTED" && s !== "EVIDENCE_APPROVED")) {
+        expect(requiresDedicatedFlow(status), status).toBe(false);
+      }
+    });
+
+    it("keeps the entry into the evidence phase and the close step as plain transitions", () => {
+      expect(canTransition("DELIVERED", "EVIDENCE_PENDING", "DRIVER")).toBe(true);
+      expect(canTransition("DELIVERED", "EVIDENCE_PENDING", "OPERATIONS_MANAGER")).toBe(true);
+      expect(nextStatuses("EVIDENCE_APPROVED", "OPERATIONS_MANAGER")).toEqual(["CLOSED"]);
+      expect(nextStatuses("EVIDENCE_APPROVED", "TENANT_OWNER")).toEqual(["CLOSED"]);
+      expect(nextStatuses("EVIDENCE_APPROVED", "DRIVER")).toEqual([]);
+    });
+
+    it("only closes from EVIDENCE_APPROVED and never for the driver", () => {
+      const closing = tripTransitions.filter((t) => t.to === "CLOSED");
+      expect(closing.length).toBeGreaterThan(0);
+      for (const transition of closing) {
+        expect(transition.from).toBe("EVIDENCE_APPROVED");
+        expect(transition.roles).not.toContain("DRIVER");
+      }
+      for (const from of ALL_STATUSES.filter((s) => s !== "EVIDENCE_APPROVED")) {
+        for (const role of ALL_ROLES) expect(canTransition(from, "CLOSED", role), `${from} (${role})`).toBe(false);
+      }
+    });
+
+    it("requires an approved proof and proofReady to close", () => {
+      expect(canCloseTrip({ proofReady: false, proof: null })).toBe(false);
+      expect(canCloseTrip({ proofReady: true, proof: null })).toBe(false);
+      expect(canCloseTrip({ proofReady: true, proof: { status: "SUBMITTED" } })).toBe(false);
+      expect(canCloseTrip({ proofReady: true, proof: { status: "REJECTED" } })).toBe(false);
+      expect(canCloseTrip({ proofReady: false, proof: { status: "APPROVED" } })).toBe(false);
+      expect(canCloseTrip({ proofReady: true, proof: { status: "APPROVED" } })).toBe(true);
+    });
+  });
+
+  describe("driver offline whitelist consistency", () => {
+    it("never whitelists closing, cancelling or the dedicated evidence states", () => {
+      for (const forbidden of ["CLOSED", "CANCELLED", "DELIVERY_FAILED", "EVIDENCE_SUBMITTED", "EVIDENCE_APPROVED"] as const) {
+        expect(DRIVER_ALLOWED_TRANSITIONS).not.toContain(forbidden);
+      }
+    });
+
+    it("every status a DRIVER can reach by a plain transition is in the whitelist", () => {
+      const reachable = new Set<TripStatus>();
+      for (const from of ALL_STATUSES) {
+        for (const to of ALL_STATUSES) if (canTransition(from, to, "DRIVER")) reachable.add(to);
+      }
+      for (const status of reachable) expect(DRIVER_ALLOWED_TRANSITIONS, status).toContain(status);
+    });
   });
 });

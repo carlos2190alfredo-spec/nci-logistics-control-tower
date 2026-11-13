@@ -79,3 +79,73 @@ export function getPermissionsForRole(role: TenantRole): TenantPermission[] {
     PERMISSION_MAP[p].includes(role),
   );
 }
+
+/** Roles de tenant que deben tener MFA verificado para operar (propietario y administrador). */
+export const MFA_REQUIRED_TENANT_ROLES: readonly TenantRole[] = ["TENANT_OWNER", "TENANT_ADMIN"];
+
+/**
+ * Pantalla de inicio de cada rol dentro del tenant. Quien no tiene `tenant.view`
+ * (el conductor) aterriza en su app y no en el centro de control; cualquier otro
+ * rol sin vista operativa vuelve al login en lugar de entrar en un bucle.
+ */
+export function tenantHomePath(tenantSlug: string, role: TenantRole): string {
+  if (hasPermission(role, "tenant.view")) return `/t/${tenantSlug}`;
+  if (role === "DRIVER") return `/t/${tenantSlug}/driver`;
+  return "/login";
+}
+
+export type TenantAccessDenialReason =
+  | "TENANT_INACTIVE"
+  | "NO_MEMBERSHIP"
+  | "CUSTOMER_ONLY"
+  | "ROLE_DENIED"
+  | "MFA_REQUIRED";
+
+export type TenantAccessDecision = { ok: true } | { ok: false; reason: TenantAccessDenialReason };
+
+/**
+ * Regla unica de acceso a un tenant, sin I/O. La comparten las paginas
+ * (`requireTenantRole`, que redirige) y los endpoints API (que responden 403),
+ * de modo que ambos exigen lo mismo: tenant ACTIVO, membresia activa, rol
+ * permitido y MFA verificado para los roles que lo requieren.
+ */
+export function evaluateTenantAccess(input: {
+  tenantActive: boolean;
+  /** Rol de la membresia activa del usuario en el tenant, o null si no tiene. */
+  role: TenantRole | null;
+  /** true si el usuario es cliente (portal) activo de este mismo tenant. */
+  hasCustomerMembership: boolean;
+  /** Si se omite, cualquier rol de tenant es aceptable. */
+  allowedRoles?: readonly TenantRole[];
+  mfaVerified: boolean;
+}): TenantAccessDecision {
+  if (!input.tenantActive) return { ok: false, reason: "TENANT_INACTIVE" };
+  if (!input.role) {
+    return { ok: false, reason: input.hasCustomerMembership ? "CUSTOMER_ONLY" : "NO_MEMBERSHIP" };
+  }
+  if (input.allowedRoles && !input.allowedRoles.includes(input.role)) {
+    return { ok: false, reason: "ROLE_DENIED" };
+  }
+  if (MFA_REQUIRED_TENANT_ROLES.includes(input.role) && !input.mfaVerified) {
+    return { ok: false, reason: "MFA_REQUIRED" };
+  }
+  return { ok: true };
+}
+
+/** Destino de redireccion para una pagina cuando el acceso al tenant fue denegado. */
+export function tenantAccessRedirect(
+  reason: TenantAccessDenialReason,
+  tenantSlug: string,
+  role: TenantRole | null,
+): string {
+  switch (reason) {
+    case "CUSTOMER_ONLY":
+      return `/t/${tenantSlug}/portal`;
+    case "ROLE_DENIED":
+      return role ? tenantHomePath(tenantSlug, role) : "/login";
+    case "MFA_REQUIRED":
+      return "/account/security/mfa/setup";
+    default:
+      return "/login";
+  }
+}

@@ -34,6 +34,7 @@ import {
   Timeline,
   TimelineItem,
 } from "@/components/ui";
+import { isLocalEnv } from "@/lib/app-env";
 import { createServiceRequestAction } from "@/lib/server/actions";
 import { customerRequestAction } from "@/lib/server/request-actions";
 import { availableRequestActions } from "@/lib/domain/request-state-machine";
@@ -214,6 +215,11 @@ export default async function CustomerPortalPage({
     trips.find((trip) => !["CLOSED", "CANCELLED"].includes(trip.status)) ??
     trips[0];
   const basePath = `/t/${tenantSlug}/portal`;
+  // Los datos de ejemplo del formulario (contenedor, booking, sello...) solo se
+  // precargan en local: las pruebas E2E dependen de ellos. En staging y produccion
+  // el formulario arranca vacio para no enviar datos ficticios a operaciones reales;
+  // los ejemplos van como placeholder.
+  const demoValue = (value: string) => (isLocalEnv() ? value : undefined);
 
   const navGroups: ShellNavGroup[] = [
     {
@@ -266,7 +272,7 @@ export default async function CustomerPortalPage({
 
           <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
             <MetricCard
-              hint="En ejecucion o programados"
+              hint="En ejecución o programados"
               href="#servicios"
               icon={<Route />}
               label="Servicios activos"
@@ -304,7 +310,7 @@ export default async function CustomerPortalPage({
           <div className="grid items-start gap-6 xl:grid-cols-[minmax(0,0.95fr)_minmax(0,1.05fr)]">
             <Card className="scroll-mt-20" id="solicitar">
               <CardHeader
-                description="Complete los datos y su transportista confirmara el servicio."
+                description="Complete los datos y su transportista confirmará el servicio."
                 icon={<PlusCircle />}
                 title="Nueva solicitud de transporte"
               />
@@ -317,7 +323,7 @@ export default async function CustomerPortalPage({
                 <fieldset className="grid gap-3.5 rounded-lg border border-border p-4">
                   <legend className="flex items-center gap-1.5 px-1 text-sm font-bold text-foreground">
                     <MapPin aria-hidden className="size-4 text-primary" />
-                    Ruta y programacion
+                    Ruta y programación
                   </legend>
                   <SelectField label="Tipo de servicio" name="serviceTypeId">
                     {serviceTypes.map((type) => (
@@ -327,14 +333,18 @@ export default async function CustomerPortalPage({
                     ))}
                   </SelectField>
                   <Field
-                    defaultValue="Manzanillo International Terminal"
+                    defaultValue={demoValue(
+                      "Manzanillo International Terminal",
+                    )}
                     label="Origen"
                     name="origin"
+                    placeholder="Terminal, puerto o dirección de recogida"
                   />
                   <Field
-                    defaultValue="Puerto de Balboa"
+                    defaultValue={demoValue("Puerto de Balboa")}
                     label="Destino"
                     name="destination"
+                    placeholder="Terminal, puerto o dirección de entrega"
                   />
                   <div className="grid gap-3.5 sm:grid-cols-2">
                     <Field
@@ -356,52 +366,59 @@ export default async function CustomerPortalPage({
                   </legend>
                   <div className="grid gap-3.5 sm:grid-cols-2">
                     <Field
-                      defaultValue="NCIU7654321"
+                      defaultValue={demoValue("NCIU7654321")}
                       label="Numero de contenedor"
                       name="containerNumber"
+                      placeholder="Ej.: MSCU1234567"
                     />
                     <Field
-                      defaultValue="40HC"
-                      label="Tamano"
+                      defaultValue={demoValue("40HC")}
+                      label="Tamaño"
                       name="containerSize"
+                      placeholder="Ej.: 40HC"
                     />
                     <Field
-                      defaultValue="Dry"
+                      defaultValue={demoValue("Dry")}
                       label="Tipo de contenedor"
                       name="containerType"
+                      placeholder="Ej.: Dry"
                     />
                     <Field
-                      defaultValue="Naviera Demo"
+                      defaultValue={demoValue("Naviera Demo")}
                       label="Naviera"
                       name="shippingLine"
+                      placeholder="Nombre de la naviera"
                     />
                     <Field
-                      defaultValue="MIT"
+                      defaultValue={demoValue("MIT")}
                       label="Terminal"
                       name="terminal"
+                      placeholder="Ej.: MIT"
                     />
                     <Field
-                      defaultValue="SELLO-123"
-                      label="Numero de sello"
+                      defaultValue={demoValue("SELLO-123")}
+                      label="Número de sello"
                       name="sealNumber"
+                      placeholder="Número del sello"
                     />
                     <SelectField label="Estado de carga" name="loadStatus">
                       <option value="LOADED">Cargado</option>
-                      <option value="EMPTY">Vacio</option>
+                      <option value="EMPTY">Vacío</option>
                     </SelectField>
                     <SelectField
-                      label="Retorno de vacio"
+                      label="Retorno de vacío"
                       name="emptyReturnRequired"
                     >
-                      <option value="YES">Si</option>
+                      <option value="YES">Sí</option>
                       <option value="NO">No</option>
                     </SelectField>
                   </div>
                   <Field
-                    defaultValue="BOOK-DEMO-001"
+                    defaultValue={demoValue("BOOK-DEMO-001")}
                     help="Referencia de booking de su naviera o interna."
                     label="Booking o referencia"
                     name="bookingReference"
+                    placeholder="Ej.: BKG123456"
                   />
                 </fieldset>
 
@@ -412,18 +429,20 @@ export default async function CustomerPortalPage({
                   </legend>
                   <div className="grid gap-3.5 sm:grid-cols-2">
                     <Field
-                      defaultValue="Coordinador Demo"
+                      defaultValue={demoValue("Coordinador Demo")}
                       label="Contacto"
                       name="contactName"
+                      placeholder="Nombre de quien coordina"
                     />
                     <Field
-                      defaultValue="+50760000000"
-                      label="Telefono contacto"
+                      defaultValue={demoValue("+50760000000")}
+                      label="Teléfono de contacto"
                       name="contactPhone"
+                      placeholder="Ej.: +507 6000 0000"
                     />
                   </div>
                   <TextArea
-                    help="Estas instrucciones seran visibles para el equipo operativo."
+                    help="Estas instrucciones serán visibles para el equipo operativo."
                     label="Instrucciones visibles"
                     name="customerNotes"
                   />
@@ -490,7 +509,7 @@ export default async function CustomerPortalPage({
                     className="mt-4"
                     description="Cree una solicitud de transporte para iniciar su primer servicio."
                     icon={<PackageOpen />}
-                    title="Aun no hay viajes para este cliente"
+                    title="Aún no hay viajes para este cliente"
                   />
                 )}
               </Card>
@@ -546,7 +565,7 @@ export default async function CustomerPortalPage({
               <CardHeader
                 description="Trazabilidad autorizada de cada servicio."
                 icon={<Route />}
-                title="Servicios y linea de tiempo"
+                title="Servicios y línea de tiempo"
               />
               <div className="mt-4 grid gap-4">
                 {trips.length ? (
@@ -604,7 +623,7 @@ export default async function CustomerPortalPage({
                   ))
                 ) : (
                   <EmptyState
-                    description="Cuando su transportista confirme una solicitud, el servicio aparecera aqui."
+                    description="Cuando su transportista confirme una solicitud, el servicio aparecerá aquí."
                     icon={<Route />}
                     title="Sin servicios registrados"
                   />
@@ -646,7 +665,7 @@ export default async function CustomerPortalPage({
                   ) : (
                     <EmptyState
                       compact
-                      description="Su operacion no registra novedades."
+                      description="Su operación no registra novedades."
                       icon={<CheckCircle2 />}
                       title="Sin incidencias visibles"
                     />
@@ -675,7 +694,7 @@ export default async function CustomerPortalPage({
                   ) : (
                     <EmptyState
                       compact
-                      description="Los documentos de sus servicios cerrados apareceran aqui."
+                      description="Los documentos de sus servicios cerrados aparecerán aquí."
                       icon={<FileText />}
                       title="Sin documentos autorizados"
                     />
@@ -688,7 +707,7 @@ export default async function CustomerPortalPage({
           <footer className="flex flex-wrap items-center justify-between gap-2 border-t border-border pt-5 text-xs text-faint-foreground">
             <p>
               {tenant.branding?.footerText ??
-                "Tecnologia desarrollada por NCI Automation"}
+                "Tecnología desarrollada por NCI Automation"}
             </p>
             {tenant.branding?.supportMail ? (
               <p>

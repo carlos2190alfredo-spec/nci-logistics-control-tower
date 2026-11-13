@@ -1,6 +1,5 @@
 "use server";
 
-import { randomBytes } from "node:crypto";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
@@ -9,9 +8,8 @@ import { audit } from "@/lib/server/audit";
 import { requirePlatformRole } from "@/lib/server/auth";
 import { hashPassword } from "@/lib/server/crypto";
 import { getDb } from "@/lib/server/db";
-import { sendMail } from "@/lib/server/mail";
-import { welcomeTenantOwnerEmail } from "@/lib/server/email-templates";
-import { generateEmailVerifyToken } from "@/lib/server/email-verification";
+import { generateUnusablePassword } from "@/lib/server/password-reset";
+import { sendOwnerWelcomeMail } from "@/lib/server/welcome-mail";
 
 const createTenantSchema = z.object({
   name: z.string().min(2).max(100),
@@ -29,14 +27,6 @@ const createTenantSchema = z.object({
   internalNotes: z.string().max(2000).optional(),
   isDemo: z.boolean().default(false),
 });
-
-function generateTempPassword(): string {
-  const chars = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789";
-  const bytes = randomBytes(12);
-  let pwd = "";
-  for (let i = 0; i < 12; i++) pwd += chars[bytes[i] % chars.length];
-  return pwd;
-}
 
 export async function createTenantFullAction(formData: FormData) {
   const user = await requirePlatformRole(["PLATFORM_SUPER_ADMIN"]);
@@ -62,11 +52,12 @@ export async function createTenantFullAction(formData: FormData) {
   const db = getDb();
   const plan = await db.tenantPlan.findUniqueOrThrow({ where: { code: parsed.planCode as TenantPlanCode } });
 
-  const tempPassword = generateTempPassword();
-  const passwordHash = await hashPassword(tempPassword);
+  // Ninguna contrasena viaja por correo: la cuenta nueva nace con una contrasena
+  // aleatoria que nadie conoce y el propietario define la suya con un enlace de un solo uso.
+  const passwordHash = await hashPassword(generateUnusablePassword());
   const ownerEmailNorm = parsed.ownerEmail.toLowerCase().trim();
 
-  const { tenant, ownerUser } = await db.$transaction(async (tx) => {
+  const { tenant, ownerUser, ownerIsNew } = await db.$transaction(async (tx) => {
     const t = await tx.tenant.create({
       data: {
         name: parsed.name,
@@ -99,6 +90,7 @@ export async function createTenantFullAction(formData: FormData) {
     });
 
     let ou = await tx.user.findUnique({ where: { email: ownerEmailNorm } });
+    const isNew = !ou;
     if (!ou) {
       ou = await tx.user.create({
         data: {
@@ -114,21 +106,11 @@ export async function createTenantFullAction(formData: FormData) {
       data: { tenantId: t.id, userId: ou.id, role: "TENANT_OWNER" },
     });
 
-    return { tenant: t, ownerUser: ou };
+    return { tenant: t, ownerUser: ou, ownerIsNew: isNew };
   });
 
-  const verifyToken = await generateEmailVerifyToken(ownerUser.id);
-  const baseUrl = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
-  const verifyUrl = `${baseUrl}/verificar-email/${verifyToken}`;
-  const email = welcomeTenantOwnerEmail({
-    ownerName: parsed.ownerName,
-    tenantName: parsed.name,
-    verifyUrl,
-    loginUrl: `${baseUrl}/login`,
-    tempPassword,
-  });
-  await sendMail({ to: ownerEmailNorm, ...email });
-
+  // La auditoria va ANTES del correo: el tenant ya esta confirmado y debe quedar
+  // registrado aunque el envio falle o la funcion se corte por tiempo.
   await audit({
     actorId: user.id,
     actorRole: user.platformRole,
@@ -137,9 +119,34 @@ export async function createTenantFullAction(formData: FormData) {
     entityId: tenant.id,
     after: { ...parsed, ownerUserId: ownerUser.id },
   });
+
+  const welcome = await sendOwnerWelcomeMail({
+    tenantId: tenant.id,
+    tenantName: parsed.name,
+    userId: ownerUser.id,
+    to: ownerEmailNorm,
+    ownerName: parsed.ownerName,
+    isNewUser: ownerIsNew,
+    emailVerified: ownerUser.emailVerified,
+  });
+  if (!welcome.ok) {
+    // El tenant ya existe: no se aborta. Queda en log, auditoria y en el parametro
+    // `warning` del detalle. El propietario puede usar "Recuperar contrasena" en
+    // cuanto el correo funcione.
+    await audit({
+      tenantId: tenant.id,
+      actorId: user.id,
+      actorRole: user.platformRole,
+      action: "tenant.welcome_email_failed",
+      entity: "Tenant",
+      entityId: tenant.id,
+      after: { ownerUserId: ownerUser.id, errorCode: welcome.code },
+    });
+  }
+
   revalidatePath("/platform");
   revalidatePath("/platform/tenants");
-  redirect(`/platform/tenants/${tenant.id}`);
+  redirect(`/platform/tenants/${tenant.id}${welcome.ok ? "" : "?warning=welcome_email_failed"}`);
 }
 
 const updateTenantSchema = z.object({

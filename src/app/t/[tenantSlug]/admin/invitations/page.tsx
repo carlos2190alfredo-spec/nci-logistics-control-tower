@@ -1,6 +1,8 @@
+import { redirect } from "next/navigation";
 import { Mail } from "lucide-react";
 import { AppShell } from "@/components/shell/app-shell";
 import {
+  Alert,
   Card,
   CardHeader,
   DataTable,
@@ -30,12 +32,30 @@ const roleLabel: Record<string, string> = {
   DRIVER: "Conductor",
 };
 
+/** Avisos del resultado de enviar una invitacion (codigos fijos, no texto reflejado). */
+const NOTICES: Record<string, { tone: "success" | "warning" | "danger"; text: string }> = {
+  sent: { tone: "success", text: "Invitacion enviada." },
+  mail_failed: {
+    tone: "warning",
+    text: "No se pudo enviar el correo de invitacion. Revise la configuracion de correo y vuelva a enviarla.",
+  },
+  role_not_allowed: { tone: "danger", text: "Rol no permitido para invitacion." },
+  invalid_email: { tone: "danger", text: "Correo invalido." },
+  already_member: { tone: "danger", text: "El usuario ya es miembro de este tenant." },
+  already_pending: { tone: "danger", text: "Ya existe una invitacion pendiente para este correo." },
+  rate_limited: { tone: "danger", text: "Se alcanzo el limite de correos de alta por hora. Intente de nuevo mas tarde." },
+};
+
 export default async function TenantInvitationsPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ tenantSlug: string }>;
+  searchParams: Promise<{ notice?: string }>;
 }) {
   const { tenantSlug } = await params;
+  const { notice } = await searchParams;
+  const noticeData = notice ? NOTICES[notice] : undefined;
   const { user, tenant } = await requireTenantRole(tenantSlug, ["TENANT_OWNER", "TENANT_ADMIN"]);
 
   const invitations = await listPendingInvitations(tenantSlug);
@@ -44,7 +64,9 @@ export default async function TenantInvitationsPage({
     "use server";
     const email = formData.get("email") as string;
     const role = formData.get("role") as string;
-    await createInvitation(tenantSlug, email, role as "TENANT_ADMIN");
+    const result = await createInvitation(tenantSlug, email, role as "TENANT_ADMIN");
+    const code = !result.ok ? result.code.toLowerCase() : result.warning ? "mail_failed" : "sent";
+    redirect(`/t/${tenantSlug}/admin/invitations?notice=${code}`);
   }
 
   return (
@@ -64,6 +86,8 @@ export default async function TenantInvitationsPage({
           description="Invita usuarios al tenant via correo electronico."
           title="Invitaciones"
         />
+
+        {noticeData ? <Alert tone={noticeData.tone}>{noticeData.text}</Alert> : null}
 
         <div className="grid items-start gap-6 xl:grid-cols-[minmax(0,1.5fr)_minmax(0,0.9fr)]">
           <Card>

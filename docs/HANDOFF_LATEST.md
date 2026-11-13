@@ -1,5 +1,24 @@
 # HANDOFF LATEST
 
+## 2026-11-13 (noche) — Endurecimiento de producción (ADR-037)
+
+- Leer `docs/decisions/ADR-037-production-readiness-audit.md` y `docs/STAGING_DEPLOYMENT.md`.
+- **Pendiente del dueño** (las conexiones de Vercel/Supabase/Resend estaban desconectadas):
+  1. Supabase → Storage → S3 Connection → New access key → Vercel `MINIO_ACCESS_KEY` / `MINIO_SECRET_KEY`.
+  2. Resend: API key solo de envío para `nciautomation.com` → Vercel `MAIL_PASSWORD`.
+  3. Vercel: `CRON_SECRET` (`openssl rand -hex 32`) y `OPS_ALERT_EMAIL`. Todas Sensitive,
+     Production y Preview.
+  4. `APP_ENV=production` (también en build) solo cuando el sitio deba ser indexable.
+- Tras definir variables: redesplegar (`git commit --allow-empty` + push) y verificar
+  `/api/internal/health` en verde, una subida de evidencia y el correo de recuperación.
+- Reseembrar staging (`APP_ENV=staging`, con `.env.staging.local`) para que los viajes demo con
+  evidencia pendiente tengan su prueba de entrega.
+- Para clientes reales: proyecto Supabase nuevo, `pnpm db:deploy`, `harden.sql`, `pnpm prod:bootstrap`,
+  y retirar los datos demo con `pnpm demo:purge`.
+- Programar `pnpm backup:postgres` y `backup:minio` en un equipo autorizado (nada corre solo).
+- No está en el código y requiere decisión: CSP sin `unsafe-inline`, FK compuestas, imagen social.
+
+
 ## 2026-11-13 — Staging en la nube y rediseño (ADR-036)
 
 - Leer `docs/STAGING_DEPLOYMENT.md` (runbook) y `docs/decisions/ADR-036-cloud-staging.md`.

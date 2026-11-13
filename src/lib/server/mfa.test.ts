@@ -169,8 +169,12 @@ describe("MFA auth integration security invariants", () => {
   });
 
   it("enforces MFA for privileged tenant roles", () => {
-    expect(authSource).toContain("TENANT_OWNER");
-    expect(authSource).toContain("TENANT_ADMIN");
+    // La constante vive en tenant-permissions.ts (compartida con /api/sync/actions);
+    // auth.ts la importa y la aplica.
+    const permissionsSource = readFileSync("src/lib/server/tenant-permissions.ts", "utf8");
+    expect(permissionsSource).toContain("TENANT_OWNER");
+    expect(permissionsSource).toContain("TENANT_ADMIN");
+    expect(permissionsSource).toContain("MFA_REQUIRED_TENANT_ROLES");
     expect(authSource).toContain("MFA_REQUIRED_TENANT_ROLES");
   });
 

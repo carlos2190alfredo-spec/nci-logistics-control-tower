@@ -1,6 +1,8 @@
 import { execSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { config } from "dotenv";
+import { getAppEnv } from "../src/lib/app-env";
+import { MIN_SESSION_METADATA_KEY_LENGTH } from "../src/lib/server/crypto";
 
 // Precedencia: variables exportadas > .env.local > .env (dotenv no pisa lo ya definido).
 config({ path: ".env.local" });
@@ -69,6 +71,26 @@ check("MFA_ENCRYPTION_KEY set", () => ({
   status: process.env.MFA_ENCRYPTION_KEY ? "ok" : "warn",
   detail: process.env.MFA_ENCRYPTION_KEY ? "configured" : "Missing (MFA will not work)",
 }));
+
+check("APP_ENV valid", () => {
+  try {
+    return { name: "APP_ENV valid", status: "ok", detail: getAppEnv() };
+  } catch (error) {
+    return { name: "APP_ENV valid", status: "fail", detail: (error as Error).message };
+  }
+});
+
+check("SESSION_METADATA_KEY set", () => {
+  const key = process.env.SESSION_METADATA_KEY ?? "";
+  const valid = key.length >= MIN_SESSION_METADATA_KEY_LENGTH;
+  // Fuera de local es obligatoria: keyedHash lanza sin ella en vez de usar un SHA-256 sin clave.
+  const required = getAppEnv() !== "local";
+  return {
+    name: "SESSION_METADATA_KEY set",
+    status: valid ? "ok" : required ? "fail" : "warn",
+    detail: valid ? "configured" : `Missing or shorter than ${MIN_SESSION_METADATA_KEY_LENGTH} chars${required ? " (required outside local)" : " (local uses an unkeyed hash)"}`,
+  };
+});
 
 check("PostgreSQL connectivity", () => {
   try {

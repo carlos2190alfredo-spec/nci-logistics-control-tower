@@ -1,12 +1,37 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { isLocalEnv } from "@/lib/app-env";
 import { audit } from "@/lib/server/audit";
 import { requirePlatformRole } from "@/lib/server/auth";
 import { hashPassword } from "@/lib/server/crypto";
 import { getDb } from "@/lib/server/db";
 
+/**
+ * Las acciones demo crean y borran datos de demostracion: solo existen en el perfil `local`.
+ * En staging y produccion se niegan, aunque las invoque un PLATFORM_SUPER_ADMIN (F8, F5).
+ */
+function assertLocalDemoEnv() {
+  if (!isLocalEnv()) {
+    throw new Error("Las acciones demo solo estan disponibles con APP_ENV=local.");
+  }
+}
+
+/**
+ * Contrasena de los usuarios demo: nunca un literal del repositorio (es publico). Se toma de
+ * `DEMO_TENANT_PASSWORD` en `.env.local`.
+ */
+function demoTenantPassword() {
+  const password = process.env.DEMO_TENANT_PASSWORD ?? "";
+  if (password.length < 12) {
+    throw new Error("Defina DEMO_TENANT_PASSWORD (minimo 12 caracteres) en .env.local para crear el tenant demo.");
+  }
+  return password;
+}
+
 export async function seedDemoTenantAction(_formData: FormData) {
+  assertLocalDemoEnv();
+  const password = demoTenantPassword();
   const user = await requirePlatformRole(["PLATFORM_SUPER_ADMIN"]);
   const db = getDb();
 
@@ -63,7 +88,7 @@ export async function seedDemoTenantAction(_formData: FormData) {
     });
   }
 
-  const passwordHash = await hashPassword("Demo2024!");
+  const passwordHash = await hashPassword(password);
 
   const demoOwner = await db.user.create({
     data: {
@@ -269,6 +294,7 @@ export async function seedDemoTenantAction(_formData: FormData) {
 }
 
 export async function resetDemoTenantAction(formData: FormData) {
+  assertLocalDemoEnv();
   const user = await requirePlatformRole(["PLATFORM_SUPER_ADMIN"]);
   const tenantId = String(formData.get("tenantId") ?? "");
   if (!tenantId) throw new Error("tenantId requerido");

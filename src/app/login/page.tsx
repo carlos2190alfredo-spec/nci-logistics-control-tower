@@ -1,11 +1,30 @@
+import type { Metadata } from "next";
 import { Suspense } from "react";
 import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
 import { IsthmusRoute } from "@/components/brand/isthmus-route";
+import { siteOpenGraph, siteTwitter } from "@/components/brand/site";
 import { LoginForm } from "@/components/login-form";
 import { isLocalEnv } from "@/lib/app-env";
 
 export const dynamic = "force-dynamic";
+
+const pageTitle = "Acceso";
+const pageDescription =
+  "Ingreso a la plataforma para operaciones, clientes y conductores. Cada acceso queda registrado.";
+
+// Titulo "Acceso · NCI LCT" por la plantilla del layout; canonica relativa a metadataBase.
+export const metadata: Metadata = {
+  title: pageTitle,
+  description: pageDescription,
+  alternates: { canonical: "/login" },
+  openGraph: siteOpenGraph({
+    title: pageTitle,
+    description: pageDescription,
+    url: "/login",
+  }),
+  twitter: siteTwitter({ title: pageTitle, description: pageDescription }),
+};
 
 export default function LoginPage() {
   return (
@@ -44,7 +63,7 @@ export default function LoginPage() {
             <ArrowLeft aria-hidden className="size-4" />
             Volver al inicio
           </Link>
-          <p className="flex items-center gap-2 font-mono text-[11px] font-bold tracking-[0.22em] text-signal">
+          <p className="flex items-center gap-2 font-mono text-[11px] font-bold tracking-[0.22em] text-signal-strong">
             <span className="inline-block size-2 rounded-full bg-signal" />
             Acceso a la plataforma
           </p>

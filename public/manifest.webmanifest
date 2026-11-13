@@ -1,14 +1,14 @@
 {
   "name": "NCI Logistics Control Tower",
   "short_name": "LCT",
-  "description": "Control tower logistico multitenant local",
+  "description": "Plataforma multiempresa para transportistas de carga: solicitudes, flota, conductor, evidencias y prueba de entrega digital.",
   "lang": "es",
   "start_url": "/login",
   "scope": "/",
   "display": "standalone",
   "orientation": "portrait-primary",
-  "background_color": "#f6f8fb",
-  "theme_color": "#0f2d46",
+  "background_color": "#f4efe4",
+  "theme_color": "#0b2338",
   "categories": ["business", "logistics"],
   "icons": [
     {
@@ -26,16 +26,11 @@
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "maskable"
-    },
-    {
-      "src": "/window.svg",
-      "sizes": "any",
-      "type": "image/svg+xml"
     }
   ],
   "shortcuts": [
     {
-      "name": "Iniciar sesion",
+      "name": "Iniciar sesión",
       "url": "/login",
       "icons": [{ "src": "/icons/icon-192x192.png", "sizes": "192x192" }]
     }

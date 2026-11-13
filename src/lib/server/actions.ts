@@ -10,10 +10,18 @@ import {
   EVIDENCE_SUBMITTABLE_STATUSES,
   MIN_REASON_LENGTH,
   TERMINAL_TRIP_STATUSES,
+  canCloseTrip,
   canTransition,
   customerVisibleStatus,
+  requiresDedicatedFlow,
   transitionRequiresReason,
 } from "@/lib/domain/state-machine";
+import {
+  EVIDENCE_DOCUMENT_VISIBILITY,
+  POD_MIME_TYPE,
+  POD_OBJECT_KEY_SEGMENT,
+  evidenceDocumentIdsToPublish,
+} from "@/lib/domain/proof-evidence";
 import { tripStatusLabel } from "@/lib/ui/status";
 import { actionError, actionOk, StaleStateError, type ActionResult } from "@/lib/server/action-result";
 import { blockingDocumentsNow } from "@/lib/compliance/eligibility";
@@ -29,6 +37,7 @@ import {
   signOut,
 } from "@/lib/server/auth";
 import { userHasMfaActive } from "@/lib/server/mfa";
+import { tenantHomePath } from "@/lib/server/tenant-permissions";
 import { getDb } from "@/lib/server/db";
 import { enforceRateLimit } from "@/lib/server/rate-limit";
 import { logger } from "@/lib/server/logger";
@@ -109,8 +118,9 @@ export async function loginAction(_: unknown, formData: FormData) {
   }
 
   if (user?.platformRole) redirect("/platform");
-  const firstTenant = user?.tenantMemberships[0]?.tenant.slug;
-  if (firstTenant) redirect(`/t/${firstTenant}`);
+  const firstMembership = user?.tenantMemberships[0];
+  // Cada rol aterriza en su inicio: el conductor en su app, no en el centro de control.
+  if (firstMembership) redirect(tenantHomePath(firstMembership.tenant.slug, firstMembership.role));
 
   const firstCustomerTenant = user?.customerMemberships[0]?.customerAccount.tenant.slug;
   redirect(firstCustomerTenant ? `/t/${firstCustomerTenant}/portal` : "/login");
@@ -245,6 +255,14 @@ export async function createServiceRequestAction(tenantSlug: string, formData: F
   const clientRequestKey = parsed.idempotencyKey ?? randomUUID();
 
   const db = getDb();
+  // El FK de ServiceRequest solo apunta a service_types.id: un UUID ajeno pasaria.
+  // El tipo de servicio debe ser un tipo activo de ESTE tenant.
+  const serviceType = await db.serviceType.findFirst({
+    where: { id: parsed.serviceTypeId, tenantId: tenant.id, active: true },
+    select: { id: true },
+  });
+  if (!serviceType) throw new Error("Tipo de servicio invalido para esta empresa.");
+
   const existing = await db.serviceRequest.findFirst({
     where: {
       tenantId: tenant.id,
@@ -263,7 +281,7 @@ export async function createServiceRequestAction(tenantSlug: string, formData: F
       data: {
         tenantId: tenant.id,
         customerAccountId: customerAccount.id,
-        serviceTypeId: parsed.serviceTypeId,
+        serviceTypeId: serviceType.id,
         reference: `${tenant.slug.toUpperCase()}-SR-${String(count + 1).padStart(4, "0")}`,
         status: parsed.intent,
         origin: parsed.origin,
@@ -612,7 +630,7 @@ export async function transitionTripAction(
   const note = String(formData.get("note") ?? "").slice(0, 500);
   const reason = String(formData.get("reason") ?? "").trim().slice(0, 1000);
   const db = getDb();
-  const trip = await db.trip.findFirst({ where: { id: tripId, tenantId: tenant.id } });
+  const trip = await db.trip.findFirst({ where: { id: tripId, tenantId: tenant.id }, include: { proof: true } });
   if (!trip) return actionError("El viaje no existe o no pertenece a esta empresa.");
 
   const role: TenantRole = membership.role;
@@ -623,10 +641,21 @@ export async function transitionTripAction(
     driverId = driver.id;
   }
   if (!tripStatusLabel[nextStatus]) return actionError("Seleccione un estado valido.");
+  // La evidencia enviada/aprobada exige firma, archivo y POD: solo la mueven
+  // submitProofAction y approveProofAction, nunca un cambio de estado generico.
+  if (requiresDedicatedFlow(nextStatus)) {
+    return actionError(
+      "La evidencia se registra con el formulario de evidencia y se aprueba con \"Aprobar evidencia y generar POD\". No se puede forzar con un cambio de estado.",
+    );
+  }
   if (!canTransition(trip.status, nextStatus, role)) {
     return actionError(
       `No se puede pasar de "${tripStatusLabel[trip.status]}" a "${tripStatusLabel[nextStatus]}" con su rol.`,
     );
+  }
+  // El cierre exige la evidencia aprobada y el POD generado.
+  if (nextStatus === "CLOSED" && !canCloseTrip(trip)) {
+    return actionError("No se puede cerrar el servicio sin la evidencia aprobada y su POD.");
   }
   const requiresReason = transitionRequiresReason(trip.status, nextStatus, role);
   if (requiresReason && reason.length < MIN_REASON_LENGTH) {
@@ -642,7 +671,6 @@ export async function transitionTripAction(
         status: nextStatus,
         customerVisibleStatus: customerVisibleStatus[nextStatus],
         simulationStartedAt: nextStatus === "EN_ROUTE_TO_ORIGIN" ? new Date() : undefined,
-        proofReady: nextStatus === "CLOSED" ? true : undefined,
       },
     });
     if (result.count === 0) return false;
@@ -819,7 +847,9 @@ export async function submitProofAction(
         sizeBytes: buffer.length,
         bucket: getStorageBucket(),
         objectKey: pipelineResult.objectKey,
-        visibility: "CUSTOMER_VISIBLE",
+        // La evidencia del conductor no es visible al cliente hasta que operaciones
+        // la apruebe (approveProofAction la publica junto con el POD).
+        visibility: EVIDENCE_DOCUMENT_VISIBILITY,
         uploadedById: user.id,
       },
     });
@@ -847,7 +877,8 @@ export async function submitProofAction(
           objectKey: { in: objectKeys },
           proofId: null,
         },
-        data: { proofId: proof.id },
+        // Al ligarlas a la prueba quedan en revision: INTERNAL hasta la aprobacion.
+        data: { proofId: proof.id, visibility: EVIDENCE_DOCUMENT_VISIBILITY },
       });
     }
   }
@@ -931,8 +962,20 @@ export async function approveProofAction(
     return actionError(`No se puede aprobar evidencia con el viaje en "${tripStatusLabel[trip.status]}".`);
   }
 
+  const proofId = trip.proof.id;
+  // Evidencia revisada que se publica al cliente junto con el POD (nace INTERNAL).
+  const publishDocumentIds = evidenceDocumentIdsToPublish(trip.documents, proofId);
+  const published = new Set(publishDocumentIds);
+
   const pdfObjectKey = `tenants/${tenant.slug}/trips/${trip.reference}/pod/${trip.reference}-pod.pdf`;
-  const pdfBuffer = await generateProofOfDeliveryPdf(trip);
+  // El POD lista las evidencias autorizadas: se genera con las que esta
+  // aprobacion publica, aunque en BD sigan INTERNAL hasta la transaccion.
+  const pdfBuffer = await generateProofOfDeliveryPdf({
+    ...trip,
+    documents: trip.documents.map((document) =>
+      published.has(document.id) ? { ...document, visibility: "CUSTOMER_VISIBLE" as const } : document,
+    ),
+  });
 
   await uploadBuffer({
     objectKey: pdfObjectKey,
@@ -957,6 +1000,19 @@ export async function approveProofAction(
       });
       if (claimed.count === 0 || moved.count === 0) throw new StaleStateError();
       const proof = await tx.proofOfDelivery.findUniqueOrThrow({ where: { id: trip.proof!.id } });
+      // Publicacion de la evidencia revisada: solo aqui pasa a CUSTOMER_VISIBLE.
+      if (publishDocumentIds.length > 0) {
+        await tx.document.updateMany({
+          where: {
+            id: { in: publishDocumentIds },
+            tenantId: tenant.id,
+            tripId: trip.id,
+            proofId: proof.id,
+            visibility: EVIDENCE_DOCUMENT_VISIBILITY,
+          },
+          data: { visibility: "CUSTOMER_VISIBLE" },
+        });
+      }
       await tx.document.create({
         data: {
           tenantId: tenant.id,
@@ -964,7 +1020,7 @@ export async function approveProofAction(
           tripId: trip.id,
           proofId: proof.id,
           filename: `${trip.reference}-pod.pdf`,
-          mimeType: "application/pdf",
+          mimeType: POD_MIME_TYPE,
           sizeBytes: pdfBuffer.length,
           bucket: getStorageBucket(),
           objectKey: pdfObjectKey,
@@ -1052,6 +1108,19 @@ export async function rejectProofAction(
         data: { status: "EVIDENCE_PENDING", customerVisibleStatus: customerVisibleStatus.EVIDENCE_PENDING },
       });
       if (claimed.count === 0 || moved.count === 0) throw new StaleStateError();
+      // La evidencia rechazada no debe quedar expuesta ni re-publicarse en una
+      // aprobacion posterior (la nueva captura reutiliza la misma prueba): vuelve
+      // a INTERNAL y se desliga de la prueba, conservandose en el viaje.
+      await tx.document.updateMany({
+        where: {
+          tenantId: tenant.id,
+          tripId: trip.id,
+          proofId: trip.proof!.id,
+          // El POD no es evidencia del conductor (se distingue por su clave, no por el MIME).
+          NOT: { objectKey: { contains: POD_OBJECT_KEY_SEGMENT } },
+        },
+        data: { visibility: EVIDENCE_DOCUMENT_VISIBILITY, proofId: null },
+      });
       await tx.tripEvent.create({
         data: {
           tenantId: tenant.id,
@@ -1082,5 +1151,6 @@ export async function rejectProofAction(
   });
   revalidatePath(`/t/${tenantSlug}`, "layout");
   revalidatePath(`/t/${tenantSlug}/driver`);
+  revalidatePath(`/t/${tenantSlug}/portal`);
   return actionOk("Evidencia rechazada. El conductor debera capturarla de nuevo.");
 }

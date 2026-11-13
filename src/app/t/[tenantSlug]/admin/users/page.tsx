@@ -2,6 +2,7 @@ import Link from "next/link";
 import { PlusCircle, Users } from "lucide-react";
 import { AppShell } from "@/components/shell/app-shell";
 import {
+  Alert,
   Card,
   CardHeader,
   DataTable,
@@ -21,6 +22,7 @@ import { getDb } from "@/lib/server/db";
 import { parsePagination, paginatedResult, buildPageUrl } from "@/lib/pagination/parse";
 import { getTenantAdminNavGroups } from "@/lib/ui/tenant-admin-nav";
 import { tenantRoleLabel } from "@/lib/ui/status";
+import { tenantUserNotice } from "@/lib/ui/tenant-user-notices";
 import { toggleMembershipAction } from "@/lib/server/tenant-user-actions";
 import type { Prisma, TenantRole } from "@/generated/prisma";
 
@@ -36,7 +38,9 @@ export default async function TenantUsersPage({
 }) {
   const { tenantSlug } = await params;
   const { user, tenant } = await requireTenantRole(tenantSlug, ["TENANT_OWNER", "TENANT_ADMIN"]);
-  const pg = parsePagination(await searchParams, {
+  const rawParams = await searchParams;
+  const notice = tenantUserNotice({ error: rawParams.error, warning: rawParams.warning });
+  const pg = parsePagination(rawParams, {
     defaultPageSize: 20,
     filterKeys: ["role", "active"],
   });
@@ -89,6 +93,8 @@ export default async function TenantUsersPage({
           description={`${total} miembro(s) del tenant.`}
           title="Usuarios del Tenant"
         />
+
+        {notice ? <Alert tone={notice.tone}>{notice.text}</Alert> : null}
 
         <div className="flex flex-wrap items-center justify-between gap-3">
           <SearchToolbar

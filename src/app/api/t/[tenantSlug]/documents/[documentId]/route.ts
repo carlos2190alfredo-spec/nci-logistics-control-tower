@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
 import { requireCustomerMembership } from "@/lib/server/auth";
 import { getDb } from "@/lib/server/db";
-import { getSignedReadUrl } from "@/lib/server/storage";
+import { safeFilename, getSignedReadUrl } from "@/lib/server/storage";
+import { customerReadableDocumentWhere } from "@/lib/domain/proof-evidence";
 import { enforceRateLimit } from "@/lib/server/rate-limit";
 import { clientIpFrom } from "@/lib/server/http-security";
 import { ErrorCodes, errorMessages } from "@/lib/server/errors";
@@ -29,11 +30,11 @@ export async function GET(
 
   const db = getDb();
   const document = await db.document.findFirst({
+    // Solo documentos CUSTOMER_VISIBLE de su propia cuenta; la evidencia ligada a
+    // una prueba de entrega unicamente tras la aprobacion de operaciones.
     where: {
       id: documentId,
-      tenantId: tenant.id,
-      customerAccountId: customerAccount.id,
-      visibility: "CUSTOMER_VISIBLE",
+      ...customerReadableDocumentWhere({ tenantId: tenant.id, customerAccountId: customerAccount.id }),
     },
   });
 
@@ -66,7 +67,7 @@ export async function GET(
 
   const signed = await getSignedReadUrl(document.objectKey, {
     expiresIn: 60,
-    contentDisposition: `attachment; filename="${document.filename}"`,
+    contentDisposition: `attachment; filename="${safeFilename(document.filename)}"`,
   });
   return NextResponse.redirect(signed, {
     status: 303,

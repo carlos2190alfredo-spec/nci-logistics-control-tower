@@ -1,6 +1,8 @@
 import { execSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { config } from "dotenv";
+import { getAppEnv } from "../src/lib/app-env";
+import { MIN_SESSION_METADATA_KEY_LENGTH } from "../src/lib/server/crypto";
 
 // Precedencia: variables exportadas > .env.local > .env (dotenv no pisa lo ya definido).
 config({ path: ".env.local" });
@@ -106,6 +108,14 @@ add("Config", "DATABASE_URL set", () => ({
 add("Config", "SESSION_SECRET set", () => ({
   status: process.env.SESSION_SECRET ? "ready" : "not_ready",
 }));
+
+add("Config", "SESSION_METADATA_KEY set (required outside local)", () => {
+  const valid = (process.env.SESSION_METADATA_KEY ?? "").length >= MIN_SESSION_METADATA_KEY_LENGTH;
+  if (valid) return { status: "ready" };
+  return getAppEnv() === "local"
+    ? { status: "optional", detail: "Local uses an unkeyed hash" }
+    : { status: "not_ready", detail: `Missing or shorter than ${MIN_SESSION_METADATA_KEY_LENGTH} chars` };
+});
 
 add("AI", "DEEPSEEK_API_KEY", () => ({
   status: process.env.DEEPSEEK_API_KEY ? "ready" : "optional",
