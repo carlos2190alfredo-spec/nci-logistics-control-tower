@@ -7,11 +7,22 @@ que es público.
 
 | Componente | Servicio | Identificador |
 | --- | --- | --- |
-| App Next.js | Vercel, team "Web Studio" (`web-studio-hq`), región `iad1` | proyecto `nci-logistics-control-tower` |
+| App Next.js | Vercel, team "Web Studio" (`web-studio-hq`), región `iad1` | proyecto `nci-logistics-control-tower` → **https://nci-logistics-control-tower.vercel.app** |
 | Postgres | Supabase `nci-lct-staging` (ref `khedaunvwzjduxmlufun`), us-east-1 | rol de app `nci_app` |
 | Archivos | Supabase Storage por S3, bucket privado `nci-lct-staging` | endpoint `https://khedaunvwzjduxmlufun.storage.supabase.co/storage/v1/s3` |
 | Antivirus | Fly.io, app `nci-lct-clamav-staging` (`infra/clamav-gateway`) | `https://nci-lct-clamav-staging.fly.dev` |
 | Correo | SMTP real (pendiente de aprobación del proveedor) | — |
+
+## Estado (2026-11-13)
+
+| Pieza | Estado |
+| --- | --- |
+| GitHub `carlos2190alfredo-spec/nci-logistics-control-tower` | Publicado (`main`). Cada push a `main` despliega en Vercel |
+| Vercel | Desplegado (READY). Postgres y Prisma sanos en runtime; health `UNHEALTHY` solo por `storage` y `clamav` |
+| Supabase | Migrado, endurecido, sembrado; bucket creado |
+| Storage S3 | **Falta** `MINIO_ACCESS_KEY` / `MINIO_SECRET_KEY` (Supabase → Storage → S3 Connection → New access key) |
+| Correo | **Falta** `MAIL_PASSWORD` (API key de envío de Resend para `nciautomation.com`) |
+| ClamAV en Fly | **Falta** `flyctl auth login` del dueño; luego `fly launch`/`secrets`/`deploy` |
 
 ## Secretos
 
