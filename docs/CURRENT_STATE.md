@@ -1,6 +1,28 @@
 # CURRENT STATE
 
-Fecha: 2026-11-12
+Fecha: 2026-11-13
+
+## Staging en la nube (ADR-036) y rediseño de la cara pública
+
+- **Perfiles `APP_ENV` (local | staging | production).** Fuera de local:
+  - no se muestran credenciales demo;
+  - el storage no acepta las claves por defecto de MinIO;
+  - el seed exige `SEED_PASSWORD` y `SEED_TOTP_SECRET`.
+- **Supabase `nci-lct-staging`** (us-east-1) con el rol `nci_app`:
+  - migrado, endurecido (RLS 70/70, Data API cerrada) y sembrado;
+  - bucket privado `nci-lct-staging`.
+- **Antivirus por gateway HTTPS con token** (`HttpAntivirusProvider` +
+  `infra/clamav-gateway`), con destino Fly.io.
+- **Repo público** `carlos2190alfredo-spec/nci-logistics-control-tower`.
+- **Rediseño "Manifiesto del istmo"** (`docs/design/CREATIVE_DIRECTION.md`):
+  - landing, login y portal del cliente;
+  - los paneles internos heredan los neutros cálidos y la tipografía Archivo en títulos;
+  - componentes `IsthmusRoute` y `ManifestProgress`.
+- **Pendiente:**
+  - desplegar Vercel y Fly;
+  - credenciales S3 y SMTP (Resend) cargadas por el dueño;
+  - verificación en staging.
+
 
 ## Datos locales y E2E (2026-11-12, tras ADR-035)
 

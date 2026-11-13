@@ -30,7 +30,8 @@ async function fillVerified(page: Page, label: string, value: string) {
 }
 
 async function failureMessage(page: Page) {
-  const alert = page.getByRole("alert").first();
+  // El anunciador de rutas de Next tambien es role=alert (vacio): se toma el primero con texto.
+  const alert = page.getByRole("alert").filter({ hasText: /\S/ }).first();
   return (await alert.isVisible().catch(() => false)) ? `: ${(await alert.textContent())?.trim()}` : "";
 }
 

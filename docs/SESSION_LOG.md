@@ -141,3 +141,15 @@
   usuario por defecto (`platform@nci.local`) o se quedaba en `/login`.
 - FILE-SEC-004/008 y PHOTO-SYNC/PHOTO-EXIF dejan de depender de datos sobrantes.
 - Suite completa: 103/103, sin reintentos ni omitidos.
+
+## 2026-11-13 Staging en la nube (ADR-036) y rediseño "Manifiesto del istmo"
+
+- El dueño autorizó: GitHub público, Supabase (US$10/mes, us-east-1), Vercel (team Web
+  Studio), ClamAV en Fly.io (unos US$12,70/mes) y rediseño de la cara pública y el portal.
+- `APP_ENV`, `HttpAntivirusProvider`, gateway ClamAV, storage S3 configurable, health
+  checks de nube, seed con secretos propios fuera de local, `binaryTargets` para Vercel.
+- Supabase creado, migrado con el rol `nci_app`, endurecido y sembrado. Ataque por la Data
+  API rechazado.
+- Corregido: `override: true` de dotenv que redirigía `DATABASE_URL` a local en silencio.
+- Rediseño aplicado y revisado en el navegador; corregidos 3 defectos visuales. Suite E2E
+  101 + 2 flaky / 103.

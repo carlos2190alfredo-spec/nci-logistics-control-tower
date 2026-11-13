@@ -3,8 +3,9 @@ import { PrismaClient } from "../src/generated/prisma";
 import { hashPassword } from "../src/lib/server/crypto";
 import { encryptSecret } from "../src/lib/server/mfa-crypto";
 
+// Precedencia: variables exportadas > .env.local > .env (dotenv no pisa lo ya definido).
+config({ path: ".env.local" });
 config({ path: ".env" });
-config({ path: ".env.local", override: true });
 
 const prisma = new PrismaClient();
 
@@ -23,7 +24,30 @@ const credentials = [
   ["cliente@distribuciones.local", "Distribuciones2026!", "Cliente Distribuciones"],
 ] as const;
 
+/**
+ * Secretos del seed por entorno (ADR-036). En APP_ENV=local se usan los valores
+ * demo publicados en este repositorio. Fuera de local (staging en la nube) esos
+ * valores son publicos, asi que se exigen por entorno y se rechazan los demo:
+ * - SEED_PASSWORD: contraseña de todas las cuentas demo (>= 16 caracteres).
+ * - SEED_TOTP_SECRET: secreto TOTP base32 de las cuentas con MFA (>= 32 caracteres).
+ */
+const APP_ENV = process.env.APP_ENV ?? "local";
+const LOCAL_TOTP_SECRET = "JBSWY3DPEHPK3PXP4567ABCDEFGHIJKL";
+
+function requiredSeedSecret(name: string, minLength: number, pattern?: RegExp) {
+  const value = process.env[name] ?? "";
+  if (value.length < minLength || (pattern && !pattern.test(value)) || value === LOCAL_TOTP_SECRET) {
+    throw new Error(`[seed] APP_ENV=${APP_ENV}: ${name} es obligatorio (minimo ${minLength} caracteres, distinto del valor demo).`);
+  }
+  return value;
+}
+
+const seedPasswordOverride = APP_ENV === "local" ? null : requiredSeedSecret("SEED_PASSWORD", 16);
+const seedTotpSecret =
+  APP_ENV === "local" ? LOCAL_TOTP_SECRET : requiredSeedSecret("SEED_TOTP_SECRET", 32, /^[A-Z2-7]+$/);
+
 async function user(email: string, password: string, name: string, platformRole?: "PLATFORM_SUPER_ADMIN") {
+  password = seedPasswordOverride ?? password;
   return prisma.user.upsert({
     where: { email },
     update: { name, platformRole },
@@ -40,7 +64,7 @@ async function main() {
   // Guarda de producción: este seed crea tenants demo con contraseñas
   // conocidas y publicadas. NUNCA debe correr en producción salvo que se
   // fuerce explícitamente (por ejemplo, para bootstrapping controlado).
-  if (process.env.NODE_ENV === "production" && process.env.ALLOW_PROD_SEED !== "true") {
+  if ((process.env.NODE_ENV === "production" || APP_ENV === "production") && process.env.ALLOW_PROD_SEED !== "true") {
     console.error(
       "\n[seed] BLOQUEADO: NODE_ENV=production.\n" +
         "Este seed crea tenants demo con contraseñas publicas y NO debe\n" +
@@ -95,11 +119,10 @@ async function main() {
   );
   await prisma.user.update({ where: { email: "platform@nci.local" }, data: { platformRole: "PLATFORM_SUPER_ADMIN" } });
 
-  const SEED_TOTP_SECRET = "JBSWY3DPEHPK3PXP4567ABCDEFGHIJKL";
   const mfaRequiredEmails = ["platform@nci.local", "owner@panatruck.local", "owner@translogistica.local"];
   for (const email of mfaRequiredEmails) {
     const u = users[email];
-    const { encrypted, iv, authTag } = encryptSecret(SEED_TOTP_SECRET);
+    const { encrypted, iv, authTag } = encryptSecret(seedTotpSecret);
     await prisma.userMfaSecret.upsert({
       where: { userId: u.id },
       update: { encryptedSecret: encrypted, iv, authTag, verified: true, verifiedAt: new Date() },

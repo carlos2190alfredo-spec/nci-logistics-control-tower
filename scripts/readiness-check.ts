@@ -2,8 +2,9 @@ import { execSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { config } from "dotenv";
 
+// Precedencia: variables exportadas > .env.local > .env (dotenv no pisa lo ya definido).
+config({ path: ".env.local" });
 config({ path: ".env" });
-config({ path: ".env.local", override: true });
 
 interface ReadinessCheck {
   category: string;

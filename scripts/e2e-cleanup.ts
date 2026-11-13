@@ -11,8 +11,9 @@
  *   pnpm e2e:cleanup --apply  # borra
  */
 import { config } from "dotenv";
+// Precedencia: variables exportadas > .env.local > .env (dotenv no pisa lo ya definido).
+config({ path: ".env.local" });
 config({ path: ".env" });
-config({ path: ".env.local", override: true });
 
 import { DeleteObjectCommand, S3Client } from "@aws-sdk/client-s3";
 import { PrismaClient } from "../src/generated/prisma";
@@ -31,7 +32,28 @@ const s3 = new S3Client({
 });
 
 async function main() {
-  const tenants = await db.tenant.findMany({ where: { isDemo: true }, select: { id: true, slug: true } });
+  // Solo para la DB local de desarrollo: nunca borrar en staging/produccion (ADR-036).
+  const host = (() => {
+    try {
+      return new URL(process.env.DATABASE_URL ?? "").hostname;
+    } catch {
+      return "";
+    }
+  })();
+  if (
+    (process.env.APP_ENV ?? "local") !== "local" ||
+    !["localhost", "127.0.0.1", "postgres"].includes(host)
+  ) {
+    console.error(
+      `e2e:cleanup solo corre contra la DB local (APP_ENV=local, host local). Host actual: ${host || "desconocido"}.`,
+    );
+    process.exit(1);
+  }
+
+  const tenants = await db.tenant.findMany({
+    where: { isDemo: true },
+    select: { id: true, slug: true },
+  });
   if (tenants.length === 0) {
     console.log("No hay tenants demo.");
     return;
@@ -39,30 +61,54 @@ async function main() {
 
   const objectKeys: string[] = [];
   for (const tenant of tenants) {
-    const rows = await db.$queryRaw<{ id: string; service_request_id: string | null }[]>`
+    const rows = await db.$queryRaw<
+      { id: string; service_request_id: string | null }[]
+    >`
       SELECT tr.id, tr.service_request_id
       FROM trips tr
       LEFT JOIN service_requests sr ON sr.id = tr.service_request_id
       WHERE tr.tenant_id = ${tenant.id}::uuid
         AND COALESCE(sr.cargo_details->>'demo', 'false') <> 'true'`;
     const tripIds = rows.map((row) => row.id);
-    const requestIds = rows.flatMap((row) => (row.service_request_id ? [row.service_request_id] : []));
-    const keep = await db.trip.count({ where: { tenantId: tenant.id } }) - tripIds.length;
+    const requestIds = rows.flatMap((row) =>
+      row.service_request_id ? [row.service_request_id] : [],
+    );
+    const keep =
+      (await db.trip.count({ where: { tenantId: tenant.id } })) -
+      tripIds.length;
 
     if (tripIds.length === 0) {
-      console.log(`${tenant.slug}: nada que limpiar (${keep} viajes del seed).`);
+      console.log(
+        `${tenant.slug}: nada que limpiar (${keep} viajes del seed).`,
+      );
       continue;
     }
 
     const proofIds = (
-      await db.proofOfDelivery.findMany({ where: { tenantId: tenant.id, tripId: { in: tripIds } }, select: { id: true } })
+      await db.proofOfDelivery.findMany({
+        where: { tenantId: tenant.id, tripId: { in: tripIds } },
+        select: { id: true },
+      })
     ).map((proof) => proof.id);
-    const linkedToTrips = { tenantId: tenant.id, OR: [{ tripId: { in: tripIds } }, { proofId: { in: proofIds } }] };
+    const linkedToTrips = {
+      tenantId: tenant.id,
+      OR: [{ tripId: { in: tripIds } }, { proofId: { in: proofIds } }],
+    };
     const [documents, attachments, incidents, receipts] = await Promise.all([
-      db.document.findMany({ where: linkedToTrips, select: { objectKey: true } }),
-      db.fileAttachment.findMany({ where: linkedToTrips, select: { objectKey: true, quarantineKey: true } }),
-      db.incident.count({ where: { tenantId: tenant.id, tripId: { in: tripIds } } }),
-      db.offlineCommandReceipt.count({ where: { tenantId: tenant.id, tripId: { in: tripIds } } }),
+      db.document.findMany({
+        where: linkedToTrips,
+        select: { objectKey: true },
+      }),
+      db.fileAttachment.findMany({
+        where: linkedToTrips,
+        select: { objectKey: true, quarantineKey: true },
+      }),
+      db.incident.count({
+        where: { tenantId: tenant.id, tripId: { in: tripIds } },
+      }),
+      db.offlineCommandReceipt.count({
+        where: { tenantId: tenant.id, tripId: { in: tripIds } },
+      }),
     ]);
 
     console.log(
@@ -72,27 +118,50 @@ async function main() {
     );
     if (!apply) continue;
 
-    await db.$transaction(async (tx) => {
-      await tx.document.deleteMany({ where: linkedToTrips });
-      await tx.fileAttachment.deleteMany({ where: linkedToTrips });
-      await tx.incident.deleteMany({ where: { tenantId: tenant.id, tripId: { in: tripIds } } });
-      await tx.offlineCommandReceipt.deleteMany({ where: { tenantId: tenant.id, tripId: { in: tripIds } } });
-      // Sin FK: solo se desvinculan para no dejar referencias colgantes.
-      await tx.container.updateMany({ where: { tenantId: tenant.id, tripId: { in: tripIds } }, data: { tripId: null } });
-      await tx.hazmatShipment.updateMany({ where: { tenantId: tenant.id, tripId: { in: tripIds } }, data: { tripId: null } });
-      // Eventos, paradas, asignaciones, POD, finanzas, estimaciones y recomendaciones caen en cascada.
-      await tx.trip.deleteMany({ where: { tenantId: tenant.id, id: { in: tripIds } } });
-      await tx.serviceRequest.deleteMany({ where: { tenantId: tenant.id, id: { in: requestIds } } });
-    }, { timeout: 120_000 });
+    await db.$transaction(
+      async (tx) => {
+        await tx.document.deleteMany({ where: linkedToTrips });
+        await tx.fileAttachment.deleteMany({ where: linkedToTrips });
+        await tx.incident.deleteMany({
+          where: { tenantId: tenant.id, tripId: { in: tripIds } },
+        });
+        await tx.offlineCommandReceipt.deleteMany({
+          where: { tenantId: tenant.id, tripId: { in: tripIds } },
+        });
+        // Sin FK: solo se desvinculan para no dejar referencias colgantes.
+        await tx.container.updateMany({
+          where: { tenantId: tenant.id, tripId: { in: tripIds } },
+          data: { tripId: null },
+        });
+        await tx.hazmatShipment.updateMany({
+          where: { tenantId: tenant.id, tripId: { in: tripIds } },
+          data: { tripId: null },
+        });
+        // Eventos, paradas, asignaciones, POD, finanzas, estimaciones y recomendaciones caen en cascada.
+        await tx.trip.deleteMany({
+          where: { tenantId: tenant.id, id: { in: tripIds } },
+        });
+        await tx.serviceRequest.deleteMany({
+          where: { tenantId: tenant.id, id: { in: requestIds } },
+        });
+      },
+      { timeout: 120_000 },
+    );
 
     objectKeys.push(
       ...documents.map((doc) => doc.objectKey),
-      ...attachments.flatMap((file) => [file.objectKey, file.quarantineKey].filter((key): key is string => Boolean(key))),
+      ...attachments.flatMap((file) =>
+        [file.objectKey, file.quarantineKey].filter((key): key is string =>
+          Boolean(key),
+        ),
+      ),
     );
   }
 
   if (!apply) {
-    console.log("\nDry-run: no se borro nada. Ejecute con --apply para limpiar.");
+    console.log(
+      "\nDry-run: no se borro nada. Ejecute con --apply para limpiar.",
+    );
     return;
   }
 
@@ -102,7 +171,9 @@ async function main() {
       await s3.send(new DeleteObjectCommand({ Bucket: BUCKET, Key: key }));
       removed += 1;
     } catch (error) {
-      console.warn(`No se pudo borrar ${key} de MinIO: ${(error as Error).message}`);
+      console.warn(
+        `No se pudo borrar ${key} de MinIO: ${(error as Error).message}`,
+      );
     }
   }
   console.log(`\nLimpieza aplicada. Objetos de MinIO borrados: ${removed}.`);

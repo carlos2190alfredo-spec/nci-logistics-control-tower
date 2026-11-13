@@ -1,6 +1,39 @@
 # VERIFICATION LATEST
 
-Fecha: 2026-11-12 (Seed renovable y limpieza de datos E2E acumulados)
+Fecha: 2026-11-13 (Staging en la nube — ADR-036 — y rediseño "Manifiesto del istmo")
+
+## Staging en la nube y rediseño
+
+| Verificación | Resultado |
+| --- | --- |
+| `pnpm typecheck`, `pnpm lint` | Pasan |
+| `pnpm test` (Vitest) | 35 archivos, 325 tests pasan (nuevos: `antivirus-http.test.ts`, `manifest.test.ts`) |
+| Gateway ClamAV (`infra/clamav-gateway`) en Docker local | 401 sin token; `CLEAN` con archivo limpio; `INFECTED` con EICAR; 413 con 7 MB; primer arranque de unos 5 min |
+| Supabase `nci-lct-staging` | 22 migraciones aplicadas con el rol `nci_app`; `harden.sql` ejecutado: RLS en 70/70 tablas, 0 permisos para `anon`/`authenticated` |
+| Ataque por la Data API con la clave publicable | `GET /rest/v1/users`, `sessions`, `tenants` y `POST tenants` → 401 `permission denied` |
+| Advisors de seguridad de Supabase | Solo `rls_enabled_no_policy` (INFO), que es el diseño: se niega todo a la Data API |
+| Seed de staging (`APP_ENV=staging`) | 2 tenants, 8 usuarios, 15 viajes, 3 MFA; contraseña y TOTP propios (no los del repo) |
+| Revisión visual en navegador (landing, login, portal) | Escritorio 1440×900 y móvil 375 px sin desborde horizontal. Corregidos: sellos del SVG en el origen (la animación CSS pisaba el `transform`), solape de etiquetas y la regla global `a {color: inherit}` sin capa que anulaba `text-*` en enlaces |
+| **E2E completa** | **101 pasan + 2 flaky (pasan al reintentar), 0 fallos, 0 omitidos** (17,4 min). Flaky: TENANT-ADMIN-E2E-001 (copia oculta durante el streaming, selector estricto) y EXC-004 (timeout de carga) |
+
+## Hallazgos
+
+- `prisma.config.ts` y 7 scripts cargaban `.env.local` con `override: true`: un
+  `DATABASE_URL` exportado apuntaba en silencio a la DB local. Corregido (las variables
+  exportadas tienen precedencia); `e2e:cleanup` se niega a correr fuera de la DB local.
+- Preexistente, no corregido: error de hidratación de `OfflineQueueBadge` en las páginas
+  con shell (estado de la cola offline solo en el cliente).
+- Las corridas E2E paralelas (dos suites a la vez) o con navegadores colgados producen
+  fallos falsos: correr una sola suite por vez.
+
+## No ejecutado
+
+- Despliegue en Vercel y gateway en Fly.io: pendientes del login de Fly y de las
+  credenciales de terceros (S3 de Supabase, Resend) que carga el dueño.
+
+---
+
+## Sesión anterior: seed renovable y limpieza de datos E2E (2026-11-12)
 
 ## Seed y limpieza de datos locales
 

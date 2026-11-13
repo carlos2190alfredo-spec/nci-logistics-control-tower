@@ -15,8 +15,12 @@ Reglas no negociables:
 - Resolver tenant desde ruta, sesion y membresia verificada en servidor.
 - No hardcodear Panatruck en componentes reutilizables.
 - No crear integraciones reales sin aprobacion.
-- No usar Supabase, Vercel, Firebase ni servicios cloud para el flujo principal.
-- No crear remotes ni hacer push.
+- El flujo principal local sigue sin servicios cloud (ADR-002). Excepcion autorizada por el
+  dueno el 2026-11-12: entorno de **staging** en GitHub (repo publico), Supabase, Vercel y
+  ClamAV en Fly.io segun ADR-036. Produccion real y cualquier costo nuevo requieren
+  aprobacion explicita. Firebase u otros servicios siguen fuera.
+- Push solo al remote `origin` documentado en ADR-036. El repo es publico: nunca commitear
+  secretos; credenciales demo solo validas con `APP_ENV=local`.
 - Registrar decisiones arquitectonicas en ADR.
 - Ejecutar verificaciones reales y documentar resultados.
 - No declarar que una prueba paso si no fue ejecutada.

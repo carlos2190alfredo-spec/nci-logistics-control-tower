@@ -1,102 +1,385 @@
 import Link from "next/link";
-import { FileCheck2, KeyRound, Radar, Route, ShieldCheck } from "lucide-react";
-import { buttonStyles } from "@/components/ui/button-styles";
+import { ArrowRight, ArrowUpRight } from "lucide-react";
+import { IsthmusRoute } from "@/components/brand/isthmus-route";
+import { isLocalEnv } from "@/lib/app-env";
 
-const capabilities = [
+/*
+ * Landing — direccion "Manifiesto del istmo" (docs/design/CREATIVE_DIRECTION.md).
+ * Todo el contenido describe capacidades existentes del producto; sin cifras,
+ * clientes ni testimonios inventados.
+ */
+
+const milestones = [
   {
-    icon: Radar,
-    title: "Centro de control en vivo",
-    description: "Solicitudes, viajes activos, incidencias y evidencias en una sola vista operativa.",
+    name: "Solicitud",
+    text: "El cliente pide el servicio desde su portal. Operaciones lo revisa, pide información o lo rechaza con un motivo que el cliente ve.",
+    who: "Cliente · Operaciones",
   },
   {
-    icon: Route,
-    title: "Trazabilidad por hitos",
-    description: "Linea de tiempo de cada servicio, del origen al cierre, visible para el cliente autorizado.",
+    name: "Asignación",
+    text: "Vehiculo, equipo y conductor se validan contra cumplimiento, mantenimiento y agenda antes de confirmar. Si algo bloquea, la pantalla dice qué.",
+    who: "Operaciones",
   },
   {
-    icon: ShieldCheck,
-    title: "Aislamiento por tenant",
-    description: "Cada transportista y cada cliente ven exclusivamente su operacion, verificado en servidor.",
+    name: "En ruta",
+    text: "El conductor avanza cada tramo desde su teléfono, también sin señal. Al reconectar, la cola se sincroniza sin duplicar ni pisar cambios.",
+    who: "Conductor · Operaciones",
   },
   {
-    icon: FileCheck2,
-    title: "POD digital",
-    description: "Evidencia fotografica, firma del receptor y prueba de entrega en PDF descargable.",
+    name: "Entrega",
+    text: "Entrega confirmada, o entrega fallida con reintento o retorno. Las incidencias que importan se comunican al cliente.",
+    who: "Todos los involucrados",
   },
+  {
+    name: "Evidencia",
+    text: "Foto y firma del receptor. Cada archivo pasa por antivirus y cuarentena antes de quedar disponible.",
+    who: "Conductor · Operaciones",
+  },
+  {
+    name: "POD",
+    text: "Prueba de entrega en PDF, descargable solo por el cliente de ese servicio.",
+    who: "Cliente",
+  },
+];
+
+const views = [
+  {
+    role: "Operaciones",
+    text: "Centro de control con solicitudes, viajes activos, asignación validada, excepciones con motivo y cumplimiento panameño: documentos con vencimiento, contenedores con días libres y mercancía peligrosa.",
+  },
+  {
+    role: "Clientes",
+    text: "Portal propio para solicitar transporte, seguir cada hito autorizado, ver incidencias comunicadas y descargar sus pruebas de entrega.",
+  },
+  {
+    role: "Conductores",
+    text: "Aplicación instalable que funciona sin conexión: avance por tramos, captura de evidencia y sincronización segura al volver la señal.",
+  },
+];
+
+const controls = [
+  [
+    "Aislamiento por empresa",
+    "Cada consulta se filtra por la empresa de la ruta y una membresía verificada en el servidor.",
+  ],
+  [
+    "MFA para cuentas criticas",
+    "Dueños y administracion de plataforma entran con contraseña y código TOTP.",
+  ],
+  [
+    "Archivos en cuarentena",
+    "Ningún archivo se sirve hasta que el antivirus lo declara limpio.",
+  ],
+  [
+    "Bitácora de auditoría",
+    "Asignaciones, cambios de estado, excepciones y accesos quedan registrados con su autor.",
+  ],
 ];
 
 const demoAccounts = [
-  { role: "Plataforma", email: "platform@nci.local", password: "NCIPlatform2026!" },
-  { role: "Operaciones", email: "operaciones@panatruck.local", password: "Operaciones2026!" },
-  { role: "Conductor", email: "conductor1@panatruck.local", password: "Conductor2026!" },
-  { role: "Cliente", email: "cliente@clienteportuario.local", password: "Cliente2026!" },
+  {
+    role: "Plataforma",
+    email: "platform@nci.local",
+    password: "NCIPlatform2026!",
+  },
+  {
+    role: "Operaciones",
+    email: "operaciones@panatruck.local",
+    password: "Operaciones2026!",
+  },
+  {
+    role: "Conductor",
+    email: "conductor1@panatruck.local",
+    password: "Conductor2026!",
+  },
+  {
+    role: "Cliente",
+    email: "cliente@clienteportuario.local",
+    password: "Cliente2026!",
+  },
 ];
 
-export default function HomePage() {
+const chapters = [
+  { id: "recorrido", label: "Recorrido" },
+  { id: "vistas", label: "Vistas" },
+  { id: "control", label: "Control" },
+];
+
+function Numeral({ value, className }: { value: number; className?: string }) {
   return (
-    <main className="control-grid min-h-screen bg-nav px-4 py-10 text-nav-foreground md:px-8">
-      <div className="mx-auto grid max-w-6xl gap-10 lg:grid-cols-[1.15fr_0.85fr] lg:items-start">
-        <section className="anim-page py-6">
-          <p className="text-sm font-bold uppercase tracking-[0.25em] text-nav-active">NCI Automation</p>
-          <h1 className="mt-4 max-w-3xl text-4xl font-bold leading-tight text-white md:text-5xl">LOGISTICS CONTROL TOWER</h1>
-          <p className="mt-5 max-w-2xl text-lg leading-8 text-nav-muted">
-            Plataforma SaaS multicliente para operar transporte de carga: solicitudes, viajes, conductores, incidencias,
-            evidencias y prueba de entrega con aislamiento total por empresa.
-          </p>
-          <div className="mt-8 flex flex-wrap gap-3">
-            <Link className={buttonStyles({ variant: "accent", size: "lg" })} href="/login">
-              Iniciar sesion
-            </Link>
-            <Link
-              className="inline-flex min-h-14 items-center justify-center gap-2 rounded-lg border border-nav-border px-5 text-base font-semibold text-nav-foreground transition-colors hover:bg-nav-surface"
-              href="/platform"
-            >
-              Panel plataforma
-            </Link>
+    <span
+      className={`font-mono text-xs font-bold tracking-[0.18em] ${className ?? ""}`}
+    >
+      {String(value).padStart(2, "0")}
+    </span>
+  );
+}
+
+export default function HomePage() {
+  // Credenciales demo solo en local: en staging el repo publico las haria validas para cualquiera.
+  const showDemoAccounts = isLocalEnv();
+
+  return (
+    <div className="bg-paper text-ink">
+      <header className="sticky top-0 z-30 border-b border-ink/10 bg-paper/90 backdrop-blur-md">
+        <div className="mx-auto flex max-w-7xl items-center justify-between gap-4 px-4 py-3 md:px-8">
+          <Link className="flex items-baseline gap-2" href="/">
+            <span className="font-display text-lg font-black tracking-tight [font-stretch:125%]">
+              NCI
+            </span>
+            <span className="hidden font-mono text-[11px] tracking-[0.2em] text-ink-muted sm:inline">
+              LOGISTICS CONTROL TOWER
+            </span>
+          </Link>
+          <nav
+            aria-label="Capitulos"
+            className="hidden items-center gap-6 md:flex"
+          >
+            {chapters.map((chapter, index) => (
+              <a
+                className="group flex items-baseline gap-1.5 text-sm font-medium text-ink-muted transition-colors hover:text-ink"
+                href={`#${chapter.id}`}
+                key={chapter.id}
+              >
+                <Numeral className="text-signal" value={index + 1} />
+                {chapter.label}
+              </a>
+            ))}
+          </nav>
+          <Link
+            className="inline-flex min-h-10 items-center gap-1.5 rounded-full border border-ink px-4 text-sm font-semibold transition-colors hover:bg-ink hover:text-paper"
+            href="/login"
+          >
+            Entrar
+            <ArrowUpRight aria-hidden className="size-4" />
+          </Link>
+        </div>
+      </header>
+
+      <main>
+        {/* Hero: manifiesto a la izquierda, cruce del istmo a la derecha */}
+        <section className="mx-auto grid max-w-7xl gap-10 px-4 pt-12 pb-16 md:px-8 lg:grid-cols-[1.05fr_0.95fr] lg:items-center lg:gap-14 lg:pt-20 lg:pb-24">
+          <div className="anim-page">
+            <p className="flex flex-wrap items-center gap-x-3 gap-y-1 font-mono text-[11px] tracking-[0.22em] text-ink-muted">
+              <span className="inline-block size-2 rounded-full bg-signal" />
+              MANIFIESTO DE OPERACIÓN
+              <span className="text-ink/30">/</span>
+              PANAMÁ
+            </p>
+            <h1 className="mt-6">
+              <span className="block font-mono text-xs font-bold tracking-[0.3em] text-signal">
+                LOGISTICS CONTROL TOWER
+              </span>
+              <span className="mt-4 block font-display text-[clamp(2.6rem,6.4vw,5.4rem)] leading-[0.92] font-black tracking-[-0.02em] text-balance [font-stretch:112%]">
+                Cada carga, documentada de origen a entrega.
+              </span>
+            </h1>
+            <p className="mt-6 max-w-xl text-lg leading-8 text-ink-muted">
+              Plataforma multiempresa para transportistas de carga: solicitudes,
+              asignación de flota, avance del conductor, incidencias y prueba de
+              entrega digital. Cada hito queda registrado y visible solo para
+              quien corresponde.
+            </p>
+            <div className="mt-9 flex flex-wrap items-center gap-3">
+              <Link
+                className="inline-flex min-h-13 items-center gap-2 rounded-full bg-signal px-7 text-base font-semibold text-white shadow-[0_10px_30px_-12px_rgb(194_65_12/0.7)] transition-[background-color,transform] duration-200 hover:-translate-y-0.5 hover:bg-signal-strong focus-visible:-translate-y-0.5"
+                href="/login"
+              >
+                Iniciar sesion
+                <ArrowRight aria-hidden className="size-4.5" />
+              </Link>
+              <a
+                className="inline-flex min-h-13 items-center px-3 text-base font-semibold underline decoration-ink/30 underline-offset-[6px] transition-colors hover:decoration-signal"
+                href="#recorrido"
+              >
+                Ver el recorrido de un servicio
+              </a>
+            </div>
+            <dl className="mt-12 grid max-w-xl grid-cols-3 border-t border-ink/15 pt-5">
+              {[
+                ["Empresas", "aisladas"],
+                ["Conductor", "sin señal"],
+                ["Evidencia", "escaneada"],
+              ].map(([term, detail]) => (
+                <div key={term}>
+                  <dt className="font-mono text-[11px] tracking-[0.16em] text-ink-muted">
+                    {term.toUpperCase()}
+                  </dt>
+                  <dd className="mt-1 font-display text-lg font-bold [font-stretch:110%]">
+                    {detail}
+                  </dd>
+                </div>
+              ))}
+            </dl>
           </div>
 
-          <div className="mt-12 grid gap-4 sm:grid-cols-2">
-            {capabilities.map((capability, index) => (
-              <div
-                className="anim-item rounded-xl border border-nav-border bg-nav-surface/50 p-4 backdrop-blur-sm"
-                key={capability.title}
-                style={{ "--stagger": index } as React.CSSProperties}
-              >
-                <capability.icon aria-hidden className="size-5 text-nav-active" />
-                <h2 className="mt-3 text-sm font-bold text-white">{capability.title}</h2>
-                <p className="mt-1 text-sm leading-6 text-nav-muted">{capability.description}</p>
-              </div>
-            ))}
+          <figure className="anim-scale-in relative overflow-hidden rounded-[28px] bg-ink p-4 shadow-[0_40px_80px_-40px_rgb(11_35_56/0.6)] sm:p-6">
+            <div className="flex items-center justify-between font-mono text-[10px] tracking-[0.2em] text-fog">
+              <span>RUTA DEMO</span>
+              <span>MIT → BALBOA</span>
+            </div>
+            <IsthmusRoute className="mt-3 w-full" />
+            <figcaption className="mt-3 border-t border-fog/15 pt-3 text-sm leading-6 text-fog">
+              Del Atlántico al Pacífico: los seis hitos que todo servicio sella
+              antes de cerrarse.
+            </figcaption>
+          </figure>
+        </section>
+
+        {/* 01 — Recorrido */}
+        <section className="scroll-mt-16 border-t border-ink/10" id="recorrido">
+          <div className="mx-auto grid max-w-7xl gap-10 px-4 py-20 md:px-8 lg:grid-cols-[0.8fr_1.2fr] lg:gap-16">
+            <div className="lg:sticky lg:top-28 lg:self-start">
+              <Numeral className="text-signal" value={1} />
+              <h2 className="mt-3 font-display text-4xl leading-none font-black tracking-tight text-balance [font-stretch:115%] md:text-5xl">
+                Un servicio, seis hitos sellados.
+              </h2>
+              <p className="mt-5 max-w-md leading-7 text-ink-muted">
+                El mismo registro sirve a operaciones, al conductor y al
+                cliente. Cada uno ve lo que le corresponde, nada más.
+              </p>
+            </div>
+            <ol className="border-t border-ink">
+              {milestones.map((milestone, index) => (
+                <li
+                  className="group grid grid-cols-[3rem_1fr] gap-x-4 gap-y-2 border-b border-ink/15 py-6 sm:grid-cols-[3.5rem_1fr_10rem]"
+                  key={milestone.name}
+                >
+                  <span className="grid size-11 place-items-center rounded-full border border-dashed border-signal font-mono text-xs font-bold text-signal transition-colors duration-200 group-hover:border-solid group-hover:bg-signal group-hover:text-white">
+                    {String(index + 1).padStart(2, "0")}
+                  </span>
+                  <div>
+                    <h3 className="font-display text-xl font-bold [font-stretch:110%]">
+                      {milestone.name}
+                    </h3>
+                    <p className="mt-1.5 leading-7 text-ink-muted">
+                      {milestone.text}
+                    </p>
+                  </div>
+                  <p className="col-start-2 font-mono text-[11px] tracking-[0.12em] text-ink-muted sm:col-start-3 sm:pt-1.5 sm:text-right">
+                    {milestone.who.toUpperCase()}
+                  </p>
+                </li>
+              ))}
+            </ol>
           </div>
         </section>
 
-        <section className="anim-scale-in rounded-2xl border border-nav-border bg-surface p-6 text-foreground shadow-lg lg:mt-6">
-          <div className="flex items-center gap-2.5">
-            <span aria-hidden className="grid size-9 place-items-center rounded-lg bg-primary-soft text-primary">
-              <KeyRound className="size-4.5" />
-            </span>
-            <div>
-              <h2 className="text-base font-bold">Credenciales demo</h2>
-              <p className="text-xs text-muted-foreground">Entorno local de demostracion</p>
+        {/* 02 — Vistas */}
+        <section className="scroll-mt-16 bg-paper-deep" id="vistas">
+          <div className="mx-auto max-w-7xl px-4 py-20 md:px-8">
+            <div className="flex flex-wrap items-end justify-between gap-6">
+              <div>
+                <Numeral className="text-signal" value={2} />
+                <h2 className="mt-3 max-w-2xl font-display text-4xl leading-none font-black tracking-tight text-balance [font-stretch:115%] md:text-5xl">
+                  Tres vistas de la misma operación.
+                </h2>
+              </div>
+              <p className="max-w-sm leading-7 text-ink-muted">
+                Un solo dato, tres responsabilidades distintas.
+              </p>
+            </div>
+            <div className="mt-12 grid gap-px overflow-hidden rounded-3xl border border-ink/15 bg-ink/15 lg:grid-cols-[1.25fr_1fr_1fr]">
+              {views.map((view, index) => (
+                <article
+                  className={`bg-paper p-7 md:p-9 ${index === 0 ? "lg:row-span-1" : ""}`}
+                  key={view.role}
+                >
+                  <p className="font-mono text-[11px] tracking-[0.2em] text-signal">
+                    VISTA {String(index + 1).padStart(2, "0")}
+                  </p>
+                  <h3
+                    className={`mt-4 font-display font-black tracking-tight [font-stretch:115%] ${index === 0 ? "text-4xl" : "text-3xl"}`}
+                  >
+                    {view.role}
+                  </h3>
+                  <p className="mt-4 leading-7 text-ink-muted">{view.text}</p>
+                </article>
+              ))}
             </div>
           </div>
-          <ul className="mt-5 grid gap-3">
-            {demoAccounts.map((account) => (
-              <li className="rounded-lg border border-border bg-surface-sunken/60 p-3" key={account.role}>
-                <p className="text-xs font-bold uppercase tracking-wide text-muted-foreground">{account.role}</p>
-                <p className="mt-1 break-all font-mono text-[13px] text-foreground">{account.email}</p>
-                <p className="break-all font-mono text-[13px] text-muted-foreground">{account.password}</p>
-              </li>
-            ))}
-          </ul>
-          <p className="mt-4 text-xs leading-5 text-faint-foreground">
-            Contraseñas exclusivas de demostracion. No usar en produccion.
-          </p>
         </section>
-      </div>
-      <p className="mx-auto mt-12 max-w-6xl border-t border-nav-border pt-6 text-center text-xs text-nav-muted">
-        Tecnologia desarrollada por NCI Automation
-      </p>
-    </main>
+
+        {/* 03 — Control */}
+        <section className="scroll-mt-16 bg-ink text-paper" id="control">
+          <div className="mx-auto grid max-w-7xl gap-12 px-4 py-20 md:px-8 lg:grid-cols-[1fr_1.1fr]">
+            <div>
+              <Numeral className="text-signal-on-ink" value={3} />
+              <h2 className="mt-3 font-display text-4xl leading-none font-black tracking-tight text-balance [font-stretch:115%] md:text-5xl">
+                Control que se verifica en el servidor, no en la pantalla.
+              </h2>
+              <p className="mt-5 max-w-md leading-7 text-fog">
+                Ocultar un botón no es seguridad. Permisos, aislamiento y
+                validaciones viven en el servidor y en la base de datos.
+              </p>
+            </div>
+            <dl className="grid gap-px overflow-hidden rounded-3xl bg-fog/15 sm:grid-cols-2">
+              {controls.map(([title, text]) => (
+                <div className="bg-ink p-6" key={title}>
+                  <dt className="font-display text-lg font-bold [font-stretch:110%]">
+                    {title}
+                  </dt>
+                  <dd className="mt-2 text-sm leading-6 text-fog">{text}</dd>
+                </div>
+              ))}
+            </dl>
+          </div>
+        </section>
+
+        {showDemoAccounts ? (
+          <section
+            aria-labelledby="demo-title"
+            className="border-t border-ink/10"
+          >
+            <div className="mx-auto max-w-7xl px-4 py-14 md:px-8">
+              <h2
+                className="font-mono text-xs font-bold tracking-[0.2em] text-signal"
+                id="demo-title"
+              >
+                CREDENCIALES DEMO · SOLO ENTORNO LOCAL
+              </h2>
+              <ul className="mt-5 grid gap-px overflow-hidden rounded-2xl border border-ink/15 bg-ink/15 sm:grid-cols-2 lg:grid-cols-4">
+                {demoAccounts.map((account) => (
+                  <li className="bg-paper p-4" key={account.role}>
+                    <p className="text-xs font-bold uppercase tracking-wide text-ink-muted">
+                      {account.role}
+                    </p>
+                    <p className="mt-1 break-all font-mono text-[13px]">
+                      {account.email}
+                    </p>
+                    <p className="break-all font-mono text-[13px] text-ink-muted">
+                      {account.password}
+                    </p>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          </section>
+        ) : null}
+
+        <section className="border-t border-ink/10">
+          <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-6 px-4 py-16 md:px-8">
+            <p className="max-w-2xl font-display text-3xl leading-tight font-black tracking-tight text-balance [font-stretch:112%] md:text-4xl">
+              Su operación ya tiene manifiesto. Ahora también tiene torre de
+              control.
+            </p>
+            <Link
+              className="inline-flex min-h-13 items-center gap-2 rounded-full bg-ink px-7 text-base font-semibold text-paper transition-colors hover:bg-ink-soft"
+              href="/login"
+            >
+              Acceder a la plataforma
+              <ArrowRight aria-hidden className="size-4.5" />
+            </Link>
+          </div>
+        </section>
+      </main>
+
+      <footer className="border-t border-ink/10">
+        <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-3 px-4 py-6 text-xs text-ink-muted md:px-8">
+          <p>Tecnología desarrollada por NCI Automation</p>
+          <p className="font-mono tracking-[0.14em]">NCI · LCT</p>
+        </div>
+      </footer>
+    </div>
   );
 }

@@ -1,0 +1,30 @@
+# Gateway ClamAV para staging (ADR-036). Desplegar desde este directorio:
+#   fly launch --no-deploy --copy-config --name <app>   (una vez)
+#   fly secrets set GATEWAY_TOKEN=<token>
+#   fly deploy
+app = "nci-lct-clamav-staging"
+primary_region = "iad"
+
+[build]
+  dockerfile = "Dockerfile"
+
+[http_service]
+  internal_port = 8080
+  force_https = true
+  # clamd + freshclam tardan ~5 min en el primer arranque (medido en local): una maquina apagada haria fallar el escaneo.
+  auto_stop_machines = "off"
+  auto_start_machines = true
+  min_machines_running = 1
+
+  [[http_service.checks]]
+    grace_period = "360s"
+    interval = "30s"
+    method = "GET"
+    path = "/livez"
+    timeout = "5s"
+
+[[vm]]
+  # ClamAV necesita ~1,2 GB con las firmas cargadas.
+  memory = "2gb"
+  cpu_kind = "shared"
+  cpus = 1

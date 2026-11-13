@@ -1,5 +1,6 @@
 import { GetObjectCommand, PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
+import { envOrLocalDefault } from "@/lib/app-env";
 
 /**
  * Contrato de uploads:
@@ -25,13 +26,15 @@ let s3Client: S3Client | null = null;
 
 export function getStorageClient() {
   if (!s3Client) {
+    // Cualquier endpoint S3 con path-style: MinIO en local, Supabase Storage en staging.
+    // Fuera de local no hay valores por defecto (ADR-036).
     s3Client = new S3Client({
-      region: "local",
-      endpoint: process.env.MINIO_ENDPOINT ?? "http://localhost:9000",
+      region: process.env.STORAGE_REGION ?? "local",
+      endpoint: envOrLocalDefault("MINIO_ENDPOINT", "http://localhost:9000"),
       forcePathStyle: true,
       credentials: {
-        accessKeyId: process.env.MINIO_ACCESS_KEY ?? "nci_minio",
-        secretAccessKey: process.env.MINIO_SECRET_KEY ?? "nci_minio_password",
+        accessKeyId: envOrLocalDefault("MINIO_ACCESS_KEY", "nci_minio"),
+        secretAccessKey: envOrLocalDefault("MINIO_SECRET_KEY", "nci_minio_password"),
       },
     });
   }
@@ -40,7 +43,7 @@ export function getStorageClient() {
 }
 
 export function getStorageBucket() {
-  return process.env.MINIO_BUCKET ?? "nci-logistics-local";
+  return envOrLocalDefault("MINIO_BUCKET", "nci-logistics-local");
 }
 
 export function safeFilename(name: string) {

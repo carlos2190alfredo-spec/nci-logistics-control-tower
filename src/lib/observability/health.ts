@@ -1,4 +1,8 @@
+import { HeadBucketCommand } from "@aws-sdk/client-s3";
+import { isLocalEnv } from "@/lib/app-env";
+import { getAntivirusProvider } from "@/lib/server/antivirus";
 import { getDb } from "@/lib/server/db";
+import { getStorageBucket, getStorageClient } from "@/lib/server/storage";
 import { logger } from "./logger";
 
 export type ServiceStatus = "HEALTHY" | "DEGRADED" | "UNHEALTHY" | "UNKNOWN";
@@ -62,8 +66,31 @@ export async function checkPostgres(): Promise<HealthCheckResult> {
   }
 }
 
+/** Fuera de local el storage es Supabase S3: se comprueba el bucket con HeadBucket. */
+async function checkCloudStorage(checkedAt: string): Promise<HealthCheckResult> {
+  try {
+    const { durationMs } = await timed(() =>
+      getStorageClient().send(new HeadBucketCommand({ Bucket: getStorageBucket() }), {
+        abortSignal: AbortSignal.timeout(5000),
+      }),
+    );
+    return { name: "storage", status: "HEALTHY", durationMs, checkedAt, severity: "critical" };
+  } catch (err) {
+    return {
+      name: "storage",
+      status: "UNHEALTHY",
+      durationMs: 0,
+      checkedAt,
+      message: err instanceof Error ? err.message.slice(0, 200) : "Storage unreachable",
+      remediation: "Verificar MINIO_ENDPOINT, credenciales S3 y bucket de Supabase Storage",
+      severity: "critical",
+    };
+  }
+}
+
 export async function checkMinio(): Promise<HealthCheckResult> {
   const checkedAt = new Date().toISOString();
+  if (!isLocalEnv()) return checkCloudStorage(checkedAt);
   try {
     const endpoint = process.env.MINIO_ENDPOINT ?? "http://localhost:9000";
     const { result, durationMs } = await timed(async () => {
@@ -99,6 +126,17 @@ export async function checkMinio(): Promise<HealthCheckResult> {
 
 export async function checkClamAV(): Promise<HealthCheckResult> {
   const checkedAt = new Date().toISOString();
+  if (process.env.ANTIVIRUS_URL) {
+    const { result: healthy, durationMs } = await timed(() => getAntivirusProvider().ping());
+    return {
+      name: "clamav",
+      status: healthy ? "HEALTHY" : "UNHEALTHY",
+      durationMs,
+      checkedAt,
+      severity: "critical",
+      ...(healthy ? {} : { message: "Gateway ClamAV no responde", remediation: "Verificar la app de Fly.io y ANTIVIRUS_TOKEN" }),
+    };
+  }
   try {
     const { result, durationMs } = await timed(async () => {
       const net = await import("node:net");
@@ -203,7 +241,8 @@ export async function runHealthChecks(): Promise<HealthSummary> {
     checkPrismaConnection(),
     checkMinio(),
     checkClamAV(),
-    checkMailpit(),
+    // Mailpit solo existe en local; en staging el correo sale por SMTP real.
+    ...(isLocalEnv() ? [checkMailpit()] : []),
   ]);
 
   const status = aggregateStatus(checks);
@@ -222,7 +261,7 @@ export async function runHealthChecks(): Promise<HealthSummary> {
     uptime: Math.floor((Date.now() - appStartedAt) / 1000),
     version: process.env.npm_package_version ?? "0.1.0",
     commit: process.env.COMMIT_SHA ?? "local",
-    environment: process.env.NODE_ENV ?? "development",
+    environment: process.env.APP_ENV ?? process.env.NODE_ENV ?? "development",
     nodeVersion: process.version,
     checks,
   };

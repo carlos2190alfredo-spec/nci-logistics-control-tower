@@ -1,0 +1,54 @@
+{
+  "company": "NCI Logistics Control Tower",
+  "recommended": "B — Manifiesto del istmo",
+  "directions": [
+    {
+      "name": "A — Torre de control",
+      "concept": "La plataforma se presenta como la consola que ya es: claridad operativa de un centro de control, ejecutada con precision editorial.",
+      "axes": {
+        "layout": "editorial-grid",
+        "hero": "product-ui-demo",
+        "navigation": "classic-bar",
+        "luminosity": "light",
+        "color_temp": "cool",
+        "type_genus": "grotesque-sans",
+        "motion": "restrained-precise",
+        "immersion": "premium-motion",
+        "imagery": "product-ui"
+      },
+      "signature_interaction": "Captura real de la consola cuyos paneles se enfocan al pasar el cursor por cada capacidad listada"
+    },
+    {
+      "name": "B — Manifiesto del istmo",
+      "concept": "Cada servicio es un manifiesto de carga que cruza el istmo de Colon a Balboa: el sitio se lee como ese documento, hito por hito, y cada hito se sella.",
+      "axes": {
+        "layout": "split-asymmetric",
+        "hero": "data-or-diagram",
+        "navigation": "chaptered-progress",
+        "luminosity": "mixed-sections",
+        "color_temp": "warm",
+        "type_genus": "expressive-display",
+        "motion": "mechanical-technical",
+        "immersion": "hybrid",
+        "imagery": "data-viz"
+      },
+      "signature_interaction": "La ruta Atlantico-Pacifico se traza en SVG sobre el perfil del istmo y cada hito recibe un sello de tinta al entrar en vista"
+    },
+    {
+      "name": "C — Radar nocturno",
+      "concept": "Operaciones 24/7 vistas como un radar de madrugada: la flota es un pulso que nunca se apaga.",
+      "axes": {
+        "layout": "spatial-canvas",
+        "hero": "interactive-object",
+        "navigation": "minimal-overlay",
+        "luminosity": "dark",
+        "color_temp": "chromatic",
+        "type_genus": "mono-technical",
+        "motion": "fluid-organic",
+        "immersion": "full",
+        "imagery": "generative-procedural"
+      },
+      "signature_interaction": "Barrido de radar que responde al cursor revelando unidades y su estado"
+    }
+  ]
+}

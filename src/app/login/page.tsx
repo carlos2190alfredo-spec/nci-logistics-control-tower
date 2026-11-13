@@ -1,50 +1,75 @@
 import { Suspense } from "react";
 import Link from "next/link";
-import { ArrowLeft, Radar } from "lucide-react";
+import { ArrowLeft } from "lucide-react";
+import { IsthmusRoute } from "@/components/brand/isthmus-route";
 import { LoginForm } from "@/components/login-form";
+import { isLocalEnv } from "@/lib/app-env";
 
 export const dynamic = "force-dynamic";
 
 export default function LoginPage() {
   return (
-    <main className="grid min-h-screen lg:grid-cols-[1fr_1.1fr]">
-      <section className="control-grid relative hidden flex-col justify-between bg-nav p-10 text-nav-foreground lg:flex">
-        <div>
-          <p className="text-xs font-bold uppercase tracking-[0.25em] text-nav-active">NCI Automation</p>
-          <p className="mt-2 text-2xl font-bold text-white">Logistics Control Tower</p>
+    <main className="grid min-h-screen bg-paper text-ink lg:grid-cols-[1.05fr_1fr]">
+      <section className="relative hidden flex-col justify-between overflow-hidden bg-ink p-10 text-paper lg:flex xl:p-14">
+        <div className="flex items-baseline gap-2">
+          <span className="font-display text-xl font-black [font-stretch:125%]">
+            NCI
+          </span>
+          <span className="font-mono text-[11px] tracking-[0.2em] text-fog">
+            LOGISTICS CONTROL TOWER
+          </span>
         </div>
-        <div className="anim-slide-in-left max-w-md">
-          <Radar aria-hidden className="size-10 text-nav-active" />
-          <p className="mt-6 text-2xl font-bold leading-9 text-white">
-            Toda su operacion de transporte, visible y bajo control.
+        <div className="anim-slide-in-left">
+          <IsthmusRoute className="w-full max-w-xl" />
+          <p className="mt-8 max-w-md font-display text-3xl leading-tight font-black tracking-tight text-balance [font-stretch:112%]">
+            Toda su operación de transporte, visible y bajo control.
           </p>
-          <p className="mt-4 text-sm leading-7 text-nav-muted">
-            Solicitudes, asignaciones, avance del conductor, incidencias y prueba de entrega digital: un solo lugar para
-            operaciones, clientes y conductores.
+          <p className="mt-4 max-w-md text-sm leading-7 text-fog">
+            Solicitudes, asignaciones, avance del conductor, incidencias y
+            prueba de entrega digital: un solo lugar para operaciones, clientes
+            y conductores.
           </p>
         </div>
-        <p className="text-xs text-nav-muted">Tecnologia desarrollada por NCI Automation</p>
+        <p className="font-mono text-[11px] tracking-[0.14em] text-fog">
+          Tecnología desarrollada por NCI Automation
+        </p>
       </section>
 
-      <section className="grid place-items-center bg-background px-4 py-10">
+      <section className="grid place-items-center px-4 py-10">
         <div className="anim-page w-full max-w-md">
-          <Link className="mb-6 inline-flex items-center gap-1.5 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground" href="/">
+          <Link
+            className="mb-8 inline-flex items-center gap-1.5 text-sm font-medium text-ink-muted transition-colors hover:text-ink"
+            href="/"
+          >
             <ArrowLeft aria-hidden className="size-4" />
             Volver al inicio
           </Link>
-          <div className="rounded-2xl border border-border bg-surface p-7 shadow-md">
-            <p className="text-xs font-bold uppercase tracking-[0.2em] text-primary">Acceso a la plataforma</p>
-            <h1 className="mt-2 text-2xl font-bold tracking-tight text-foreground">NCI Logistics Control Tower</h1>
-            <p className="mt-2 text-sm text-muted-foreground">
-              Ingrese con su cuenta de operaciones, cliente o conductor. Su acceso queda registrado.
-            </p>
-            <div className="mt-6">
-              <Suspense fallback={null}>
-                <LoginForm />
-              </Suspense>
-            </div>
+          <p className="flex items-center gap-2 font-mono text-[11px] font-bold tracking-[0.22em] text-signal">
+            <span className="inline-block size-2 rounded-full bg-signal" />
+            Acceso a la plataforma
+          </p>
+          <h1 className="mt-3 font-display text-4xl leading-[0.95] font-black tracking-tight [font-stretch:112%]">
+            NCI Logistics Control Tower
+          </h1>
+          <p className="mt-3 text-sm leading-6 text-ink-muted">
+            Ingrese con su cuenta de operaciones, cliente o conductor. Su acceso
+            queda registrado.
+          </p>
+          <div className="mt-8 rounded-3xl border border-ink/10 bg-surface p-6 shadow-[0_30px_60px_-40px_rgb(11_35_56/0.45)] sm:p-7">
+            <Suspense fallback={null}>
+              <LoginForm
+                demoDefaults={
+                  isLocalEnv()
+                    ? {
+                        email: "platform@nci.local",
+                        password: "NCIPlatform2026!",
+                      }
+                    : undefined
+                }
+              />
+            </Suspense>
           </div>
-          <p className="mt-4 text-center text-xs text-faint-foreground">
+          <p className="mt-5 text-center text-xs text-ink-muted">
             ¿Problemas para entrar? Contacte a su administrador de flota.
           </p>
         </div>

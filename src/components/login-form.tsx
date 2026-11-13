@@ -8,7 +8,8 @@ import { Alert } from "@/components/ui/alert";
 import { SubmitButton } from "@/components/ui/button";
 import { Field } from "@/components/ui/field";
 
-export function LoginForm() {
+/** `demoDefaults` solo llega en APP_ENV=local; en staging el formulario arranca vacio. */
+export function LoginForm({ demoDefaults }: { demoDefaults?: { email: string; password: string } }) {
   const [state, action] = useActionState(loginAction, { message: "" });
   const params = useSearchParams();
   const passwordResetOk = params.get("password-reset") === "ok";
@@ -20,8 +21,8 @@ export function LoginForm() {
           Ya puede iniciar sesion con la nueva contrasena.
         </Alert>
       ) : null}
-      <Field defaultValue="platform@nci.local" label="Correo" name="email" type="email" />
-      <Field defaultValue="NCIPlatform2026!" label="Contrasena" name="password" type="password" />
+      <Field autoComplete="username" defaultValue={demoDefaults?.email} label="Correo" name="email" required type="email" />
+      <Field autoComplete="current-password" defaultValue={demoDefaults?.password} label="Contrasena" name="password" required type="password" />
       {state.message ? <Alert tone="danger">{state.message}</Alert> : null}
       <SubmitButton size="lg" variant="secondary">
         Entrar

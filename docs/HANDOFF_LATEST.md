@@ -1,5 +1,19 @@
 # HANDOFF LATEST
 
+## 2026-11-13 — Staging en la nube y rediseño (ADR-036)
+
+- Leer `docs/STAGING_DEPLOYMENT.md` (runbook) y `docs/decisions/ADR-036-cloud-staging.md`.
+- Los secretos de staging están en `.env.staging.local` (local, modo 600, ignorado por
+  git). `MFA_ENCRYPTION_KEY` debe coincidir entre el seed y Vercel.
+- Después de cada migración en staging, ejecutar `infra/supabase/harden.sql`.
+- Correr una sola suite E2E por vez. `pnpm e2e:cleanup --apply` tras cada suite.
+- **Pendiente:**
+  - `flyctl auth login` (dueño) → `fly deploy` del gateway;
+  - proyecto Vercel con variables;
+  - clave S3 de Supabase y API key de Resend (las pega el dueño en Vercel);
+  - verificación end-to-end en staging.
+
+
 Fecha: 2026-11-12
 Agente: Claude Opus 5.5 (auditoría + remediación P0 del núcleo operativo)
 
