@@ -6,9 +6,11 @@
 - **Hecho con los conectores (2026-11-13):** `MAIL_PASSWORD` (API key de Resend solo de envío
   para `nciautomation.com`), `CRON_SECRET` y `APP_ENV=production` en Vercel Production
   (Preview sigue en `staging`). Los valores viven en `.env.staging.local` (local, ignorado).
-- **Pendiente del dueño:** Supabase → `nci-lct-staging` → Storage → S3 Connection → New access
-  key → Vercel `MINIO_ACCESS_KEY` / `MINIO_SECRET_KEY` (Sensitive, Production y Preview). Ninguna
-  API ni conector crea esas claves. Opcional: `OPS_ALERT_EMAIL`.
+- **Clave S3 hecha:** creada en Supabase con el Chrome del dueño (extensión de Claude); el ID lo cargó
+  el conector de Vercel y el secreto lo pegó el dueño. Health 200 HEALTHY.
+- **Pendiente:** probar con sesión una subida de evidencia (debe quedar `AVAILABLE`, documento
+  `INTERNAL` hasta aprobar) y un correo real (recuperar contraseña con un correo propio). Opcional:
+  `OPS_ALERT_EMAIL`.
 - Tras definir variables: redesplegar (`git commit --allow-empty` + push) y verificar
   `/api/internal/health` en verde, una subida de evidencia y el correo de recuperación.
 - Reseembrar staging (`APP_ENV=staging`, con `.env.staging.local`) para que los viajes demo con

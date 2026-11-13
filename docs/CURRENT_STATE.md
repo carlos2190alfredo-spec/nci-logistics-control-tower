@@ -23,8 +23,9 @@ ninguno crítico) se corrigió y se revisó con revisores independientes:
 - **Configurado el 2026-11-13 con los conectores:** `MAIL_PASSWORD` (Resend, solo envío, dominio
   `nciautomation.com`), `CRON_SECRET` (Production) y `APP_ENV=production` (Production; Preview
   sigue en `staging`). Cron verificado de punta a punta.
-- **Pendiente:** `MINIO_ACCESS_KEY`/`MINIO_SECRET_KEY` (solo se crean en el panel de Supabase; el
-  health sigue UNHEALTHY por el storage hasta entonces) y, opcional, `OPS_ALERT_EMAIL`.
+- **Clave S3 cargada (2026-11-13):** el health público responde 200 HEALTHY.
+- **Pendiente:** probar una subida real de evidencia y un correo real desde la app (con sesión) y,
+  opcional, `OPS_ALERT_EMAIL`.
 
 ## Staging en la nube (ADR-036) y rediseño de la cara pública
 

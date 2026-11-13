@@ -20,9 +20,9 @@ camino a producción; no lo habilitan: producción real sigue requiriendo aproba
 | Pieza | Estado |
 | --- | --- |
 | GitHub `carlos2190alfredo-spec/nci-logistics-control-tower` | Publicado (`main`). Cada push a `main` despliega en Vercel |
-| Vercel | Desplegado (ver el último commit de `main`). Postgres y Prisma sanos en runtime; health `UNHEALTHY` mientras falte la clave S3 |
+| Vercel | Desplegado desde `main`. **Health 200 HEALTHY** (2026-11-13): Postgres, Prisma, storage (HeadBucket con la clave S3) y el gateway de ClamAV responden |
 | Supabase | Migrado, endurecido, sembrado; bucket creado |
-| Storage S3 | **Falta** `MINIO_ACCESS_KEY` / `MINIO_SECRET_KEY`. No hay API ni conector que cree claves S3 de Supabase Storage: se crean en el panel (Storage → S3 Connection → New access key) |
+| Storage S3 | Configurado: clave `vercel-nci-lct-staging` (Supabase → Storage → S3 Connection, acceso total a los buckets; solo la usa el servidor). `MINIO_ACCESS_KEY` y `MINIO_SECRET_KEY` en Vercel (Sensitive, Production y Preview). El secreto lo pegó el dueño: las herramientas de navegador bloquean leerlo y no se teclean credenciales. Rotar = crear otra clave, cargarla y borrar la anterior |
 | Perfil | `APP_ENV=production` solo en el entorno Production de Vercel (sitio indexable: `robots.txt` y sitemap verificados); Preview conserva `APP_ENV=staging` (noindex) |
 | Correo | Configurado: `MAIL_PASSWORD` es una API key de Resend solo de envío, restringida al dominio `nciautomation.com` (creada y cargada en Vercel el 2026-11-13). Credenciales y TLS verificados contra `smtp.resend.com:465` sin enviar correo. Falta probar un envío real de la app |
 | Cron de mantenimiento | `CRON_SECRET` cargada solo en Production. Verificado: 401 sin token o con token incorrecto y 200 con el token (rescan 0, prune 0, health evaluado y alerta registrada). `OPS_ALERT_EMAIL` sin definir: las alertas solo quedan en `operational_alerts` |

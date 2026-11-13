@@ -81,9 +81,10 @@ Config collect → .json → SHA-256 → encrypt → .json.enc → manifiesto �
   incluye, el plan Pro incluye copias diarias con retencion limitada y la recuperacion a un
   punto en el tiempo (PITR) es un complemento de pago. Los detalles vigentes estan en
   Dashboard → Database → Backups.
-- **El repositorio no registra el plan ni el nivel de backup del proyecto `nci-lct-staging`.**
-  Registrelo en este documento tras revisar el Dashboard; hasta entonces no se debe asumir
-  que existe un backup gestionado.
+- **Estado verificado el 2026-11-13 en el Dashboard de `nci-lct-staging`:** la organización
+  aparece con el plan **Pro** y Database → Backups → Scheduled backups lista copias diarias
+  **físicas** (13 nov 2026 05:02 y 07:42 UTC) con "Restore". No se comprobó si el complemento PITR
+  está activo (pestaña "Point in time"). Los objetos de Storage no están incluidos en esas copias.
 - Los backups de la base **no incluyen** los objetos de Supabase Storage (evidencias, POD,
   adjuntos): se respaldan aparte con `pnpm backup:minio`.
 - El respaldo portable y verificable es el **dump logico cifrado** de este documento.

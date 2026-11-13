@@ -23,12 +23,12 @@ Fecha: 2026-11-13 (Auditoría de producción y endurecimiento — ADR-037)
 | SMTP Resend (`nodemailer.verify`, sin enviar correo) | Credenciales y TLS OK en `smtp.resend.com:465` |
 | Cron `/api/internal/cron/maintenance` | Sin token 401; token incorrecto 401; token correcto 200: rescan 0, prune 0, health evaluado y alerta registrada |
 | `robots.txt` y `sitemap.xml` con `APP_ENV=production` | `Allow: /` y `/login`, áreas privadas bloqueadas; sitemap con las dos URLs; sin `noindex` |
-| Health público | 503 UNHEALTHY: solo el storage, falta la clave S3 |
+| Health público | Tras cargar la clave S3: **200 HEALTHY** (Postgres, Prisma, storage y gateway de ClamAV) |
 
 ## No ejecutado
 
 - Pruebas contra el sitio desplegado con sesión (no se introducen credenciales en una URL no local).
-- Envío real de correo desde la app y subida real de evidencia: la subida necesita las claves S3.
+- Envío real de correo desde la app y subida real de evidencia en el sitio desplegado: necesitan una sesión, y no se escriben credenciales en una URL que no es un entorno de pruebas.
 
 ---
 
