@@ -218,6 +218,44 @@ export function welcomeUserEmail(opts: {
   return { subject, html, text };
 }
 
+export function welcomeCustomerEmail(opts: {
+  userName: string;
+  /** Empresa de transporte que da el acceso. */
+  tenantName: string;
+  /** Cliente (empresa) al que pertenece el usuario del portal. */
+  customerName: string;
+  loginUrl?: string;
+  verifyUrl: string;
+  setPasswordUrl?: string;
+  setPasswordTtlHours?: number;
+}): EmailContent {
+  const subject = `Acceso al portal de ${toSingleLine(opts.tenantName)} — NCI Logistics Control Tower`;
+  const html = layout(`
+    <h1 style="margin:0 0 8px;font-size:22px;color:${TEXT_COLOR}">Hola, ${h(opts.userName)}</h1>
+    <p style="margin:0 0 20px;font-size:15px;color:${MUTED_COLOR};line-height:1.6">
+      <strong>${h(opts.tenantName)}</strong> le dio acceso a su portal para consultar y solicitar servicios de
+      <strong>${h(opts.customerName)}</strong>.
+    </p>
+    ${accessBlock(opts)}
+    <p style="margin:0 0 4px;font-size:14px;color:${TEXT_COLOR};line-height:1.5">Confirme tambien su correo electronico:</p>
+    ${button("Verificar mi correo electronico", opts.verifyUrl)}
+    <hr style="border:none;border-top:1px solid ${BORDER_COLOR};margin:24px 0">
+    <p style="margin:0;font-size:12px;color:${MUTED_COLOR}">
+      Si no esperaba este correo, puede ignorarlo: no se crea ninguna contrasena hasta que usted abra el enlace.
+    </p>
+  `);
+  const text = [
+    `Hola, ${toSingleLine(opts.userName)}`,
+    ``,
+    `${toSingleLine(opts.tenantName)} le dio acceso a su portal para consultar y solicitar servicios de ${toSingleLine(opts.customerName)}.`,
+    ``,
+    ...accessText(opts),
+    ``,
+    `Verifique su correo: ${opts.verifyUrl}`,
+  ].join("\n");
+  return { subject, html, text };
+}
+
 export function emailVerificationEmail(opts: {
   userName: string;
   verifyUrl: string;

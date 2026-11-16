@@ -40,8 +40,8 @@ async function failureMessage(page: Page) {
  * Falla con un mensaje claro si la sesion no se establece, en lugar de dejar
  * que el test siga sin autenticar y reciba la pagina de login como respuesta.
  */
-export async function login(page: Page, email: string, password: string) {
-  await page.goto("/login");
+export async function login(page: Page, email: string, password: string, options: { path?: string } = {}) {
+  await page.goto(options.path ?? "/login");
   await waitForHydratedForm(page);
   await fillVerified(page, "Correo", email);
   await fillVerified(page, "Contrasena", password);

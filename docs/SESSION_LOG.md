@@ -165,3 +165,36 @@
 - Verificación: typecheck, lint, 596 unitarios, build, E2E 102 + 1 intermitente de 103.
 - Las conexiones de Vercel, Supabase y Resend se desconectaron de la sesión; las claves de terceros
   quedaron pendientes del dueño.
+
+## 2026-11-16 — Fase 1 de simplificación (ADR-038)
+
+- Análisis de producto, diseño y revisión adversarial (5 lentes) previos; cimientos (esquema/migración, permisos, librerías, kit de UI) y luego pantallas y acciones: clientes, flota, lugares, tipos de servicio, Nuevo viaje, equipo opcional, Primeros pasos.
+- Correcciones a lo existente: `DRIVER` sin ficha, portal (viewer y solicitudes de operaciones), `TableRow`, desborde móvil.
+- Verificado: tsc, eslint, 1806 tests, security:check, build, E2E completa 101 + 3 flaky. Pendiente: acceso al portal, importación CSV, conductor usable, pruebas con BD real.
+- Segunda parte: importación CSV (panel/acción), acceso de clientes al portal con correo de un solo uso, alta de conductor sin pantalla de error y vínculo conductor↔cuenta; E2E nuevos (CSV, portal, conductor) y 1822 tests. Código en la rama `feat/fase1-catalogos-nuevo-viaje`.
+
+## 2026-11-16 — Pruebas con base de datos real (ADR-038)
+
+- Nueva suite `pnpm test:db` (`vitest.db.config.ts`, `tests/db/`): 47 pruebas contra PostgreSQL local con tenants descartables `zz-db-*`, y guarda de destino (`scripts/lib/db-test-guard.ts`) que bloquea hosts remotos, pooler, perfiles distintos de `local` y nombres de base de staging/producción.
+- Cubre referencias y bloqueo del tenant (incluida la forma real del `P2002`), carreras en los límites de plan, importación CSV, consultas de lectura y la migración de la Fase 1. Se verificó que las pruebas fallan cuando se rompe el código (7 mutaciones, 7 detectadas).
+- Error real encontrado y corregido en `import-apply.ts`: una fila de clientes podía perderse en silencio por un código explícito repetido; ahora se evita y, si ocurre, se revierte con un mensaje claro.
+- Verificado: tsc y eslint limpios, 1841 tests, `security:check`, `test:db` 47/47, E2E `csv-import` 2/2. Sin commit de esta tanda.
+
+## 2026-11-16 — Invitaciones al equipo y comprobación de seguridad (ADR-038)
+
+- El correo de invitación llevaba a `/invitacion/<token>`, que no existía. Implementada la página y la acción: cuenta nueva con contraseña propia o cuenta existente solo con su sesión, enlace de un solo uso atómico, sin escalada de rol, `/login?next=` estricto, `ServerForm` para no perder lo escrito.
+- Hallazgo: `security-check.ts::grepMissing` fallaba por sintaxis de shell y varias comprobaciones pasaban en vacío; corregido (sin shell, falla si grep falla) y comprobado con un `fetch(` plantado.
+- Verificado: tsc, eslint, 1876 tests, `test:db` 60/60, E2E invitaciones 3/3, `security:check`, `pnpm build`, mutaciones 7/7 y revisión visual (escritorio y 375 px). Sin repetir la E2E completa.
+
+## 2026-11-16 — E2E de acceso y hora de la empresa (ADR-038)
+
+- E2E nuevas de roles, aislamiento entre empresas y límites de plan (4 pruebas, 4 mutaciones detectadas). E2E completa de regresión: 114 pasan + 3 flaky preexistentes, 0 fallos.
+- BIZ-08 corregido: el motor de recomendación de conductores, el contexto de IA, operations-insights y el cupo diario del copiloto leían día/hora de la zona del servidor; ahora usan Panamá (helpers en `datetime.ts`). Pruebas con 5 zonas de proceso y con BD real.
+- Verificado: tsc, eslint, 1887 tests (UTC y Panamá), `test:db` 62/62, `security:check`, `pnpm build`.
+
+
+## 2026-11-16 — Despliegue de la Fase 1 a staging (ADR-038)
+
+- El dueño autorizó el despliegue ("Sí, desplegar"). Orden seguido: uso frente a plan (solo lectura) → backup cifrado verificado y restaurado en una base local descartable → `pnpm db:deploy` (solo `20261115181215_…` pendiente) → comprobación de RLS/privilegios en solo lectura → escaneo de secretos del parche → push de la rama → Preview de Vercel verificado (health `HEALTHY`, `/invitacion/[token]` responde con la base migrada, sin errores en logs).
+- Hallazgo ajeno a la fase: caída transitoria del gateway ClamAV de Fly (health 503 ~1 minuto, recuperado solo). Sin acceso al panel de Fly no se investigó la causa.
+- No se tecleó ninguna credencial en el sitio; los flujos con sesión quedan para recorrido manual. La fusión a `main` queda pendiente de confirmación. Los secretos de `.env.staging.local` se cargaron solo en el entorno de los procesos, sin imprimirlos.

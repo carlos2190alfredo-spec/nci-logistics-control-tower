@@ -2,14 +2,21 @@
  * Verificaciones estáticas locales. No inventa cobertura ni ejecuta escáneres
  * externos: cada regla se prueba con grep + comprobaciones deterministas.
  */
-import { execSync } from "node:child_process";
+import { execFileSync, execSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 
 type Check = { name: string; run: () => { ok: boolean; detail?: string } };
 
+/**
+ * `grep` recursivo sobre el código. Se ejecuta SIN shell (`execFileSync`): con `execSync` y los argumentos unidos por
+ * espacios, patrones como `fetch(` o `got(` rompían la sintaxis del shell, `grep` salía con código 2 y la función lo
+ * tomaba por "sin coincidencias", de modo que las comprobaciones que la usan pasaban en vacío.
+ *
+ * Código 1 de grep = sin coincidencias (resultado válido). Cualquier otro fallo se informa como una línea de error,
+ * para que la comprobación FALLE en lugar de pasar sin haber mirado nada.
+ */
 function grepMissing(patterns: string[]): string[] {
   const args = [
-    "grep",
     "-RIn",
     "--exclude-dir=generated",
     "--exclude-dir=node_modules",
@@ -24,12 +31,13 @@ function grepMissing(patterns: string[]): string[] {
     "public",
   ];
   try {
-    const output = execSync(args.join(" "), { encoding: "utf8" });
+    const output = execFileSync("grep", args, { encoding: "utf8", maxBuffer: 64 * 1024 * 1024 });
     return output.trim() ? output.trim().split("\n") : [];
   } catch (error: unknown) {
-    const err = error as { status?: number; stdout?: string };
+    const err = error as { status?: number; stdout?: string; message?: string };
     if (err.status === 1) return [];
-    return [(err.stdout ?? "").toString().trim()].filter(Boolean);
+    const partial = (err.stdout ?? "").toString().trim();
+    return [partial || `grep falló (código ${err.status ?? "desconocido"}): ${err.message ?? "sin detalle"}`];
   }
 }
 

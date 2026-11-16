@@ -27,15 +27,19 @@ export default async function DriverPage({ params }: { params: Promise<{ tenantS
   const { tenant, user, membership } = await requireTenantRole(tenantSlug, ["DRIVER", "TENANT_OWNER", "DISPATCHER"]);
   const db = getDb();
   const driver = await db.driver.findFirst({ where: { tenantId: tenant.id, userId: user.id } });
-  const trips = await db.trip.findMany({
+  // Un DRIVER sin ficha vinculada no ve viajes: con `driverId: undefined` Prisma omitiria el filtro
+  // y le mostraria todos los viajes activos del tenant.
+  const unlinkedDriver = membership.role === "DRIVER" && !driver;
+  const trips = unlinkedDriver ? [] : await db.trip.findMany({
     where: {
       tenantId: tenant.id,
-      driverId: membership.role === "DRIVER" ? driver?.id : undefined,
+      ...(membership.role === "DRIVER" && driver ? { driverId: driver.id } : {}),
       status: { notIn: ["CLOSED", "CANCELLED"] },
     },
     include: {
       vehicle: true,
       equipment: true,
+      serviceType: { select: { requiresEquipment: true } },
       customerAccount: true,
       proof: true,
       events: { orderBy: { createdAt: "desc" }, take: 5 },
@@ -104,7 +108,7 @@ export default async function DriverPage({ params }: { params: Promise<{ tenantS
                       </span>
                       <span className="inline-flex items-center gap-1.5">
                         <Truck aria-hidden className="size-4" />
-                        {trip.vehicle?.code ?? "Unidad pendiente"} · {trip.equipment?.code ?? "Equipo pendiente"}
+                        {trip.vehicle?.code ?? "Unidad pendiente"} · {trip.equipment?.code ?? (trip.serviceType.requiresEquipment ? "Equipo pendiente" : "Sin equipo")}
                       </span>
                     </div>
                   </div>

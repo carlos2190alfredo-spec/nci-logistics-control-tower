@@ -1,3 +1,4 @@
+import { tenantDayBounds } from "@/lib/datetime";
 import {
   AlertTriangle,
   Calendar,
@@ -41,10 +42,8 @@ export default async function OperationsInsightsPage({
 
   const db = getDb();
   const now = new Date();
-  const startOfDay = new Date(now);
-  startOfDay.setHours(0, 0, 0, 0);
-  const endOfDay = new Date(now);
-  endOfDay.setHours(23, 59, 59, 999);
+  // "Hoy" es el día de la empresa (Panamá), no el de la zona del servidor.
+  const today = tenantDayBounds(now) ?? { start: now, end: now };
 
   const [
     tripsWithoutDriver,
@@ -82,7 +81,7 @@ export default async function OperationsInsightsPage({
         status: "AVAILABLE",
         trips: {
           some: {
-            scheduledAt: { gte: startOfDay, lte: endOfDay },
+            scheduledAt: { gte: today.start, lt: today.end },
             status: { notIn: ["CANCELLED", "CLOSED"] },
           },
         },
@@ -90,7 +89,7 @@ export default async function OperationsInsightsPage({
       include: {
         trips: {
           where: {
-            scheduledAt: { gte: startOfDay, lte: endOfDay },
+            scheduledAt: { gte: today.start, lt: today.end },
             status: { notIn: ["CANCELLED", "CLOSED"] },
           },
           select: { id: true },

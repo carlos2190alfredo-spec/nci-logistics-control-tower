@@ -1,5 +1,6 @@
 "use server";
 
+import { tenantCalendarDate } from "@/lib/datetime";
 import { revalidatePath } from "next/cache";
 import { audit } from "@/lib/server/audit";
 import { requireTenantRole } from "@/lib/server/auth";
@@ -52,8 +53,8 @@ async function logInvocation(
     },
   });
 
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
+  // Clave diaria (@db.Date) por día de la EMPRESA: el cupo del día no se reinicia a las 19:00 de Panamá.
+  const today = tenantCalendarDate(new Date()) ?? new Date();
 
   await db.aiUsageDaily.upsert({
     where: { tenantId_date: { tenantId, date: today } },
@@ -302,8 +303,8 @@ export async function getCopilotStatusAction(tenantSlug: string) {
   const aiEnabled = aiSetting?.enabled ?? false;
   const health = getDeepSeekHealthStatus(aiEnabled);
 
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
+  // Clave diaria (@db.Date) por día de la EMPRESA: el cupo del día no se reinicia a las 19:00 de Panamá.
+  const today = tenantCalendarDate(new Date()) ?? new Date();
   const usage = await db.aiUsageDaily.findUnique({
     where: { tenantId_date: { tenantId: tenant.id, date: today } },
   });

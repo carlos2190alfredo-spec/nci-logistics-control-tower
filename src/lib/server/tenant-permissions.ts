@@ -1,4 +1,5 @@
 import type { TenantRole } from "@/generated/prisma";
+import { REQUEST_OPERATIONS_ROLES } from "@/lib/domain/request-roles";
 
 export type TenantPermission =
   | "tenant.view"
@@ -29,7 +30,11 @@ export type TenantPermission =
   | "tenant.maintenance.view"
   | "tenant.maintenance.manage"
   | "tenant.exceptions.view"
-  | "tenant.exceptions.approve";
+  | "tenant.exceptions.approve"
+  | "tenant.catalogs.view"
+  | "tenant.catalogs.manage"
+  | "tenant.customers.portal"
+  | "tenant.trips.create";
 
 const PERMISSION_MAP: Record<TenantPermission, TenantRole[]> = {
   "tenant.view": ["TENANT_OWNER", "TENANT_ADMIN", "OPERATIONS_MANAGER", "DISPATCHER", "SAFETY_MANAGER"],
@@ -64,6 +69,13 @@ const PERMISSION_MAP: Record<TenantPermission, TenantRole[]> = {
   // Excepciones de despacho: solo mando/seguridad pueden aprobar.
   "tenant.exceptions.view": ["TENANT_OWNER", "TENANT_ADMIN", "OPERATIONS_MANAGER", "SAFETY_MANAGER"],
   "tenant.exceptions.approve": ["TENANT_OWNER", "TENANT_ADMIN", "SAFETY_MANAGER"],
+  // Catalogos base (clientes, flota, lugares, tipos de servicio; ADR-038): ver = vista operativa; administrar = mando.
+  "tenant.catalogs.view": ["TENANT_OWNER", "TENANT_ADMIN", "OPERATIONS_MANAGER", "DISPATCHER", "SAFETY_MANAGER"],
+  "tenant.catalogs.manage": ["TENANT_OWNER", "TENANT_ADMIN", "OPERATIONS_MANAGER"],
+  // Crear y gestionar el acceso de usuarios externos (portal del cliente): solo roles con MFA obligatorio.
+  "tenant.customers.portal": ["TENANT_OWNER", "TENANT_ADMIN"],
+  // Crear viajes desde operaciones (pedidos por telefono, WhatsApp o correo): los roles que ya convierten solicitudes.
+  "tenant.trips.create": [...REQUEST_OPERATIONS_ROLES],
 };
 
 export function hasPermission(role: TenantRole, permission: TenantPermission): boolean {

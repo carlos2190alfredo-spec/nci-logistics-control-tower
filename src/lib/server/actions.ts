@@ -1,5 +1,6 @@
 "use server";
 
+import { safeNextPath } from "@/lib/server/next-path";
 import { randomUUID } from "node:crypto";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
@@ -22,6 +23,7 @@ import {
   POD_OBJECT_KEY_SEGMENT,
   evidenceDocumentIdsToPublish,
 } from "@/lib/domain/proof-evidence";
+import { parseTenantLocal } from "@/lib/datetime";
 import { tripStatusLabel } from "@/lib/ui/status";
 import { actionError, actionOk, StaleStateError, type ActionResult } from "@/lib/server/action-result";
 import { blockingDocumentsNow } from "@/lib/compliance/eligibility";
@@ -39,6 +41,8 @@ import {
 import { userHasMfaActive } from "@/lib/server/mfa";
 import { tenantHomePath } from "@/lib/server/tenant-permissions";
 import { getDb } from "@/lib/server/db";
+import { isUniqueViolation } from "@/lib/server/db-errors";
+import { lockTenantForCreate, nextReference } from "@/lib/server/trip-creation";
 import { enforceRateLimit } from "@/lib/server/rate-limit";
 import { logger } from "@/lib/server/logger";
 import { sendLocalNotification } from "@/lib/providers/notifications";
@@ -116,6 +120,10 @@ export async function loginAction(_: unknown, formData: FormData) {
       redirect("/account/security/mfa/setup");
     }
   }
+
+  // Volver a la invitación que la persona estaba aceptando (solo esa ruta exacta; ver next-path.ts).
+  const next = safeNextPath(formData.get("next"));
+  if (next) redirect(next);
 
   if (user?.platformRole) redirect("/platform");
   const firstMembership = user?.tenantMemberships[0];
@@ -207,11 +215,36 @@ export async function startSupportModeAction(formData: FormData) {
   redirect(`/t/${support.tenant.slug}`);
 }
 
+/**
+ * Fecha requerida del portal (`datetime-local`): hora de pared de Panamá, no la zona del proceso
+ * (ADR-038). Acepta también solo la fecha (`YYYY-MM-DD`), como medianoche de Panamá: era válida con el
+ * `min(10)` anterior y así no se rechaza lo que antes se aceptaba.
+ */
+function parseRequestedDate(value: string): Date | null {
+  return parseTenantLocal(/^\d{4}-\d{2}-\d{2}$/.test(value) ? `${value}T00:00` : value);
+}
+
+/** Intentos para crear la solicitud si otra alta sin bloqueo ocupa la misma referencia (P2002). */
+const SERVICE_REQUEST_CREATE_ATTEMPTS = 3;
+
 const requestSchema = z.object({
   serviceTypeId: z.string().uuid(),
   origin: z.string().min(3),
   destination: z.string().min(3),
-  requestedDate: z.string().min(10),
+  // Una fecha inválida falla la validación como cualquier otro campo (antes llegaba a Prisma como
+  // `Invalid Date` y terminaba en un error 500).
+  requestedDate: z
+    .string()
+    .trim()
+    .min(10)
+    .transform((value, ctx) => {
+      const date = parseRequestedDate(value);
+      if (!date) {
+        ctx.addIssue({ code: "custom", message: "La fecha requerida no es válida." });
+        return z.NEVER;
+      }
+      return date;
+    }),
   priority: z.enum(["NORMAL", "URGENT"]).default("NORMAL"),
   contactName: z.string().min(2),
   contactPhone: z.string().min(3),
@@ -275,42 +308,75 @@ export async function createServiceRequestAction(tenantSlug: string, formData: F
     redirect(`/t/${tenantSlug}/portal`);
   }
 
-  const request = await db.$transaction(async (tx) => {
-    const count = await tx.serviceRequest.count({ where: { tenantId: tenant.id } });
-    return tx.serviceRequest.create({
-      data: {
-        tenantId: tenant.id,
-        customerAccountId: customerAccount.id,
-        serviceTypeId: serviceType.id,
-        reference: `${tenant.slug.toUpperCase()}-SR-${String(count + 1).padStart(4, "0")}`,
-        status: parsed.intent,
-        origin: parsed.origin,
-        destination: parsed.destination,
-        requestedDate: new Date(parsed.requestedDate),
-        priority: parsed.priority,
-        clientRequestKey,
-        cargoDetails: {
-          contact: {
-            name: parsed.contactName,
-            phone: parsed.contactPhone,
+  // La referencia sale del MAXIMO del sufijo bajo el bloqueo del tenant (ADR-038), no de `count()+1`:
+  // sin carreras entre altas simultaneas y sin chocar tras un borrado. Si aun asi otra alta sin bloqueo
+  // ocupa la misma referencia (P2002), se reintenta TODA la transaccion con una referencia nueva.
+  const createRequest = () =>
+    db.$transaction(
+      async (tx) => {
+        await lockTenantForCreate(tx, tenant.id);
+        const reference = await nextReference(tx, { tenant, kind: "SR" });
+        return tx.serviceRequest.create({
+          data: {
+            tenantId: tenant.id,
+            customerAccountId: customerAccount.id,
+            serviceTypeId: serviceType.id,
+            reference,
+            status: parsed.intent,
+            origin: parsed.origin,
+            destination: parsed.destination,
+            requestedDate: parsed.requestedDate,
+            priority: parsed.priority,
+            clientRequestKey,
+            cargoDetails: {
+              contact: {
+                name: parsed.contactName,
+                phone: parsed.contactPhone,
+              },
+              container: {
+                number: parsed.containerNumber,
+                size: parsed.containerSize,
+                type: parsed.containerType,
+                shippingLine: parsed.shippingLine,
+                terminal: parsed.terminal,
+                sealNumber: parsed.sealNumber,
+                loadStatus: parsed.loadStatus,
+                emptyReturnRequired: parsed.emptyReturnRequired === "YES",
+                bookingReference: parsed.bookingReference,
+              },
+            },
+            customerNotes: parsed.customerNotes,
+            createdById: user.id,
           },
-          container: {
-            number: parsed.containerNumber,
-            size: parsed.containerSize,
-            type: parsed.containerType,
-            shippingLine: parsed.shippingLine,
-            terminal: parsed.terminal,
-            sealNumber: parsed.sealNumber,
-            loadStatus: parsed.loadStatus,
-            emptyReturnRequired: parsed.emptyReturnRequired === "YES",
-            bookingReference: parsed.bookingReference,
-          },
-        },
-        customerNotes: parsed.customerNotes,
-        createdById: user.id,
+        });
       },
-    });
-  });
+      // El bloqueo del tenant puede esperar a otra alta en curso (p. ej. una importacion).
+      { timeout: 10_000, maxWait: 5_000 },
+    );
+  let request: Awaited<ReturnType<typeof createRequest>>;
+  for (let attempt = 1; ; attempt += 1) {
+    try {
+      request = await createRequest();
+      break;
+    } catch (error) {
+      if (!isUniqueViolation(error)) throw error;
+      // Doble envio con la misma clave de idempotencia (dos envios simultaneos pasaron el pre-chequeo):
+      // la solicitud ya existe, no es un error. Se consulta ante CUALQUIER P2002, sin depender de que el
+      // motor informe cual restriccion fallo (`meta.target`). Solo cuenta si es de ESTE cliente: la clave es
+      // unica por empresa y una clave ajena no debe fingir exito sin haber creado nada.
+      const duplicate = await db.serviceRequest.findFirst({
+        where: { tenantId: tenant.id, customerAccountId: customerAccount.id, clientRequestKey },
+        select: { id: true },
+      });
+      if (duplicate) {
+        revalidatePath(`/t/${tenantSlug}/portal`);
+        redirect(`/t/${tenantSlug}/portal`);
+      }
+      // La clave ya es de otro cliente: reintentar nunca lo resuelve. Con la referencia ocupada si: la
+      // proxima vuelta calcula una nueva (el bloqueo del tenant ya la hace casi imposible).
+      if (isUniqueViolation(error, "clientRequestKey") || attempt >= SERVICE_REQUEST_CREATE_ATTEMPTS) throw error;
+    }
+  }
 
   await audit({
     tenantId: tenant.id,
@@ -357,9 +423,12 @@ const ASSIGNMENT_CONFLICT_WINDOW_MS = 6 * 60 * 60 * 1000;
 const assignmentSchema = z.object({
   tripId: z.string().uuid(),
   vehicleId: z.string().uuid(),
-  equipmentId: z.string().uuid(),
+  // El select de equipo puede llegar vacio ("Sin equipo") o ausente: ambos significan "sin equipo".
+  equipmentId: z.preprocess((v) => (v === "" || v === null ? undefined : v), z.string().uuid().optional()),
   driverId: z.string().uuid(),
-  scheduledAt: z.string().min(10),
+  // Opcional: si falta se conserva la hora del viaje (el formulario ya no la reenvia; antes se
+  // reinterpretaba en la zona del servidor y desplazaba la hora en cada reasignacion).
+  scheduledAt: z.preprocess((v) => (v === "" || v === null ? undefined : v), z.string().min(10).optional()),
   notes: z.string().optional(),
 });
 
@@ -377,7 +446,7 @@ export async function assignTripAction(
     scheduledAt: formData.get("scheduledAt"),
     notes: formData.get("notes")?.toString(),
   });
-  if (!parsedInput.success) return actionError("Seleccione vehiculo, equipo y conductor antes de asignar.");
+  if (!parsedInput.success) return actionError("Seleccione vehiculo y conductor (y equipo, si el servicio lo requiere) antes de asignar.");
   const parsed = parsedInput.data;
   const db = getDb();
   const trip = await db.trip.findFirst({
@@ -390,15 +459,24 @@ export async function assignTripAction(
     return actionError(`El viaje ya no admite asignacion: esta en "${tripStatusLabel[trip.status]}".`);
   }
 
+  // Equipo: solo se exige si el tipo de servicio lo requiere. NUNCA se consulta con un id indefinido:
+  // Prisma descarta `undefined` del where y devolveria el primer equipo del tenant.
+  if (trip.serviceType.requiresEquipment && !parsed.equipmentId) {
+    return actionError("Seleccione el equipo: este servicio lo requiere.");
+  }
   const [vehicle, equipment, driver] = await Promise.all([
     db.vehicle.findFirst({ where: { id: parsed.vehicleId, tenantId: tenant.id } }),
-    db.equipment.findFirst({ where: { id: parsed.equipmentId, tenantId: tenant.id } }),
+    parsed.equipmentId
+      ? db.equipment.findFirst({ where: { id: parsed.equipmentId, tenantId: tenant.id } })
+      : Promise.resolve(null),
     db.driver.findFirst({ where: { id: parsed.driverId, tenantId: tenant.id } }),
   ]);
-  if (!vehicle || !equipment || !driver) return actionError("Vehiculo, equipo o conductor no encontrado en esta empresa.");
+  if (!vehicle || !driver || (parsed.equipmentId && !equipment)) {
+    return actionError("Vehiculo, equipo o conductor no encontrado en esta empresa.");
+  }
   const unavailable = [
     vehicle.status !== "AVAILABLE" ? `vehiculo ${vehicle.code}` : null,
-    equipment.status !== "AVAILABLE" ? `equipo ${equipment.code}` : null,
+    equipment && equipment.status !== "AVAILABLE" ? `equipo ${equipment.code}` : null,
     driver.status !== "AVAILABLE" ? `conductor ${driver.code}` : null,
   ].filter(Boolean);
   if (unavailable.length > 0) return actionError(`No disponible: ${unavailable.join(", ")}.`);
@@ -411,7 +489,7 @@ export async function assignTripAction(
   const now = new Date();
   const assetKeys = [
     `VEHICULO:${vehicle.code}`,
-    `EQUIPO:${equipment.code}`,
+    ...(equipment ? [`EQUIPO:${equipment.code}`] : []),
     `CONDUCTOR:${driver.code}`,
   ];
   const exceptionCandidates = await db.complianceException.findMany({
@@ -438,7 +516,7 @@ export async function assignTripAction(
         blocksAsset: true,
         OR: [
           { assetType: "VEHICULO", assetCode: vehicle.code },
-          { assetType: "EQUIPO", assetCode: equipment.code },
+          ...(equipment ? [{ assetType: "EQUIPO" as const, assetCode: equipment.code }] : []),
         ],
       },
       select: { assetCode: true },
@@ -461,7 +539,7 @@ export async function assignTripAction(
         OR: [
           { entityType: "CONDUCTOR", entityId: { in: [driver.code].filter(Boolean) } },
           { entityType: "VEHICULO", entityId: { in: [vehicle.code, vehicle.plate].filter(Boolean) } },
-          { entityType: "EQUIPO", entityId: { in: [equipment.code].filter(Boolean) } },
+          ...(equipment ? [{ entityType: "EQUIPO" as const, entityId: { in: [equipment.code].filter(Boolean) } }] : []),
         ],
       },
       select: {
@@ -481,8 +559,9 @@ export async function assignTripAction(
     }
   }
 
-  const scheduledAt = new Date(parsed.scheduledAt);
-  if (Number.isNaN(scheduledAt.getTime())) return actionError("La fecha programada no es valida.");
+  // Hora de pared de Panama (no la zona del servidor). Sin fecha, se conserva la del viaje.
+  const scheduledAt = parsed.scheduledAt ? parseTenantLocal(parsed.scheduledAt) : trip.scheduledAt;
+  if (!scheduledAt || Number.isNaN(scheduledAt.getTime())) return actionError("La fecha programada no es valida.");
   const windowStart = new Date(scheduledAt.getTime() - ASSIGNMENT_CONFLICT_WINDOW_MS);
   const windowEnd = new Date(scheduledAt.getTime() + ASSIGNMENT_CONFLICT_WINDOW_MS);
 
@@ -501,7 +580,7 @@ export async function assignTripAction(
     const lockedStatus = locked[0]?.status ?? null;
     if (!lockedStatus || !ASSIGNABLE_TRIP_STATUSES.includes(lockedStatus)) return { kind: "stale", status: lockedStatus };
     await tx.$queryRaw`SELECT id FROM vehicles WHERE id = ${vehicle.id}::uuid FOR UPDATE`;
-    await tx.$queryRaw`SELECT id FROM equipment WHERE id = ${equipment.id}::uuid FOR UPDATE`;
+    if (equipment) await tx.$queryRaw`SELECT id FROM equipment WHERE id = ${equipment.id}::uuid FOR UPDATE`;
     await tx.$queryRaw`SELECT id FROM drivers WHERE id = ${driver.id}::uuid FOR UPDATE`;
 
     const conflict = await tx.trip.findFirst({
@@ -510,7 +589,11 @@ export async function assignTripAction(
         id: { not: trip.id },
         status: { notIn: [...TERMINAL_TRIP_STATUSES] },
         scheduledAt: { gte: windowStart, lte: windowEnd },
-        OR: [{ vehicleId: vehicle.id }, { equipmentId: equipment.id }, { driverId: driver.id }],
+        OR: [
+          { vehicleId: vehicle.id },
+          ...(equipment ? [{ equipmentId: equipment.id }] : []),
+          { driverId: driver.id },
+        ],
       },
       select: { reference: true, vehicleId: true, equipmentId: true, driverId: true },
     });
@@ -520,7 +603,7 @@ export async function assignTripAction(
           ? `el conductor ${driver.code}`
           : conflict.vehicleId === vehicle.id
             ? `el vehiculo ${vehicle.code}`
-            : `el equipo ${equipment.code}`;
+            : `el equipo ${equipment?.code ?? ""}`.trim();
       return { kind: "conflict", reference: conflict.reference, resource };
     }
 
@@ -533,7 +616,7 @@ export async function assignTripAction(
         tenantId: tenant.id,
         tripId: trip.id,
         vehicleId: vehicle.id,
-        equipmentId: equipment.id,
+        equipmentId: equipment?.id ?? null,
         driverId: driver.id,
         assignedById: user.id,
         scheduledAt,
@@ -546,7 +629,8 @@ export async function assignTripAction(
       where: { id: trip.id },
       data: {
         vehicleId: vehicle.id,
-        equipmentId: equipment.id,
+        // null explicito: al reasignar sin equipo se limpia el anterior (con undefined se conservaria).
+        equipmentId: equipment?.id ?? null,
         driverId: driver.id,
         scheduledAt,
         // Una reasignacion vuelve a ASSIGNED: el nuevo conductor debe confirmar.
@@ -558,7 +642,7 @@ export async function assignTripAction(
             actorId: user.id,
             fromStatus: lockedStatus,
             toStatus: "ASSIGNED",
-            note: reassigned ? "Recursos reasignados." : "Unidad, equipo y conductor asignados.",
+            note: reassigned ? "Recursos reasignados." : equipment ? "Unidad, equipo y conductor asignados." : "Unidad y conductor asignados.",
             visibleToCustomer: true,
           },
         },
@@ -604,12 +688,12 @@ export async function assignTripAction(
     channel: "EMAIL",
     recipient: tenant.branding?.supportMail ?? "operaciones@nci.local",
     subject: `Asignacion ${trip.reference}`,
-    body: `Asignado a ${driver.name} con ${vehicle.code} y ${equipment.code}.`,
+    body: `Asignado a ${driver.name} con ${vehicle.code}${equipment ? ` y ${equipment.code}` : ""}.`,
   });
   // Layout: refresca todas las vistas del tenant (/trips, /requests, /driver, /portal...).
   revalidatePath(`/t/${tenantSlug}`, "layout");
   revalidatePath(`/t/${tenantSlug}/driver`);
-  return actionOk(`Viaje ${trip.reference} asignado a ${driver.name} con ${vehicle.code} y ${equipment.code}.`);
+  return actionOk(`Viaje ${trip.reference} asignado a ${driver.name} con ${vehicle.code}${equipment ? ` y ${equipment.code}` : ""}.`);
 }
 
 /** Texto que ve el cliente en la linea de tiempo para transiciones de excepcion. */

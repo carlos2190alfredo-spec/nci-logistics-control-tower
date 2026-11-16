@@ -34,6 +34,7 @@ export const PRIVATE_PATH_PREFIXES = [
   "/mfa",
   "/verificar-email",
   "/recuperar",
+  "/invitacion",
   "/offline",
 ] as const;
 

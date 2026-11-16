@@ -1,5 +1,6 @@
 "use server";
 
+import { tenantCalendarDate, tenantDayBounds } from "@/lib/datetime";
 import { revalidatePath } from "next/cache";
 import { audit } from "@/lib/server/audit";
 import { requireTenantRole } from "@/lib/server/auth";
@@ -31,10 +32,10 @@ export async function generateDriverRecommendationAction(formData: FormData) {
 
   const now = new Date();
   const thirtyDaysAgo = new Date(now.getTime() - 30 * 86400_000);
-  const startOfDay = new Date(trip.scheduledAt);
-  startOfDay.setHours(0, 0, 0, 0);
-  const endOfDay = new Date(trip.scheduledAt);
-  endOfDay.setHours(23, 59, 59, 999);
+  // El día del viaje es el de la EMPRESA (Panamá), no el de la zona del servidor.
+  const dayBounds = tenantDayBounds(trip.scheduledAt);
+  const tripDate = tenantCalendarDate(trip.scheduledAt);
+  if (!dayBounds || !tripDate) throw new Error("La fecha del viaje no es válida.");
 
   const workSchedules = await db.driverWorkSchedule.findMany({
     where: { tenantId: tenant.id, driverId: { in: drivers.map((d) => d.id) } },
@@ -44,7 +45,7 @@ export async function generateDriverRecommendationAction(formData: FormData) {
     where: {
       tenantId: tenant.id,
       driverId: { in: drivers.map((d) => d.id) },
-      date: { gte: startOfDay, lte: endOfDay },
+      date: tripDate, // columna @db.Date: la fecha local del viaje, sin hora
     },
   });
 
@@ -52,7 +53,7 @@ export async function generateDriverRecommendationAction(formData: FormData) {
     where: {
       tenantId: tenant.id,
       driverId: { in: drivers.map((d) => d.id) },
-      scheduledAt: { gte: startOfDay, lte: endOfDay },
+      scheduledAt: { gte: dayBounds.start, lt: dayBounds.end },
       status: { notIn: ["CANCELLED", "CLOSED"] },
     },
     select: {

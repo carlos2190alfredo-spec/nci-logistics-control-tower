@@ -1,6 +1,12 @@
 # CURRENT STATE
 
-Fecha: 2026-11-13
+Fecha: 2026-11-16
+
+## Fase 1 de simplificación (ADR-038)
+
+Un tenant nuevo ya puede llegar solo a su primer viaje asignado: catálogos en autoservicio (clientes, flota, lugares, tipos de servicio con plantillas), "Nuevo viaje" creado por operaciones, equipo opcional según el tipo de servicio y la lista "Primeros pasos" en el Resumen. Migración aditiva `20261115181215_…` (aplicada a la BD local y, el 2026-11-16, a Supabase staging; la rama está en un Preview de Vercel verificado y **falta fusionarla a `main`**). Incluye importación CSV, acceso de clientes al portal y vínculo conductor↔cuenta. Cubierto además por `pnpm test:db` (47 pruebas con PostgreSQL local real: referencias, concurrencia, límites de plan, importación CSV, consultas y esquema). Las invitaciones al equipo ya funcionan de punta a punta (`/invitacion/[token]`). Cubierto por E2E de roles, aislamiento entre empresas y límites de plan, y el día/hora de la empresa (Panamá) ya no depende de la zona del servidor. Pendiente: confirmar cifras de plan y desplegar a staging. Detalle y riesgos en ADR-038 y `HANDOFF_LATEST.md`.
+
+Anterior: 2026-11-13
 
 ## Endurecimiento para producción (ADR-037)
 

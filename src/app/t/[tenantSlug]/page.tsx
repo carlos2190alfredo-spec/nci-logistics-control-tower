@@ -1,5 +1,6 @@
 import Link from "next/link";
 import {
+  Plus,
   Bell,
   Boxes,
   FileCheck2,
@@ -20,7 +21,12 @@ import {
   MetricCard,
   PageHeader,
   StatusBadge,
+  buttonStyles,
 } from "@/components/ui";
+import { StartupChecklist } from "@/components/tenant/startup-checklist";
+import { buildStartupSteps, hasPendingSteps } from "@/lib/onboarding/startup-steps";
+import { getStartupCounts } from "@/lib/server/startup-data";
+import { hasPermission } from "@/lib/server/tenant-permissions";
 import { ActivityItem } from "@/components/tenant/activity-item";
 import { IncidentCard } from "@/components/tenant/incident-card";
 import { RequestCard } from "@/components/tenant/request-card";
@@ -70,6 +76,18 @@ export default async function TenantControlTowerPage({
 
   const selectedTrip = activeTrips[0];
   const base = `/t/${tenantSlug}`;
+  const canCreateTrips = hasPermission(membership.role, "tenant.trips.create");
+  const startupSteps = hasPermission(membership.role, "tenant.catalogs.manage")
+    ? buildStartupSteps(
+        await getStartupCounts(tenant.id),
+        {
+          canManageCatalogs: true,
+          canManageDrivers: hasPermission(membership.role, "tenant.drivers.manage"),
+          canCreateTrips,
+        },
+        base,
+      )
+    : [];
 
   return (
     <AppShell
@@ -80,11 +98,21 @@ export default async function TenantControlTowerPage({
     >
       <div className="anim-page grid gap-6">
         <PageHeader
+          actions={
+            canCreateTrips ? (
+              <Link className={buttonStyles({ size: "md" })} href={`${base}/trips/new`}>
+                <Plus aria-hidden className="size-4" />
+                Nuevo viaje
+              </Link>
+            ) : null
+          }
           breadcrumbs={[{ label: tenant.name }, { label: "Resumen" }]}
           description={`Operacion en tiempo real: ${activeTrips.length} servicios en curso y ${requests.length} solicitudes por atender.`}
           meta={<StatusBadge label="Operacion en vivo" pulse tone="success" />}
           title={tenant.name}
         />
+
+        {hasPendingSteps(startupSteps) ? <StartupChecklist steps={startupSteps} /> : null}
 
         <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
           <MetricCard

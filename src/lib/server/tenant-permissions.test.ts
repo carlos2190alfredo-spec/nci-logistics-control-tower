@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { TenantRole } from "@/generated/prisma";
+import { REQUEST_OPERATIONS_ROLES } from "@/lib/domain/request-roles";
 import {
   MFA_REQUIRED_TENANT_ROLES,
   evaluateTenantAccess,
@@ -95,6 +96,48 @@ describe("evaluateTenantAccess (AT-04)", () => {
   it("accepts any tenant role when no role list is given", () => {
     for (const role of ALL_ROLES.filter((r) => !MFA_REQUIRED_TENANT_ROLES.includes(r))) {
       expect(evaluateTenantAccess({ ...base, role }), role).toEqual({ ok: true });
+    }
+  });
+});
+
+describe("catalog and trip creation permissions (ADR-038)", () => {
+  it("lets every role with the operations view read the catalogs, and nobody else", () => {
+    expect([...getRolesForPermission("tenant.catalogs.view")].sort()).toEqual(
+      [...getRolesForPermission("tenant.view")].sort(),
+    );
+    expect(hasPermission("DRIVER", "tenant.catalogs.view")).toBe(false);
+  });
+
+  it("restricts catalog management to owner, admin and operations manager", () => {
+    expect([...getRolesForPermission("tenant.catalogs.manage")].sort()).toEqual(
+      ["OPERATIONS_MANAGER", "TENANT_ADMIN", "TENANT_OWNER"].sort(),
+    );
+    for (const role of ["DISPATCHER", "SAFETY_MANAGER", "DRIVER"] as const) {
+      expect(hasPermission(role, "tenant.catalogs.manage"), role).toBe(false);
+    }
+  });
+
+  it("keeps the management of portal (external) users to the MFA-protected roles", () => {
+    const roles = getRolesForPermission("tenant.customers.portal");
+    expect(roles.length).toBeGreaterThan(0);
+    for (const role of roles) expect(MFA_REQUIRED_TENANT_ROLES, role).toContain(role);
+  });
+
+  it("lets only the roles that already convert requests create trips", () => {
+    expect([...getRolesForPermission("tenant.trips.create")].sort()).toEqual([...REQUEST_OPERATIONS_ROLES].sort());
+    for (const role of ["TENANT_ADMIN", "SAFETY_MANAGER", "DRIVER"] as const) {
+      expect(hasPermission(role, "tenant.trips.create"), role).toBe(false);
+    }
+  });
+
+  it("never grants any of the new permissions to the driver", () => {
+    for (const permission of [
+      "tenant.catalogs.view",
+      "tenant.catalogs.manage",
+      "tenant.customers.portal",
+      "tenant.trips.create",
+    ] as const) {
+      expect(hasPermission("DRIVER", permission), permission).toBe(false);
     }
   });
 });

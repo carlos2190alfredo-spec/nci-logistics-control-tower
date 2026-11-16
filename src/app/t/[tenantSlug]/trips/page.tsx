@@ -1,8 +1,10 @@
-import { Route } from "lucide-react";
+import Link from "next/link";
+import { Plus, Route } from "lucide-react";
 import { AppShell } from "@/components/shell/app-shell";
-import { EmptyState, PageHeader, StatusBadge } from "@/components/ui";
+import { Alert, EmptyState, PageHeader, StatusBadge, buttonStyles } from "@/components/ui";
 import { TripOperationsCard } from "@/components/operations/trip-operations-card";
 import { requireTenantPermission } from "@/lib/server/auth";
+import { hasPermission } from "@/lib/server/tenant-permissions";
 import {
   getTenantActiveTrips,
   getTenantDrivers,
@@ -16,12 +18,20 @@ import { tenantRoleLabel } from "@/lib/ui/status";
 
 export const dynamic = "force-dynamic";
 
+/** Referencia de viaje valida para mostrar: nunca se refleja texto arbitrario del query string. */
+const CREATED_REFERENCE = /^[A-Z0-9-]{3,60}$/;
+
 export default async function TenantTripsPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ tenantSlug: string }>;
+  searchParams: Promise<{ creado?: string | string[] }>;
 }) {
   const { tenantSlug } = await params;
+  const { creado } = await searchParams;
+  const createdRaw = Array.isArray(creado) ? creado[0] : creado;
+  const createdReference = createdRaw && CREATED_REFERENCE.test(createdRaw) ? createdRaw : null;
   const { user, tenant, membership } = await requireTenantPermission(tenantSlug, "tenant.view");
   const viewer = { tenantId: tenant.id, role: membership.role };
   const [trips, vehicles, equipment, drivers, blockedAssets] = await Promise.all([
@@ -42,6 +52,8 @@ export default async function TenantTripsPage({
     })),
   );
 
+  const canCreate = hasPermission(membership.role, "tenant.trips.create");
+
   return (
     <AppShell
       brandContext="Centro de control"
@@ -51,6 +63,14 @@ export default async function TenantTripsPage({
     >
       <div className="anim-page grid gap-6">
         <PageHeader
+          actions={
+            canCreate ? (
+              <Link className={buttonStyles({ size: "md" })} href={`/t/${tenantSlug}/trips/new`}>
+                <Plus aria-hidden className="size-4" />
+                Nuevo viaje
+              </Link>
+            ) : null
+          }
           breadcrumbs={[
             { label: tenant.name, href: `/t/${tenantSlug}` },
             { label: "Viajes activos" },
@@ -64,6 +84,12 @@ export default async function TenantTripsPage({
           title="Viajes activos"
         />
 
+        {createdReference ? (
+          <Alert tone="success">
+            Viaje {createdReference} creado. Asigne ahora la unidad y el conductor en su tarjeta.
+          </Alert>
+        ) : null}
+
         {trips.length ? (
           <div className="grid gap-4">
             {trips.map((trip, i) => (
@@ -72,6 +98,7 @@ export default async function TenantTripsPage({
                 drivers={drivers}
                 eligibilityLight={eligibility.get(trip.id)}
                 equipment={equipment}
+                highlighted={createdReference !== null && trip.reference === createdReference}
                 index={i}
                 key={trip.id}
                 role={membership.role}
@@ -83,7 +110,15 @@ export default async function TenantTripsPage({
           </div>
         ) : (
           <EmptyState
-            description="Confirme una solicitud de cliente para iniciar un nuevo servicio."
+            action={
+              canCreate ? (
+                <Link className={buttonStyles({ size: "md" })} href={`/t/${tenantSlug}/trips/new`}>
+                  <Plus aria-hidden className="size-4" />
+                  Nuevo viaje
+                </Link>
+              ) : undefined
+            }
+            description="Registre un pedido con «Nuevo viaje» o confirme una solicitud de un cliente."
             icon={<Route />}
             title="No hay viajes activos"
           />

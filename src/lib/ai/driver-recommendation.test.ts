@@ -3,11 +3,6 @@ import { recommendDriverForTrip } from "./driver-recommendation";
 import type { RecommendationInput, DriverCandidate, DriverWorkScheduleEntry } from "./driver-recommendation";
 import type { DayOfWeek } from "@/generated/prisma";
 
-const DAY_MAP: Record<number, DayOfWeek> = {
-  0: "SUNDAY", 1: "MONDAY", 2: "TUESDAY", 3: "WEDNESDAY",
-  4: "THURSDAY", 5: "FRIDAY", 6: "SATURDAY",
-};
-
 const tenantId = "tenant-1";
 const tripId = "trip-1";
 
@@ -36,7 +31,7 @@ function makeInput(overrides: Partial<RecommendationInput> = {}): Recommendation
   return {
     tenantId,
     tripId,
-    plannedStartAt: new Date("2026-07-13T10:00:00Z"), // Sunday
+    plannedStartAt: new Date("2026-07-13T10:00:00Z"), // lunes 13 de julio, 05:00 en Panamá
     drivers: [makeDriver()],
     workSchedules: [],
     availabilityExceptions: [],
@@ -61,15 +56,15 @@ describe("recommendDriverForTrip", () => {
   });
 
   it("scores higher for driver within work schedule", () => {
-    const mondayTrip = new Date("2026-07-14T12:00:00Z");
-    const day = DAY_MAP[mondayTrip.getDay()];
+    // Martes 14 de julio, 07:00 en Panamá (dentro de 06:00-18:00). El día se fija aquí: no depende de la zona del equipo.
+    const tuesdayTrip = new Date("2026-07-14T12:00:00Z");
     const input = makeInput({
-      plannedStartAt: mondayTrip,
+      plannedStartAt: tuesdayTrip,
       drivers: [
         makeDriver({ id: "d1", name: "Con horario", code: "D1" }),
         makeDriver({ id: "d2", name: "Sin horario", code: "D2" }),
       ],
-      workSchedules: [makeSchedule("d1", day as "MONDAY")],
+      workSchedules: [makeSchedule("d1", "TUESDAY")],
     });
     const result = recommendDriverForTrip(input);
     expect(result.recommended?.driverId).toBe("d1");
@@ -158,10 +153,10 @@ describe("recommendDriverForTrip", () => {
   });
 
   it("returns LOW risk for confident recommendation", () => {
-    const mondayTrip = new Date("2026-07-14T10:00:00Z"); // Monday
+    const tuesdayTrip = new Date("2026-07-14T12:00:00Z"); // martes 07:00 en Panamá, dentro de 06:00-18:00
     const result = recommendDriverForTrip(makeInput({
-      plannedStartAt: mondayTrip,
-      workSchedules: [makeSchedule("driver-1", "MONDAY")],
+      plannedStartAt: tuesdayTrip,
+      workSchedules: [makeSchedule("driver-1", "TUESDAY")],
       driverStats: [{ driverId: "driver-1", incidentsLast30d: 0, tripsToday: 0, lastPwaSyncAt: new Date() }],
     }));
     expect(result.riskLevel).toBe("LOW");
@@ -194,5 +189,62 @@ describe("recommendDriverForTrip", () => {
     const result = recommendDriverForTrip(makeInput());
     expect(result.explanation.length).toBeGreaterThan(10);
     expect(result.generatedBy).toBe("RULES_ENGINE");
+  });
+});
+
+describe("hora del tenant (Panamá), no la del servidor", () => {
+  // 2026-07-14T00:30:00Z = lunes 13 de julio, 19:30 en Panamá (UTC-5). En UTC ya sería martes 00:30.
+  const mondayEveningPanama = new Date("2026-07-14T00:30:00.000Z");
+  const schedule = (dayOfWeek: DayOfWeek, end = "20:00"): DriverWorkScheduleEntry => ({
+    driverId: "driver-1",
+    dayOfWeek,
+    startTimeLocal: "06:00",
+    endTimeLocal: end,
+    isActive: true,
+  });
+
+  it("lee el día y la hora en Panamá: el horario del lunes aplica a las 19:30 del lunes", () => {
+    const result = recommendDriverForTrip(makeInput({ plannedStartAt: mondayEveningPanama, workSchedules: [schedule("MONDAY")] }));
+    expect(result.recommended?.reasons).toContain("Dentro de horario laboral");
+    expect(result.recommended?.warnings).not.toContain("Sin horario configurado para este dia");
+  });
+
+  it("respeta el fin del turno en hora de Panamá (19:30 está fuera de un turno que termina a las 18:00)", () => {
+    const result = recommendDriverForTrip(makeInput({ plannedStartAt: mondayEveningPanama, workSchedules: [schedule("MONDAY", "18:00")] }));
+    expect(result.recommended?.warnings).toContain("Fuera de horario laboral");
+  });
+
+  it("el horario del martes NO aplica a la noche del lunes de Panamá", () => {
+    const result = recommendDriverForTrip(makeInput({ plannedStartAt: mondayEveningPanama, workSchedules: [schedule("TUESDAY")] }));
+    expect(result.recommended?.warnings).toContain("Sin horario configurado para este dia");
+  });
+
+  it("la excepción (fecha calendario) se compara con la fecha de Panamá: una vacación del lunes 13 descalifica", () => {
+    const monday = recommendDriverForTrip(
+      makeInput({
+        plannedStartAt: mondayEveningPanama,
+        availabilityExceptions: [{ driverId: "driver-1", date: new Date("2026-07-13"), type: "VACATION" }],
+      }),
+    );
+    expect(monday.disqualified).toHaveLength(1);
+    expect(monday.disqualified[0].disqualificationReason).toContain("Vacaciones");
+
+    // Una vacación del martes 14 (el día UTC del instante) no aplica a este viaje.
+    const tuesday = recommendDriverForTrip(
+      makeInput({
+        plannedStartAt: mondayEveningPanama,
+        availabilityExceptions: [{ driverId: "driver-1", date: new Date("2026-07-14"), type: "VACATION" }],
+      }),
+    );
+    expect(tuesday.disqualified).toHaveLength(0);
+  });
+
+  it("con una zona explícita distinta el resultado cambia (la zona sale del dato, no del servidor)", () => {
+    const result = recommendDriverForTrip(
+      makeInput({ plannedStartAt: mondayEveningPanama, timeZone: "UTC", workSchedules: [schedule("TUESDAY")] }),
+    );
+    // En UTC es martes 00:30: SÍ hay horario ese día (se encuentra) y 00:30 queda fuera de 06:00-20:00.
+    expect(result.recommended?.warnings).toContain("Fuera de horario laboral");
+    expect(result.recommended?.warnings).not.toContain("Sin horario configurado para este dia");
   });
 });
