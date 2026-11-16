@@ -1,18 +1,22 @@
 # HANDOFF LATEST
 
-## 2026-11-16 — Fase 1 de simplificación (ADR-038): implementada
+## 2026-11-16 — Fase 1 de simplificación (ADR-038): implementada y desplegada a staging (falta fusionar a `main`)
 
-- Leer `docs/decisions/ADR-038-phase1-self-service-catalogs.md` (decisiones, implementado, pendiente y hallazgos de la revisión). **Sin commit**; la migración solo está aplicada a la BD local.
+- **Despliegue autorizado por el dueño el 2026-11-16 ("Sí, desplegar") y ejecutado hasta el Preview:** (1) uso frente a plan revisado en Supabase (2 tenants demo, todos por debajo de sus topes); (2) backup cifrado `backups/2026-11-16_19-55-22` (239,7 KB, `backup:verify` OK) y restauración real en una base local descartable (70 tablas, 2 tenants, 15 viajes); (3) `pnpm db:deploy` aplicó `20261115181215_phase1_catalogs_and_optional_equipment` y `--status` quedó sin pendientes; (4) `harden.sql` NO se re-ejecutó (necesita el rol `postgres`; la migración no creó tablas) y se comprobó en solo lectura: RLS en 70/70 tablas, 0 privilegios de `anon`/`authenticated`; (5) push de la rama `feat/fase1-catalogos-nuevo-viaje` → Preview de Vercel `dpl_Ep5Gav41…` en READY, con health `HEALTHY` y `/invitacion/<token inventado>` mostrando «Enlace no válido».
+- **Falta:** fusionar a `main` (Production). `main` sigue en `9a080a5`. Rollback del código: Instant Rollback al deployment `dpl_Hh9QbnhYa3fponMBT9bj8sKbiUFK`; la base no se restaura (migración aditiva).
+- **No verificado en la nube:** ningún flujo con sesión (Primeros pasos, importación CSV, Nuevo viaje, invitación con correo real de Resend). Hay que recorrerlos a mano con una cuenta de staging; no se teclearon credenciales.
+- **Observación (no relacionada con la Fase 1):** hacia las 19:59 UTC el health de Production dio 503 por `clamav` (el gateway de Fly respondía 503 en `/livez`) y volvió a HEALTHY solo en ~1 minuto. Causa no investigada (sin acceso al panel de Fly); conviene revisar los reinicios de la máquina y poner un monitor externo.
+- Leer `docs/decisions/ADR-038-phase1-self-service-catalogs.md` (decisiones, implementado, pendiente y hallazgos de la revisión). La rama tiene 8 commits sobre `origin/main`.
 - Hecho: catálogos (clientes, flota, lugares, tipos de servicio), Nuevo viaje, equipo opcional, Primeros pasos, menú "Mi negocio", importación CSV, acceso de clientes al portal y vínculo conductor↔cuenta. Verificado con tsc, eslint, 1822 tests, security:check, build y E2E completa (106 + 4 flaky por copias ocultas del streaming, 0 fallos).
-- Código en la rama `feat/fase1-catalogos-nuevo-viaje` (commits locales, sin push).
+- Código en la rama `feat/fase1-catalogos-nuevo-viaje` (publicada en `origin`).
 - **Pruebas con BD real (hecho):** `pnpm test:db` (47 pruebas, `tests/db/`, solo contra la BD local: la guarda bloquea cualquier otro destino). Encontró y se corrigió un error de la importación de clientes (pérdida silenciosa de una fila con código explícito repetido). Detalle en ADR-038.
 - **Invitaciones al equipo (hecho):** `/invitacion/[token]` ya existe (antes el correo llevaba a una página inexistente). Cuenta nueva con contraseña propia o cuenta existente solo con su sesión; enlace de un solo uso atómico; `/login?next=` estricto. Detalle y pruebas (60 con BD real, 3 E2E) en ADR-038.
 - **Comprobación de seguridad arreglada:** `security-check.ts::grepMissing` fallaba en silencio (sintaxis de shell) y varias comprobaciones pasaban en vacío; ahora corre sin shell y falla si grep falla.
 - **E2E de roles, aislamiento y límites (hecho):** `catalog-access.spec.ts` (ACCESS-001…004) con 4 mutaciones detectadas. E2E completa de regresión: 114 pasan + 3 flaky (`panama-modules`, copias ocultas del streaming) y 0 fallos.
 - **Hora de la empresa (hecho, BIZ-08):** el motor de conductores, el contexto de IA, operations-insights y el cupo del copiloto leían día/hora de la zona del servidor (UTC en Vercel); ahora usan Panamá con helpers de `datetime.ts`. Detalle en ADR-038.
-- Pendiente prioritario: confirmar las cifras de plan con el dueño y desplegar a staging (backup + `pnpm db:deploy` + `harden.sql` ANTES de cualquier push; requiere autorización).
+- Pendiente prioritario: fusionar a `main` (Production), recorrer a mano los flujos con sesión y confirmar con el dueño las cifras de plan (`tenant_plans`, sin validación comercial; ahora bloquean altas).
 - Si Mailpit local no responde el saludo SMTP (`ETIMEDOUT`/"Greeting never received"): `docker restart nci-lct-mailpit`.
-- Antes de desplegar: backup + `pnpm db:deploy` en staging + `harden.sql`; recién después push. Las E2E nuevas crean un tenant `zz-e2e-*` descartable y lo borran al final.
+- Orden de despliegue (cumplido en esta fase): backup + `pnpm db:deploy` en staging + comprobar `harden.sql`; recién después push. Las E2E nuevas crean un tenant `zz-e2e-*` descartable y lo borran al final.
 
 ## 2026-11-13 (noche) — Endurecimiento de producción (ADR-037)
 

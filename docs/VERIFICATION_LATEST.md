@@ -23,8 +23,26 @@ Fecha: 2026-11-16 (Fase 1 de simplificación — ADR-038)
 | Revisión visual (Playwright, 1440 y 375 px) | Páginas nuevas sin desborde horizontal tras corregir `min-w-0` y el contenedor de tablas |
 | Revisión adversarial del diseño | 5 lentes, 56 verificaciones independientes, 67 hallazgos no refutados (ver ADR-038) |
 
+### Despliegue a staging (2026-11-16, autorizado por el dueño)
+
+| Verificación | Resultado |
+| --- | --- |
+| Uso frente a plan (SQL de solo lectura en Supabase) | `panatruck-demo` (PROFESSIONAL): 3/30 clientes, 5/50 vehículos; `translogistica-demo` (STARTER): 2/6 y 5/10. Ningún tenant por encima de su tope |
+| Backup cifrado (`pnpm backup:postgres`) + `pnpm backup:verify` | 239,7 KB, checksum verificado |
+| Restauración real del backup (`pnpm backup:restore:postgres`, base local descartable) | 70 tablas; `tenants` 2, `users` 8, `trips` 15, `audit_logs` 6; la base de prueba se eliminó |
+| `pnpm db:deploy --status` → `pnpm db:deploy` → `--status` | Solo `20261115181215_…` pendiente; aplicada; «Database schema is up to date!» |
+| Columnas nuevas en Supabase (solo lectura) | `locations.active` NOT NULL default true; `latitude` y `trip_assignments.equipment_id` anulables; `service_requests.source` default `'PORTAL'` (15 filas existentes = PORTAL); `service_types.requires_equipment` default true (6 filas = true) |
+| Endurecimiento (en lugar de re-ejecutar `harden.sql`, que requiere el rol `postgres`) | RLS en 70/70 tablas; 0 privilegios de `anon`/`authenticated` sobre tablas; 0 funciones ejecutables por ellos. El `USAGE` del esquema `public` viene del grant por defecto a `PUBLIC`, no de esos roles |
+| Escaneo del parche publicado (8 commits) | 0 coincidencias exactas con los 11 valores de `.env.staging.local`; los únicos patrones genéricos son URLs de prueba locales (`user:secret@localhost`) |
+| Preview de Vercel `dpl_Ep5Gav41…` (commit `9204482`) | Build `READY`; `/api/internal/health` 200 `HEALTHY`; `/invitacion/<token inventado>` 200 con «Enlace no válido» (la ruta nueva consulta la base migrada); sin entradas en los logs de ejecución |
+| Health de Production (código anterior, base ya migrada) | 503 a las 19:59 UTC solo por `clamav` (el gateway de Fly dio 503 en `/livez` tres veces seguidas y luego 200); 200 `HEALTHY` a las 20:00. Postgres, Prisma y storage no fallaron. Causa de la caída de ClamAV no investigada |
+
 ## No ejecutado
-- Migración y código en Supabase staging/Vercel; correo real; E2E de roles, aislamiento entre tenants y límites de plan por la interfaz; `test:db` contra staging (bloqueado a propósito).
+- Fusión a `main` (Production): pendiente de confirmar.
+- Flujos con sesión en staging (Primeros pasos, importación CSV, Nuevo viaje, invitación con correo real de Resend): no se tecleó ninguna credencial; hay que recorrerlos a mano.
+- `harden.sql` no se re-ejecutó (se verificó su resultado en solo lectura, ver arriba).
+- GitHub Actions no corrió sobre la rama (`ci.yml` y `e2e.yml` solo se disparan con `main` y con PR hacia `main`).
+- La E2E completa no se repitió tras la corrección de hora (BIZ-08); `test:db` contra staging sigue bloqueado a propósito.
 
 ---
 

@@ -192,3 +192,9 @@
 - BIZ-08 corregido: el motor de recomendación de conductores, el contexto de IA, operations-insights y el cupo diario del copiloto leían día/hora de la zona del servidor; ahora usan Panamá (helpers en `datetime.ts`). Pruebas con 5 zonas de proceso y con BD real.
 - Verificado: tsc, eslint, 1887 tests (UTC y Panamá), `test:db` 62/62, `security:check`, `pnpm build`.
 
+
+## 2026-11-16 — Despliegue de la Fase 1 a staging (ADR-038)
+
+- El dueño autorizó el despliegue ("Sí, desplegar"). Orden seguido: uso frente a plan (solo lectura) → backup cifrado verificado y restaurado en una base local descartable → `pnpm db:deploy` (solo `20261115181215_…` pendiente) → comprobación de RLS/privilegios en solo lectura → escaneo de secretos del parche → push de la rama → Preview de Vercel verificado (health `HEALTHY`, `/invitacion/[token]` responde con la base migrada, sin errores en logs).
+- Hallazgo ajeno a la fase: caída transitoria del gateway ClamAV de Fly (health 503 ~1 minuto, recuperado solo). Sin acceso al panel de Fly no se investigó la causa.
+- No se tecleó ninguna credencial en el sitio; los flujos con sesión quedan para recorrido manual. La fusión a `main` queda pendiente de confirmación. Los secretos de `.env.staging.local` se cargaron solo en el entorno de los procesos, sin imprimirlos.

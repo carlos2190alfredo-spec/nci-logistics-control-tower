@@ -21,7 +21,7 @@ camino a producción; no lo habilitan: producción real sigue requiriendo aproba
 | --- | --- |
 | GitHub `carlos2190alfredo-spec/nci-logistics-control-tower` | Publicado (`main`). Cada push a `main` despliega en Vercel |
 | Vercel | Desplegado desde `main`. **Health 200 HEALTHY** (2026-11-13): Postgres, Prisma, storage (HeadBucket con la clave S3) y el gateway de ClamAV responden |
-| Supabase | Migrado, endurecido, sembrado; bucket creado |
+| Supabase | Migrado, endurecido, sembrado; bucket creado. **2026-11-16:** migración `20261115181215_phase1_catalogs_and_optional_equipment` (Fase 1, ADR-038) aplicada con `pnpm db:deploy` tras un backup cifrado verificado y restaurado; RLS en 70/70 tablas y 0 privilegios de `anon`/`authenticated` comprobados en solo lectura |
 | Storage S3 | Configurado: clave `vercel-nci-lct-staging` (Supabase → Storage → S3 Connection, acceso total a los buckets; solo la usa el servidor). `MINIO_ACCESS_KEY` y `MINIO_SECRET_KEY` en Vercel (Sensitive, Production y Preview). El secreto lo pegó el dueño: las herramientas de navegador bloquean leerlo y no se teclean credenciales. Rotar = crear otra clave, cargarla y borrar la anterior |
 | Perfil | `APP_ENV=production` solo en el entorno Production de Vercel (sitio indexable: `robots.txt` y sitemap verificados); Preview conserva `APP_ENV=staging` (noindex) |
 | Correo | Configurado: `MAIL_PASSWORD` es una API key de Resend solo de envío, restringida al dominio `nciautomation.com` (creada y cargada en Vercel el 2026-11-13). Credenciales y TLS verificados contra `smtp.resend.com:465` sin enviar correo. Falta probar un envío real de la app |
