@@ -37,11 +37,18 @@ Fecha: 2026-11-16 (Fase 1 de simplificación — ADR-038)
 | Preview de Vercel `dpl_Ep5Gav41…` (commit `9204482`) | Build `READY`; `/api/internal/health` 200 `HEALTHY`; `/invitacion/<token inventado>` 200 con «Enlace no válido» (la ruta nueva consulta la base migrada); sin entradas en los logs de ejecución |
 | Health de Production (código anterior, base ya migrada) | 503 a las 19:59 UTC solo por `clamav` (el gateway de Fly dio 503 en `/livez` tres veces seguidas y luego 200); 200 `HEALTHY` a las 20:00. Postgres, Prisma y storage no fallaron. Causa de la caída de ClamAV no investigada |
 
+### Fusión a `main` (2026-11-16, PR #1)
+
+| Verificación | Resultado |
+| --- | --- |
+| CI de GitHub en el HEAD `61b87f0` | **Pasan:** Lint / Typecheck / Test / Build (1 m 54 s; migraciones desde cero en Linux limpio, lint, typecheck, tests, `security:check`, build), Dependency audit (tras definir `DATABASE_URL` en el job) y los dos checks de Vercel. **Falla:** Playwright E2E (29 s) en «Initialize containers»: `pull access denied for minio/minio`; no ejecutó ninguna prueba. Misma causa y mismo resultado que las 12 ejecuciones previas de `main` (desde 2026-11-13) |
+| Fusión | Merge commit `f8d5b3d` en `main`, con la E2E de GitHub en rojo por esa causa previa y con aprobación del dueño |
+| Deployment de Production `dpl_3SwnnsudJwSe4HpfFRnqjn3dwHj8` (commit `f8d5b3d`) | Build `success`. `/api/internal/health`: 503 a las 21:03:03 UTC solo por `clamav` (la primera respuesta de `/livez` del gateway de Fly tardó 24 s; después 200 en 0,4 s) y 200 `HEALTHY` a las 21:03:40. `/invitacion/<token inventado>` 200 con «Enlace no válido»; `/login` sin credenciales demo; `robots.txt` 200. Sin errores en los logs de ejecución (solo el aviso `health.degraded`) |
+
 ## No ejecutado
-- Fusión a `main` (Production): pendiente de confirmar.
 - Flujos con sesión en staging (Primeros pasos, importación CSV, Nuevo viaje, invitación con correo real de Resend): no se tecleó ninguna credencial; hay que recorrerlos a mano.
 - `harden.sql` no se re-ejecutó (se verificó su resultado en solo lectura, ver arriba).
-- GitHub Actions no corrió sobre la rama (`ci.yml` y `e2e.yml` solo se disparan con `main` y con PR hacia `main`).
+- Ninguna E2E de Playwright corrió en GitHub (ver arriba): la única E2E completa sigue siendo la local.
 - La E2E completa no se repitió tras la corrección de hora (BIZ-08); `test:db` contra staging sigue bloqueado a propósito.
 
 ---

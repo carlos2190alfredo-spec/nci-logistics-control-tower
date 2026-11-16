@@ -13,6 +13,7 @@ camino a producción; no lo habilitan: producción real sigue requiriendo aproba
 | Archivos | Supabase Storage por S3, bucket privado `nci-lct-staging` | endpoint `https://khedaunvwzjduxmlufun.storage.supabase.co/storage/v1/s3` |
 | Antivirus | Fly.io, app `nci-lct-clamav-staging` (`infra/clamav-gateway`) | `https://nci-lct-clamav-staging.fly.dev` |
 | Correo | SMTP real (Resend, dominio `nciautomation.com`) | pendiente la API key (`MAIL_PASSWORD`) |
+| CI de GitHub | `ci.yml` pasa (lint, typecheck, tests, build, auditoría). **`e2e.yml` falla desde 2026-11-13:** la imagen `minio/minio:RELEASE.2025-09-07T16-13-09Z` ya no se puede descargar y el workflow no inicia el servidor MinIO; pendiente elegir otro almacén S3. `docker-compose.yml` fija la misma imagen |
 | Mantenimiento diario | Vercel Cron (`vercel.json` → `/api/internal/cron/maintenance`, 09:00 UTC) | requiere `CRON_SECRET` |
 
 ## Estado (2026-11-13)

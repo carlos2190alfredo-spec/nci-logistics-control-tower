@@ -73,8 +73,8 @@ El motor de recomendación de conductores usaba `getDay()`, `getHours()` y `setH
 - **Verificación:** 4 de 5 pruebas nuevas del motor fallaban con `TZ=UTC` antes del arreglo. Después, las pruebas del motor y de `datetime` pasan con `TZ` = UTC, Panamá, Tokio, Kiritimati (UTC+14) y Los Ángeles, y la suite completa con UTC y Panamá. Pruebas con BD real de la ventana del día (límites 00:00 y 23:59:59.999) y de la excepción `@db.Date`. Las pruebas antiguas del motor leían `getDay()` de la zona de la máquina: ahora usan un día fijo.
 - **Fuera de alcance:** la zona sigue siendo fija (Panamá); el parámetro `tz` existe para cuando sea configurable por empresa.
 
-## Despliegue de la Fase 1 (ejecutado el 2026-11-16 salvo la fusión a `main`)
-La rama `feat/fase1-catalogos-nuevo-viaje` (8 commits sobre `origin/main` 9a080a5) se publicó en `origin` y la migración se aplicó a Supabase staging; `main` sigue en 9a080a5. Procedimiento general: `docs/STAGING_DEPLOYMENT.md` ("Migraciones" y "Orden de migraciones y despliegue"). Lo específico de esta fase:
+## Despliegue de la Fase 1 (ejecutado y fusionado a `main` el 2026-11-16)
+La rama `feat/fase1-catalogos-nuevo-viaje` (8 commits sobre `origin/main` 9a080a5) se publicó en `origin` y la migración se aplicó a Supabase staging; se fusionó a `main` con el PR #1 (merge commit `f8d5b3d`). Procedimiento general: `docs/STAGING_DEPLOYMENT.md` ("Migraciones" y "Orden de migraciones y despliegue"). Lo específico de esta fase:
 1. **Autorización:** push, migración de Supabase y despliegue requieren que el dueño los apruebe (AGENTS.md; ADR-036). Production y Preview comparten UNA base: incluso un push de la rama (Preview) ejecuta código que lee columnas nuevas, así que la migración va ANTES de cualquier push.
 2. **Revisar el uso frente al plan** (ahora los límites bloquean altas de vehículos y clientes ACTIVOS; las cifras de `tenant_plans` no tienen validación comercial). Ejecutar en Supabase (solo lectura) y confirmar con el dueño que ningún tenant real quedaría por encima:
    ```sql
@@ -91,13 +91,13 @@ La rama `feat/fase1-catalogos-nuevo-viaje` (8 commits sobre `origin/main` 9a080a
 7. **Revertir:** redeploy del commit anterior en Vercel; la base no necesita restaurarse (migración aditiva). Los tenants creados después ya tendrían las 5 plantillas de servicio; no estorban al código antiguo.
 
 ### Ejecución (2026-11-16, autorizada por el dueño)
-Pasos 2 a 5 del runbook y el push de la rama hechos; resultados en `docs/VERIFICATION_LATEST.md`. Diferencia respecto al plan: `harden.sql` no se re-ejecutó porque contiene `ALTER DEFAULT PRIVILEGES FOR ROLE postgres` (el rol `nci_app` no puede) y esta migración no crea tablas; se comprobó en solo lectura que las 70 tablas tienen RLS y que `anon`/`authenticated` no tienen privilegios. Falta: fusionar a `main` (Production) y recorrer a mano los flujos con sesión, incluida una invitación con correo real.
+Pasos 2 a 5 del runbook y el push de la rama hechos; resultados en `docs/VERIFICATION_LATEST.md`. Diferencia respecto al plan: `harden.sql` no se re-ejecutó porque contiene `ALTER DEFAULT PRIVILEGES FOR ROLE postgres` (el rol `nci_app` no puede) y esta migración no crea tablas; se comprobó en solo lectura que las 70 tablas tienen RLS y que `anon`/`authenticated` no tienen privilegios. Después se abrió el PR #1 y se fusionó con CI de GitHub parcialmente rojo por una causa previa (el job E2E no puede descargar la imagen de MinIO; ver `docs/HANDOFF_LATEST.md`). Falta: recorrer a mano los flujos con sesión, incluida una invitación con correo real, y reparar el CI de E2E.
 
 ## Pendiente (no implementado)
 - `e2e:cleanup` ampliado a los tenants `zz-e2e-*` y `zz-db-*` huérfanos (hoy se limpian al terminar cada spec y `sweepStaleTestTenants` barre los de `test:db`).
 - Revocar y reenviar invitaciones desde la pantalla (`revokeInvitation` existe pero no está enlazado).
 - Reglas de identidad de placa/código más estrictas (SEC-04), y el portal sigue exigiendo datos de contenedor para cualquier tipo de servicio.
-- Fusión a `main` (Production) y recorrido manual de los flujos con sesión. Las cifras de plan (`tenant_plans`) no tienen validación comercial y ahora bloquean altas de vehículos/clientes: confirmarlas antes del primer tenant real.
+- Recorrido manual de los flujos con sesión en staging y reparación del CI de E2E (almacén S3 sustituto de MinIO, con su ADR). Las cifras de plan (`tenant_plans`) no tienen validación comercial y ahora bloquean altas de vehículos/clientes: confirmarlas antes del primer tenant real.
 
 ## Revisión adversarial del diseño (5 lentes, 56 verificaciones)
 Hallazgos no refutados (el detalle completo vive en el journal del workflow de la sesión):

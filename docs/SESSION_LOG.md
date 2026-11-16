@@ -198,3 +198,8 @@
 - El dueño autorizó el despliegue ("Sí, desplegar"). Orden seguido: uso frente a plan (solo lectura) → backup cifrado verificado y restaurado en una base local descartable → `pnpm db:deploy` (solo `20261115181215_…` pendiente) → comprobación de RLS/privilegios en solo lectura → escaneo de secretos del parche → push de la rama → Preview de Vercel verificado (health `HEALTHY`, `/invitacion/[token]` responde con la base migrada, sin errores en logs).
 - Hallazgo ajeno a la fase: caída transitoria del gateway ClamAV de Fly (health 503 ~1 minuto, recuperado solo). Sin acceso al panel de Fly no se investigó la causa.
 - No se tecleó ninguna credencial en el sitio; los flujos con sesión quedan para recorrido manual. La fusión a `main` queda pendiente de confirmación. Los secretos de `.env.staging.local` se cargaron solo en el entorno de los procesos, sin imprimirlos.
+
+## 2026-11-16 — PR #1 y fusión a main (ADR-038)
+
+- Se abrió el PR #1 hacia `main` (el repo solo ejecuta CI con PR o push a `main`). Lint/typecheck/test/build y la auditoría de dependencias pasan; la E2E de GitHub falla por una causa previa: la imagen `minio/minio` ya no se puede descargar (así falla `main` desde el 2026-11-13). Se corrigió `ci.yml` (el job de auditoría no definía `DATABASE_URL`) y se propuso una tarea aparte para reparar el CI de E2E.
+- Con la aprobación del dueño se fusionó con un merge commit (`f8d5b3d`) pese a la E2E de GitHub en rojo. La E2E completa local de la Fase 1 (114 pasan + 3 intermitentes preexistentes, 0 fallos) es anterior a la corrección de hora y no se repitió.
