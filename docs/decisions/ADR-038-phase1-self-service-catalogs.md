@@ -73,6 +73,23 @@ El motor de recomendación de conductores usaba `getDay()`, `getHours()` y `setH
 - **Verificación:** 4 de 5 pruebas nuevas del motor fallaban con `TZ=UTC` antes del arreglo. Después, las pruebas del motor y de `datetime` pasan con `TZ` = UTC, Panamá, Tokio, Kiritimati (UTC+14) y Los Ángeles, y la suite completa con UTC y Panamá. Pruebas con BD real de la ventana del día (límites 00:00 y 23:59:59.999) y de la excepción `@db.Date`. Las pruebas antiguas del motor leían `getDay()` de la zona de la máquina: ahora usan un día fijo.
 - **Fuera de alcance:** la zona sigue siendo fija (Panamá); el parámetro `tz` existe para cuando sea configurable por empresa.
 
+## Despliegue de la Fase 1 (runbook; NO ejecutado)
+Hasta aquí todo vive en la rama local `feat/fase1-catalogos-nuevo-viaje` (5 commits sobre `origin/main` 9a080a5, sin push) y en la base LOCAL. Procedimiento general: `docs/STAGING_DEPLOYMENT.md` ("Migraciones" y "Orden de migraciones y despliegue"). Lo específico de esta fase:
+1. **Autorización:** push, migración de Supabase y despliegue requieren que el dueño los apruebe (AGENTS.md; ADR-036). Production y Preview comparten UNA base: incluso un push de la rama (Preview) ejecuta código que lee columnas nuevas, así que la migración va ANTES de cualquier push.
+2. **Revisar el uso frente al plan** (ahora los límites bloquean altas de vehículos y clientes ACTIVOS; las cifras de `tenant_plans` no tienen validación comercial). Ejecutar en Supabase (solo lectura) y confirmar con el dueño que ningún tenant real quedaría por encima:
+   ```sql
+   select t.slug, p.code as plan,
+     (select count(*) from customer_accounts c where c.tenant_id = t.id and c.active) as clientes, p.max_customers,
+     (select count(*) from vehicles v where v.tenant_id = t.id and v.status <> 'INACTIVE') as vehiculos, p.max_vehicles
+   from tenants t join tenant_plans p on p.id = t.plan_id order by t.slug;
+   ```
+   (Consulta probada en la base local: 3 tenants demo, todos por debajo de sus topes.) Un tenant por encima no pierde datos, pero no podría agregar ni reactivar hasta ampliar el plan.
+3. **Backup** reciente y verificado (`pnpm backup:postgres` + `pnpm backup:verify <dir>`).
+4. **Migrar:** `pnpm db:deploy --status` (debe listar solo `20261115181215_phase1_catalogs_and_optional_equipment`; la anterior `20261112120000` ya está en staging) y `pnpm db:deploy`, con `CONFIRM_DB_HOST` igual al host. La migración es ADITIVA (columnas nulas o con valor por defecto, un `DROP NOT NULL`): el código antiguo sigue funcionando si hay que revertir el despliegue, sin restaurar la base.
+5. **`infra/supabase/harden.sql`** otra vez y `pnpm db:deploy --status` sin pendientes.
+6. **Push** de la rama (Preview) y verificación; después fusionar a `main` (Production). Tras desplegar: `docs/STAGING_DEPLOYMENT.md` ("Verificación tras desplegar") y recorrer a mano "Primeros pasos", importar un CSV pequeño, "Nuevo viaje" y una invitación con un correo real (el correo real es lo único que ninguna prueba local cubre; Resend ya está configurado).
+7. **Revertir:** redeploy del commit anterior en Vercel; la base no necesita restaurarse (migración aditiva). Los tenants creados después ya tendrían las 5 plantillas de servicio; no estorban al código antiguo.
+
 ## Pendiente (no implementado)
 - `e2e:cleanup` ampliado a los tenants `zz-e2e-*` y `zz-db-*` huérfanos (hoy se limpian al terminar cada spec y `sweepStaleTestTenants` barre los de `test:db`).
 - Revocar y reenviar invitaciones desde la pantalla (`revokeInvitation` existe pero no está enlazado).
