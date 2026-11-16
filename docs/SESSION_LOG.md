@@ -179,3 +179,9 @@
 - Cubre referencias y bloqueo del tenant (incluida la forma real del `P2002`), carreras en los límites de plan, importación CSV, consultas de lectura y la migración de la Fase 1. Se verificó que las pruebas fallan cuando se rompe el código (7 mutaciones, 7 detectadas).
 - Error real encontrado y corregido en `import-apply.ts`: una fila de clientes podía perderse en silencio por un código explícito repetido; ahora se evita y, si ocurre, se revierte con un mensaje claro.
 - Verificado: tsc y eslint limpios, 1841 tests, `security:check`, `test:db` 47/47, E2E `csv-import` 2/2. Sin commit de esta tanda.
+
+## 2026-11-16 — Invitaciones al equipo y comprobación de seguridad (ADR-038)
+
+- El correo de invitación llevaba a `/invitacion/<token>`, que no existía. Implementada la página y la acción: cuenta nueva con contraseña propia o cuenta existente solo con su sesión, enlace de un solo uso atómico, sin escalada de rol, `/login?next=` estricto, `ServerForm` para no perder lo escrito.
+- Hallazgo: `security-check.ts::grepMissing` fallaba por sintaxis de shell y varias comprobaciones pasaban en vacío; corregido (sin shell, falla si grep falla) y comprobado con un `fetch(` plantado.
+- Verificado: tsc, eslint, 1876 tests, `test:db` 60/60, E2E invitaciones 3/3, `security:check`, `pnpm build`, mutaciones 7/7 y revisión visual (escritorio y 375 px). Sin repetir la E2E completa.

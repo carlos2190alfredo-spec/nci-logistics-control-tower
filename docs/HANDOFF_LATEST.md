@@ -6,7 +6,9 @@
 - Hecho: catálogos (clientes, flota, lugares, tipos de servicio), Nuevo viaje, equipo opcional, Primeros pasos, menú "Mi negocio", importación CSV, acceso de clientes al portal y vínculo conductor↔cuenta. Verificado con tsc, eslint, 1822 tests, security:check, build y E2E completa (106 + 4 flaky por copias ocultas del streaming, 0 fallos).
 - Código en la rama `feat/fase1-catalogos-nuevo-viaje` (commits locales, sin push).
 - **Pruebas con BD real (hecho):** `pnpm test:db` (47 pruebas, `tests/db/`, solo contra la BD local: la guarda bloquea cualquier otro destino). Encontró y se corrigió un error de la importación de clientes (pérdida silenciosa de una fila con código explícito repetido). Detalle en ADR-038.
-- Pendiente prioritario: E2E de roles/aislamiento/límites por la interfaz y confirmar las cifras de plan con el dueño. Sin commit de esta tanda todavía.
+- **Invitaciones al equipo (hecho):** `/invitacion/[token]` ya existe (antes el correo llevaba a una página inexistente). Cuenta nueva con contraseña propia o cuenta existente solo con su sesión; enlace de un solo uso atómico; `/login?next=` estricto. Detalle y pruebas (60 con BD real, 3 E2E) en ADR-038.
+- **Comprobación de seguridad arreglada:** `security-check.ts::grepMissing` fallaba en silencio (sintaxis de shell) y varias comprobaciones pasaban en vacío; ahora corre sin shell y falla si grep falla.
+- Pendiente prioritario: E2E de roles/aislamiento/límites por la interfaz y confirmar las cifras de plan con el dueño.
 - Si Mailpit local no responde el saludo SMTP (`ETIMEDOUT`/"Greeting never received"): `docker restart nci-lct-mailpit`.
 - Antes de desplegar: backup + `pnpm db:deploy` en staging + `harden.sql`; recién después push. Las E2E nuevas crean un tenant `zz-e2e-*` descartable y lo borran al final.
 

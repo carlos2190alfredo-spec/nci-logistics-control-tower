@@ -12,7 +12,7 @@ export default async function globalSetup() {
     await db.rateLimitBucket.deleteMany({
       where: {
         scope: {
-          in: ["mfa.verify", "auth.mfa.verify", "auth.login", "login"],
+          in: ["mfa.verify", "auth.mfa.verify", "auth.login", "login", "auth.invitation.accept"],
         },
       },
     });

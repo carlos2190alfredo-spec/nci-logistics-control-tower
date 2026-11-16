@@ -1,5 +1,6 @@
 "use server";
 
+import { safeNextPath } from "@/lib/server/next-path";
 import { randomUUID } from "node:crypto";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
@@ -119,6 +120,10 @@ export async function loginAction(_: unknown, formData: FormData) {
       redirect("/account/security/mfa/setup");
     }
   }
+
+  // Volver a la invitación que la persona estaba aceptando (solo esa ruta exacta; ver next-path.ts).
+  const next = safeNextPath(formData.get("next"));
+  if (next) redirect(next);
 
   if (user?.platformRole) redirect("/platform");
   const firstMembership = user?.tenantMemberships[0];

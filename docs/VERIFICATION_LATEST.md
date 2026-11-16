@@ -5,8 +5,12 @@ Fecha: 2026-11-16 (Fase 1 de simplificación — ADR-038)
 | Verificación | Resultado |
 | --- | --- |
 | `pnpm exec tsc --noEmit`, `eslint .` | Pasan |
-| `pnpm test` (Vitest, suite normal) | 1841 tests pasan en 93 archivos (1822 + 17 de la guarda de destino + 2 de la importación); línea base previa: 596 |
-| **`pnpm test:db` (BD real, local)** | **47 pruebas pasan en 5 archivos (referencias, concurrencia, límites de plan, importación CSV, consultas, esquema)**; repetible, sin residuos (0 tenants `zz-db-*`, 0 usuarios `@zz-db.local` después) |
+| `pnpm test` (Vitest, suite normal) | 1876 tests pasan en 95 archivos (1841 + 35 de invitaciones y `next-path`); línea base previa: 596 |
+| **`pnpm test:db` (BD real, local)** | **60 pruebas pasan en 6 archivos (referencias, concurrencia, límites de plan, importación CSV, consultas, esquema, invitaciones)**; repetible, sin residuos (0 tenants `zz-*`, 0 usuarios `@zz-db.local`/`@e2e.local`, 0 invitaciones de prueba) |
+| E2E `invitations.spec.ts` (nuevo) | 3 de 3 pasan (INV-001 cuenta nueva y enlace no reutilizable, INV-002 cuenta existente con su sesión vía `/login?next=`, INV-003 enlace inventado) |
+| Mutaciones sobre la aceptación de invitaciones | 7 de 7 detectadas por `test:db`; archivos restaurados |
+| `pnpm security:check` | Pasa, y ahora de verdad: `grepMissing` corría con un error de shell y varias comprobaciones pasaban en vacío. Con un `fetch(` plantado en `disabled/gps.ts` falla (revertido) |
+| `pnpm build` (con `/invitacion/[token]`) | Pasa |
 | Mutaciones sobre código de producción | 7 de 7 detectadas por `test:db` (sin bloqueo del plan, `FOR UPDATE`, referencia sin +1, bloqueo sin efecto, importación sin límite, importación sin `tenantId`, conteo con inactivos); archivos restaurados (`git diff` solo `package.json`) |
 | E2E `csv-import.spec.ts` tras el arreglo de `import-apply.ts` | 2 de 2 pasan (`.env.local` exportado: `global-setup` no lo carga solo). La E2E completa NO se repitió tras este cambio |
 | `pnpm security:check` | Pasa |

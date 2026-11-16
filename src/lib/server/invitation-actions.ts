@@ -10,18 +10,11 @@ import { describeMailError, trySendMail } from "@/lib/server/mail";
 import { invitationEmail } from "@/lib/server/email-templates";
 import { logger } from "@/lib/server/logger";
 import { canGrantRole } from "@/lib/server/membership-rules";
+import { INVITATION_TTL_HOURS, isInvitableRole } from "@/lib/server/invitation-rules";
 import { consumeOnboardingMailQuota } from "@/lib/server/welcome-mail";
 import { tenantRoleLabel } from "@/lib/ui/status";
 import type { TenantRole } from "@/generated/prisma";
 
-const INVITATION_TTL_HOURS = 72;
-const INVITABLE_ROLES: TenantRole[] = [
-  "TENANT_ADMIN",
-  "OPERATIONS_MANAGER",
-  "DISPATCHER",
-  "SAFETY_MANAGER",
-  "DRIVER",
-];
 
 // Un solo destinatario valido: un valor como "a@x.com,b@y.com" se enviaria a ambos.
 const invitationEmailSchema = z.string().trim().toLowerCase().email().max(200);
@@ -39,7 +32,7 @@ export async function createInvitation(
     "TENANT_ADMIN",
   ]);
 
-  if (!INVITABLE_ROLES.includes(role) || !canGrantRole(membership.role, role)) {
+  if (!isInvitableRole(role) || !canGrantRole(membership.role, role)) {
     return { ok: false, code: "ROLE_NOT_ALLOWED", message: "Rol no permitido para invitacion." };
   }
 
