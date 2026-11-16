@@ -66,10 +66,17 @@ El correo de invitación (`createInvitation`, ya existente) enviaba `/invitacion
 - **ACCESS-004 (plan):** con plan DEMO (3 clientes) el cuarto se rechaza explicando "permite hasta 3 clientes y ya tiene 3", sin perder lo escrito; desactivar uno libera cupo; y reactivar el primero ya no cabe (sigue inactivo y el aviso lo explica).
 - **Mutaciones:** 4 de 4 detectadas (ficha de cliente sin filtro de tenant, despachador con permiso de gestión, reactivar sin límite de plan, operaciones con acceso al portal).
 
+## Día y hora de la empresa, no del servidor (2026-11-16)
+El motor de recomendación de conductores usaba `getDay()`, `getHours()` y `setHours(0, 0, 0, 0)`, que leen la zona del PROCESO. En Vercel (UTC) un viaje de las 19:30 del lunes en Panamá (00:30Z del martes) se evaluaba como "martes 00:30": el horario del lunes no se encontraba, las vacaciones de ese lunes no descalificaban al conductor y la ventana "del día" empezaba a las 19:00 del día anterior. En el equipo de desarrollo (Panamá) nada de esto se veía.
+- **Funciones nuevas** en `datetime.ts` (puras, con zona explícita, por defecto Panamá): `tenantLocalDate`, `tenantLocalTime`, `tenantLocalWeekday`, `tenantDayBounds` (`{ gte: start, lt: end }`, el día del cambio de horario dura 23 o 25 h) y `tenantCalendarDate` (medianoche UTC de la fecha local, para columnas `@db.Date`).
+- **Corregido:** el motor (`RecommendationInput.timeZone`, por defecto Panamá), `generateDriverRecommendationAction` (excepciones por `@db.Date` y viajes del día por ventana), el contexto de IA (`tenant-context.ts`), `operations-insights` y la clave diaria del cupo del copiloto (`copilot-actions.ts`: ya no se reinicia a las 19:00 de Panamá).
+- **Verificación:** 4 de 5 pruebas nuevas del motor fallaban con `TZ=UTC` antes del arreglo. Después, las pruebas del motor y de `datetime` pasan con `TZ` = UTC, Panamá, Tokio, Kiritimati (UTC+14) y Los Ángeles, y la suite completa con UTC y Panamá. Pruebas con BD real de la ventana del día (límites 00:00 y 23:59:59.999) y de la excepción `@db.Date`. Las pruebas antiguas del motor leían `getDay()` de la zona de la máquina: ahora usan un día fijo.
+- **Fuera de alcance:** la zona sigue siendo fija (Panamá); el parámetro `tz` existe para cuando sea configurable por empresa.
+
 ## Pendiente (no implementado)
 - `e2e:cleanup` ampliado a los tenants `zz-e2e-*` y `zz-db-*` huérfanos (hoy se limpian al terminar cada spec y `sweepStaleTestTenants` barre los de `test:db`).
 - Revocar y reenviar invitaciones desde la pantalla (`revokeInvitation` existe pero no está enlazado).
-- Motor de recomendación de conductores en hora de Panamá (BIZ-08), reglas de identidad de placa/código más estrictas (SEC-04), y el portal sigue exigiendo datos de contenedor para cualquier tipo de servicio.
+- Reglas de identidad de placa/código más estrictas (SEC-04), y el portal sigue exigiendo datos de contenedor para cualquier tipo de servicio.
 - Despliegue: backup + `pnpm db:deploy` en Supabase staging y `harden.sql` ANTES de cualquier push (Production y Preview comparten BD). Las cifras de plan (`tenant_plans`) no tienen validación comercial y ahora bloquean altas de vehículos/clientes: confirmarlas antes del primer tenant real.
 
 ## Revisión adversarial del diseño (5 lentes, 56 verificaciones)

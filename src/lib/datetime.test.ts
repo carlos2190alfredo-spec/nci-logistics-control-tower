@@ -6,6 +6,10 @@ import {
   PANAMA_TZ,
   isInPast,
   parseTenantLocal,
+  tenantDayBounds,
+  tenantLocalDate,
+  tenantLocalTime,
+  tenantLocalWeekday,
   toTenantLocalInput,
 } from "./datetime";
 
@@ -394,5 +398,54 @@ describe("isInPast", () => {
 
   it("una fecha invalida no es 'pasada': hay que validarla antes con parseTenantLocal", () => {
     expect(isInPast(new Date(Number.NaN), now)).toBe(false);
+  });
+});
+
+describe("día local del tenant (zona explícita, sin depender del servidor)", () => {
+  // 2026-07-14T00:30:00Z = lunes 13 de julio, 19:30 en Panamá (UTC-5, sin horario de verano).
+  const mondayEvening = new Date("2026-07-14T00:30:00.000Z");
+
+  it("tenantLocalDate / tenantLocalTime / tenantLocalWeekday leen la hora de pared de Panamá", () => {
+    expect(tenantLocalDate(mondayEvening)).toBe("2026-07-13");
+    expect(tenantLocalTime(mondayEvening)).toBe("19:30");
+    expect(tenantLocalWeekday(mondayEvening)).toBe(1); // lunes; en UTC ya sería martes
+  });
+
+  it("con otra zona cambia el día (el valor sale de la zona indicada, no del servidor)", () => {
+    expect(tenantLocalDate(mondayEvening, "UTC")).toBe("2026-07-14");
+    expect(tenantLocalWeekday(mondayEvening, "UTC")).toBe(2);
+    expect(tenantLocalDate(mondayEvening, "Asia/Tokyo")).toBe("2026-07-14");
+    expect(tenantLocalTime(mondayEvening, "Asia/Tokyo")).toBe("09:30");
+  });
+
+  it("medianoche y fin de día de Panamá", () => {
+    expect(tenantLocalTime(new Date("2026-07-13T05:00:00.000Z"))).toBe("00:00");
+    expect(tenantLocalDate(new Date("2026-07-13T05:00:00.000Z"))).toBe("2026-07-13");
+    expect(tenantLocalTime(new Date("2026-07-14T04:59:59.000Z"))).toBe("23:59");
+    expect(tenantLocalDate(new Date("2026-07-14T04:59:59.000Z"))).toBe("2026-07-13");
+  });
+
+  it("tenantDayBounds: del primer al último instante del día de Panamá (fin exclusivo)", () => {
+    const bounds = tenantDayBounds(mondayEvening);
+    expect(bounds?.start.toISOString()).toBe("2026-07-13T05:00:00.000Z");
+    expect(bounds?.end.toISOString()).toBe("2026-07-14T05:00:00.000Z");
+    // El instante de inicio pertenece al día; el de fin, al siguiente.
+    expect(tenantLocalDate(bounds!.start)).toBe("2026-07-13");
+    expect(tenantLocalDate(bounds!.end)).toBe("2026-07-14");
+  });
+
+  it("tenantDayBounds en una zona con horario de verano: el día del cambio dura 23 horas", () => {
+    const springForward = new Date("2026-03-08T15:00:00.000Z"); // 11:00 en Nueva York (ya con horario de verano)
+    const bounds = tenantDayBounds(springForward, "America/New_York");
+    expect(bounds?.start.toISOString()).toBe("2026-03-08T05:00:00.000Z");
+    expect(bounds?.end.toISOString()).toBe("2026-03-09T04:00:00.000Z");
+  });
+
+  it("una fecha inválida no produce valores", () => {
+    const invalid = new Date("no es una fecha");
+    expect(tenantLocalDate(invalid)).toBe("");
+    expect(tenantLocalTime(invalid)).toBe("");
+    expect(tenantLocalWeekday(invalid)).toBeNull();
+    expect(tenantDayBounds(invalid)).toBeNull();
   });
 });

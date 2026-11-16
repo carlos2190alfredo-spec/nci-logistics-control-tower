@@ -172,3 +172,53 @@ export function toTenantLocalInput(date: Date, tz: string = PANAMA_TZ): string {
 export function isInPast(date: Date, now: Date = new Date(), graceMs: number = DEFAULT_PAST_GRACE_MS): boolean {
   return date.getTime() < now.getTime() - graceMs;
 }
+
+// ---------------------------------------------------------------------------
+// Día local de la empresa
+// ---------------------------------------------------------------------------
+//
+// Un servidor en UTC (Vercel, Docker) y uno en Panamá (el equipo de desarrollo) NO coinciden en qué día es ni en qué
+// hora es: `getDay()`, `getHours()` y `setHours(0, 0, 0, 0)` leen la zona del PROCESO. Con UTC, un viaje de las 19:30 del
+// lunes en Panamá (00:30Z del martes) se evaluaba como "martes 00:30" y el "hoy" de los tableros empezaba a las 19:00 del
+// día anterior. Estas funciones leen siempre la zona de la empresa, indicada de forma explícita.
+
+/** Fecha local `YYYY-MM-DD` de `date` en `tz`; `""` si la fecha no es válida. */
+export function tenantLocalDate(date: Date, tz: string = PANAMA_TZ): string {
+  return toTenantLocalInput(date, tz).slice(0, 10);
+}
+
+/** Hora local `HH:mm` de `date` en `tz`; `""` si la fecha no es válida. */
+export function tenantLocalTime(date: Date, tz: string = PANAMA_TZ): string {
+  return toTenantLocalInput(date, tz).slice(11, 16);
+}
+
+/** Día de la semana local de `date` en `tz` (0 = domingo … 6 = sábado); `null` si la fecha no es válida. */
+export function tenantLocalWeekday(date: Date, tz: string = PANAMA_TZ): number | null {
+  const day = tenantLocalDate(date, tz);
+  return day === "" ? null : new Date(`${day}T00:00:00.000Z`).getUTCDay();
+}
+
+/**
+ * Primer instante (inclusive) y primer instante del día siguiente (EXCLUSIVO) del día local que contiene `date`.
+ * Úselo como `{ gte: start, lt: end }`. En una zona con horario de verano el día del cambio dura 23 o 25 horas.
+ * `null` si la fecha no es válida.
+ */
+export function tenantDayBounds(date: Date, tz: string = PANAMA_TZ): { start: Date; end: Date } | null {
+  const day = tenantLocalDate(date, tz);
+  if (day === "") return null;
+  const nextDay = new Date(new Date(`${day}T00:00:00.000Z`).getTime() + DAY_MS).toISOString().slice(0, 10);
+  const start = parseTenantLocal(`${day}T00:00`, tz);
+  const end = parseTenantLocal(`${nextDay}T00:00`, tz);
+  return start && end ? { start, end } : null;
+}
+
+/**
+ * Valor para una columna `@db.Date`: la fecha local de `date` como medianoche UTC (`2026-07-13T00:00:00.000Z`).
+ * Prisma guarda solo la parte de fecha, así que dos lecturas de "hoy" coinciden sin importar la zona del servidor.
+ * `null` si la fecha no es válida.
+ */
+export function tenantCalendarDate(date: Date, tz: string = PANAMA_TZ): Date | null {
+  const day = tenantLocalDate(date, tz);
+  return day === "" ? null : new Date(`${day}T00:00:00.000Z`);
+}
+

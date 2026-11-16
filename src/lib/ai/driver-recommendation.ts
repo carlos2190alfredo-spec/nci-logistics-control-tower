@@ -1,3 +1,4 @@
+import { PANAMA_TZ, tenantLocalDate, tenantLocalTime, tenantLocalWeekday } from "@/lib/datetime";
 import type { DayOfWeek } from "@/generated/prisma";
 
 export interface DriverCandidate {
@@ -46,6 +47,8 @@ export interface RecommendationInput {
   tenantId: string;
   tripId: string;
   plannedStartAt: Date;
+  /** Zona IANA en la que se leen el día y la hora de los horarios de trabajo. Por defecto Panamá. */
+  timeZone?: string;
   requiredVehicleType?: string;
   drivers: DriverCandidate[];
   workSchedules: DriverWorkScheduleEntry[];
@@ -111,9 +114,13 @@ export function recommendDriverForTrip(input: RecommendationInput): Recommendati
     };
   }
 
-  const dayOfWeek = DAY_MAP[plannedStartAt.getDay()];
-  const timeLocal = formatTimeLocal(plannedStartAt);
-  const dateStr = plannedStartAt.toISOString().slice(0, 10);
+  // Día, hora y fecha en la zona de la EMPRESA, no la del servidor: un horario "lunes 06:00-20:00" se compara con la
+  // hora de pared de Panamá aunque el proceso corra en UTC.
+  const tz = input.timeZone ?? PANAMA_TZ;
+  const weekday = tenantLocalWeekday(plannedStartAt, tz);
+  const dayOfWeek = weekday === null ? undefined : DAY_MAP[weekday];
+  const timeLocal = tenantLocalTime(plannedStartAt, tz);
+  const dateStr = tenantLocalDate(plannedStartAt, tz);
   const estimatedEnd = estimatedDurationSeconds
     ? new Date(plannedStartAt.getTime() + estimatedDurationSeconds * 1000)
     : new Date(plannedStartAt.getTime() + 3600_000);
@@ -275,10 +282,6 @@ export function recommendDriverForTrip(input: RecommendationInput): Recommendati
     riskLevel,
     generatedBy: "RULES_ENGINE",
   };
-}
-
-function formatTimeLocal(date: Date): string {
-  return `${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}`;
 }
 
 function isTimeInRange(time: string, start: string, end: string): boolean {

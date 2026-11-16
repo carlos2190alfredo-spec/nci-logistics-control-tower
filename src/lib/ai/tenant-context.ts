@@ -1,3 +1,4 @@
+import { tenantDayBounds } from "@/lib/datetime";
 import { getDb } from "@/lib/server/db";
 import { sanitizeAiInput, markUntrustedContent, limitContextSize } from "./prompt-safety";
 
@@ -20,8 +21,8 @@ export async function buildTenantOperationsContext(tenantId: string): Promise<st
   const tenant = await db.tenant.findUniqueOrThrow({ where: { id: tenantId }, select: { name: true } });
 
   const now = new Date();
-  const startOfDay = new Date(now);
-  startOfDay.setHours(0, 0, 0, 0);
+  // "Hoy" es el día de la empresa (Panamá), no el de la zona del servidor.
+  const startOfDay = tenantDayBounds(now)?.start ?? now;
   const thirtyDaysAgo = new Date(now.getTime() - 30 * 86400_000);
 
   const [

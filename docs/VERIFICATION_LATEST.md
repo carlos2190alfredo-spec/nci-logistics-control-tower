@@ -5,8 +5,10 @@ Fecha: 2026-11-16 (Fase 1 de simplificación — ADR-038)
 | Verificación | Resultado |
 | --- | --- |
 | `pnpm exec tsc --noEmit`, `eslint .` | Pasan |
-| `pnpm test` (Vitest, suite normal) | 1876 tests pasan en 95 archivos (1841 + 35 de invitaciones y `next-path`); línea base previa: 596 |
-| **`pnpm test:db` (BD real, local)** | **60 pruebas pasan en 6 archivos (referencias, concurrencia, límites de plan, importación CSV, consultas, esquema, invitaciones)**; repetible, sin residuos (0 tenants `zz-*`, 0 usuarios `@zz-db.local`/`@e2e.local`, 0 invitaciones de prueba) |
+| `pnpm test` (Vitest, suite normal) | 1887 tests pasan en 95 archivos, con `TZ=UTC` y con `TZ=America/Panama`; línea base previa: 596. Las pruebas del motor de conductores y de `datetime` también con Tokio, Kiritimati (UTC+14) y Los Ángeles |
+| **E2E completa de regresión** | **114 pasan + 3 flaky (`panama-modules` ×3: copias ocultas del streaming de Next, preexistente), 0 fallos (10,6 min)**; incluye CSV, portal, conductor, onboarding, invitaciones (3) y acceso/aislamiento/límites (4). Limpieza `e2e:cleanup` aplicada |
+| E2E `catalog-access.spec.ts` (nuevo) | ACCESS-001…004 pasan; 4 mutaciones (ficha de cliente sin filtro de tenant, despachador con permiso de gestión, reactivar sin límite de plan, operaciones con acceso al portal) detectadas; código restaurado |
+| **`pnpm test:db` (BD real, local)** | **62 pruebas pasan en 7 archivos (referencias, concurrencia, límites de plan, importación CSV, consultas, esquema, invitaciones, día local)**; repetible, sin residuos (0 tenants `zz-*`, 0 usuarios `@zz-db.local`/`@e2e.local`, 0 invitaciones de prueba) |
 | E2E `invitations.spec.ts` (nuevo) | 3 de 3 pasan (INV-001 cuenta nueva y enlace no reutilizable, INV-002 cuenta existente con su sesión vía `/login?next=`, INV-003 enlace inventado) |
 | Mutaciones sobre la aceptación de invitaciones | 7 de 7 detectadas por `test:db`; archivos restaurados |
 | `pnpm security:check` | Pasa, y ahora de verdad: `grepMissing` corría con un error de shell y varias comprobaciones pasaban en vacío. Con un `fetch(` plantado en `disabled/gps.ts` falla (revertido) |

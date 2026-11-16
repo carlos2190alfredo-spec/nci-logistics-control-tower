@@ -185,3 +185,10 @@
 - El correo de invitación llevaba a `/invitacion/<token>`, que no existía. Implementada la página y la acción: cuenta nueva con contraseña propia o cuenta existente solo con su sesión, enlace de un solo uso atómico, sin escalada de rol, `/login?next=` estricto, `ServerForm` para no perder lo escrito.
 - Hallazgo: `security-check.ts::grepMissing` fallaba por sintaxis de shell y varias comprobaciones pasaban en vacío; corregido (sin shell, falla si grep falla) y comprobado con un `fetch(` plantado.
 - Verificado: tsc, eslint, 1876 tests, `test:db` 60/60, E2E invitaciones 3/3, `security:check`, `pnpm build`, mutaciones 7/7 y revisión visual (escritorio y 375 px). Sin repetir la E2E completa.
+
+## 2026-11-16 — E2E de acceso y hora de la empresa (ADR-038)
+
+- E2E nuevas de roles, aislamiento entre empresas y límites de plan (4 pruebas, 4 mutaciones detectadas). E2E completa de regresión: 114 pasan + 3 flaky preexistentes, 0 fallos.
+- BIZ-08 corregido: el motor de recomendación de conductores, el contexto de IA, operations-insights y el cupo diario del copiloto leían día/hora de la zona del servidor; ahora usan Panamá (helpers en `datetime.ts`). Pruebas con 5 zonas de proceso y con BD real.
+- Verificado: tsc, eslint, 1887 tests (UTC y Panamá), `test:db` 62/62, `security:check`, `pnpm build`.
+

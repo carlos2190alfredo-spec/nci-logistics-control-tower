@@ -8,7 +8,9 @@
 - **Pruebas con BD real (hecho):** `pnpm test:db` (47 pruebas, `tests/db/`, solo contra la BD local: la guarda bloquea cualquier otro destino). Encontró y se corrigió un error de la importación de clientes (pérdida silenciosa de una fila con código explícito repetido). Detalle en ADR-038.
 - **Invitaciones al equipo (hecho):** `/invitacion/[token]` ya existe (antes el correo llevaba a una página inexistente). Cuenta nueva con contraseña propia o cuenta existente solo con su sesión; enlace de un solo uso atómico; `/login?next=` estricto. Detalle y pruebas (60 con BD real, 3 E2E) en ADR-038.
 - **Comprobación de seguridad arreglada:** `security-check.ts::grepMissing` fallaba en silencio (sintaxis de shell) y varias comprobaciones pasaban en vacío; ahora corre sin shell y falla si grep falla.
-- Pendiente prioritario: E2E de roles/aislamiento/límites por la interfaz y confirmar las cifras de plan con el dueño.
+- **E2E de roles, aislamiento y límites (hecho):** `catalog-access.spec.ts` (ACCESS-001…004) con 4 mutaciones detectadas. E2E completa de regresión: 114 pasan + 3 flaky (`panama-modules`, copias ocultas del streaming) y 0 fallos.
+- **Hora de la empresa (hecho, BIZ-08):** el motor de conductores, el contexto de IA, operations-insights y el cupo del copiloto leían día/hora de la zona del servidor (UTC en Vercel); ahora usan Panamá con helpers de `datetime.ts`. Detalle en ADR-038.
+- Pendiente prioritario: confirmar las cifras de plan con el dueño y desplegar a staging (backup + `pnpm db:deploy` + `harden.sql` ANTES de cualquier push; requiere autorización).
 - Si Mailpit local no responde el saludo SMTP (`ETIMEDOUT`/"Greeting never received"): `docker restart nci-lct-mailpit`.
 - Antes de desplegar: backup + `pnpm db:deploy` en staging + `harden.sql`; recién después push. Las E2E nuevas crean un tenant `zz-e2e-*` descartable y lo borran al final.
 
