@@ -1,5 +1,6 @@
 "use server";
 
+import { isUniqueViolation } from "@/lib/server/db-errors";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
@@ -343,24 +344,33 @@ export async function createDriverAction(tenantSlug: string, formData: FormData)
   const { user, tenant, membership } = await requireTenantRole(tenantSlug, [
     "TENANT_OWNER", "TENANT_ADMIN", "OPERATIONS_MANAGER",
   ]);
-  const parsed = createDriverSchema.parse({
-    name: formData.get("name"),
-    code: formData.get("code"),
-    license: formData.get("license"),
+  // Un dato invalido o un codigo repetido vuelve al formulario con un aviso (antes terminaba en la pagina de error).
+  const result = createDriverSchema.safeParse({
+    name: String(formData.get("name") ?? "").trim(),
+    code: String(formData.get("code") ?? "").trim(),
+    license: String(formData.get("license") ?? "").trim(),
     phone: formData.get("phone")?.toString()?.trim() || undefined,
   });
+  if (!result.success) redirect(`/t/${tenantSlug}/admin/drivers/new?error=datos`);
+  const parsed = result.data;
 
   const db = getDb();
-  const driver = await db.driver.create({
-    data: {
-      tenantId: tenant.id,
-      name: parsed.name,
-      code: parsed.code,
-      license: parsed.license,
-      phone: parsed.phone || null,
-      status: "AVAILABLE",
-    },
-  });
+  let driver;
+  try {
+    driver = await db.driver.create({
+      data: {
+        tenantId: tenant.id,
+        name: parsed.name,
+        code: parsed.code,
+        license: parsed.license,
+        phone: parsed.phone || null,
+        status: "AVAILABLE",
+      },
+    });
+  } catch (error) {
+    if (isUniqueViolation(error)) redirect(`/t/${tenantSlug}/admin/drivers/new?error=codigo`);
+    throw error;
+  }
 
   await audit({
     tenantId: tenant.id,

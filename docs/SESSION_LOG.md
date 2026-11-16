@@ -171,3 +171,4 @@
 - Análisis de producto, diseño y revisión adversarial (5 lentes) previos; cimientos (esquema/migración, permisos, librerías, kit de UI) y luego pantallas y acciones: clientes, flota, lugares, tipos de servicio, Nuevo viaje, equipo opcional, Primeros pasos.
 - Correcciones a lo existente: `DRIVER` sin ficha, portal (viewer y solicitudes de operaciones), `TableRow`, desborde móvil.
 - Verificado: tsc, eslint, 1806 tests, security:check, build, E2E completa 101 + 3 flaky. Pendiente: acceso al portal, importación CSV, conductor usable, pruebas con BD real.
+- Segunda parte: importación CSV (panel/acción), acceso de clientes al portal con correo de un solo uso, alta de conductor sin pantalla de error y vínculo conductor↔cuenta; E2E nuevos (CSV, portal, conductor) y 1822 tests. Código en la rama `feat/fase1-catalogos-nuevo-viaje`.

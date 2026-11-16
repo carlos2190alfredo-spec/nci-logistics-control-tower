@@ -1,5 +1,6 @@
 import { appUrl } from "@/lib/server/app-url";
 import {
+  welcomeCustomerEmail,
   welcomeTenantOwnerEmail,
   welcomeUserEmail,
 } from "@/lib/server/email-templates";
@@ -140,5 +141,36 @@ export async function sendMemberWelcomeMail(input: {
     return result.ok ? { ok: true } : { ok: false, code: result.code };
   } catch (error) {
     return failed("welcome_mail.member_failed", input.tenantId, error);
+  }
+}
+
+/** Bienvenida de un usuario del portal de un cliente: enlace de un solo uso para definir la contrasena (sin contrasena en el correo). */
+export async function sendCustomerWelcomeMail(input: {
+  tenantId: string;
+  tenantName: string;
+  customerName: string;
+  userId: string;
+  to: string;
+  userName: string;
+}): Promise<WelcomeMailResult> {
+  try {
+    const verifyUrl = buildVerifyUrl(await generateEmailVerifyToken(input.userId));
+    const setPasswordUrl = passwordResetUrl(await issuePasswordSetupToken(input.userId));
+    const content = welcomeCustomerEmail({
+      userName: input.userName,
+      tenantName: input.tenantName,
+      customerName: input.customerName,
+      loginUrl: appUrl("/login"),
+      verifyUrl,
+      setPasswordUrl,
+      setPasswordTtlHours: SETUP_TOKEN_TTL_HOURS,
+    });
+    const result = await trySendMail(
+      { to: input.to, ...content },
+      { event: "welcome_mail.customer_failed", component: "welcome-mail", tenantId: input.tenantId },
+    );
+    return result.ok ? { ok: true } : { ok: false, code: result.code };
+  } catch (error) {
+    return failed("welcome_mail.customer_failed", input.tenantId, error);
   }
 }

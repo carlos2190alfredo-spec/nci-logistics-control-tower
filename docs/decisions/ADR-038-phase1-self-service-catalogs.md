@@ -1,6 +1,6 @@
 # ADR-038 — Autoservicio de catálogos, viajes creados por operaciones y equipo opcional (Fase 1)
 
-Fecha: 2026-11-16 · Estado: **implementado en lo esencial** (catálogos, Nuevo viaje, equipo opcional, Primeros pasos); pendientes abajo · Contexto: análisis de producto del 2026-11-15 ("simplificar para que el tenant llegue solo a su primer viaje").
+Fecha: 2026-11-16 · Estado: **implementado** (catálogos, Nuevo viaje, equipo opcional, Primeros pasos, importación CSV, acceso al portal y vínculo de conductores); pendientes abajo · Contexto: análisis de producto del 2026-11-15 ("simplificar para que el tenant llegue solo a su primer viaje").
 
 ## Problema (verificado en el código)
 Un tenant real no puede cargar clientes, flota, lugares ni tipos de servicio (solo el seed y acciones demo locales los crean); solo `CUSTOMER_ADMIN` crea solicitudes; la asignación exige equipo siempre; los límites de plan nunca se aplican; las referencias usan `count()+1`; los `datetime-local` se interpretan en la zona del servidor (desfase real de 5 h en Vercel/UTC).
@@ -22,11 +22,16 @@ Un tenant real no puede cargar clientes, flota, lugares ni tipos de servicio (so
 - **Correcciones a lo existente:** un `DRIVER` sin ficha ya no ve todos los viajes; el portal oculta el formulario de solicitud a quien solo consulta y no deja que las solicitudes de operaciones desplacen las que el cliente debe atender; `TableRow` admite atributos (`data-testid`); las tablas no desbordan la página en móvil.
 - **Verificación:** `tsc` limpio, `eslint` limpio, Vitest 1806/1806, `security:check` pasa, `pnpm build` pasa. E2E completa (local, ClamAV activo): 101 pasan + 3 flaky que pasan al reintentar (ONB-001 por una copia oculta del streaming ya corregida en la spec, y dos preexistentes: `route-driver-recommendation` y E2E-FLOW-001 por la misma causa), 0 fallos (10 min). Nueva `tests/e2e/onboarding-journey.spec.ts` (ONB-001) con tenant descartable (`helpers/tenant-factory.ts`): recorre tenant nuevo → cliente, vehículo, equipo, lugar → Nuevo viaje → asignación sin equipo (verifica `scheduledAt` = 19:00 UTC para 14:00 de Panamá) → servicio con equipo → desaparece la lista. Revisión visual a 1440 y 375 px sin desborde.
 
+## Añadido después (2026-11-16)
+- **Importación CSV** (clientes, vehículos, equipos, lugares): panel con vista previa en el navegador (UTF-8/Windows-1252, `,` y `;`, rechaza `.xlsx` con explicación) y acción con revalidación en el servidor, omisión de lo existente, límites de plan todo-o-nada y tope de 10 importaciones/hora por usuario. E2E CSV-001/002.
+- **Acceso de clientes al portal** (solo propietario/administrador): correo de un solo uso (48 h, sin contraseña), reenviar solo si la persona nunca inició sesión, desactivar/reactivar. Una cuenta que ya existe sin membresía en este tenant, de plataforma o inactiva recibe el MISMO rechazo neutro (no se vincula en silencio, no revela qué correos existen) con tope de intentos. E2E PORTAL-001/002/003 con verificación del correo en Mailpit.
+- **Conductores:** el alta ya no termina en la pantalla de error (aviso por dato inválido o código repetido), el menú tiene "Conductores", y la ficha permite vincular la cuenta de usuario con rol Conductor. E2E DRV-001 (un conductor sin ficha no ve viajes ajenos).
+- **Verificación final:** tsc/eslint limpios, 1822 tests, `security:check`, `pnpm build`, E2E completa 106 pasan + 4 flaky (copias ocultas del streaming; sin fallos).
+
 ## Pendiente (no implementado)
-- **Acceso al portal de un cliente** (crear usuario del portal, correo de bienvenida, reenviar/desactivar acceso): diseñado en la revisión (SEC-01/02/03/06, INT-08/10); sin él el cliente no puede recibir acceso desde la UI (solo seed). La ficha del cliente cuenta los usuarios pero no los gestiona.
-- **Importación CSV** (panel y acción): las librerías (`parseCsv`, `validateImport`, plantillas) están hechas y probadas; `CsvImportPanel` sigue siendo un stub que no renderiza nada.
-- Alta de conductor usable y vínculo usuario↔conductor (UX-02/03, BIZ-03); motor de recomendación en hora de Panamá (BIZ-08); pruebas con BD real (TEST-01) y E2E de seguridad/roles/límites; `e2e:cleanup` ampliado.
-- Invitaciones: el enlace apunta a `/invitacion/<token>`, que no existe (preexistente).
+- Pruebas con BD real para lo que un mock no demuestra (límite de plan y referencias bajo concurrencia, forma real del `P2002`), E2E de roles/aislamiento entre tenants/límites de plan, y `e2e:cleanup` ampliado.
+- Motor de recomendación de conductores en hora de Panamá (BIZ-08), reglas de identidad de placa/código más estrictas (SEC-04), y el portal sigue exigiendo datos de contenedor para cualquier tipo de servicio.
+- Invitaciones: el enlace apunta a `/invitacion/<token>`, que no existe (preexistente; no se tocó).
 - Despliegue: backup + `pnpm db:deploy` en Supabase staging y `harden.sql` ANTES de cualquier push (Production y Preview comparten BD). Las cifras de plan (`tenant_plans`) no tienen validación comercial y ahora bloquean altas de vehículos/clientes: confirmarlas antes del primer tenant real.
 
 ## Revisión adversarial del diseño (5 lentes, 56 verificaciones)

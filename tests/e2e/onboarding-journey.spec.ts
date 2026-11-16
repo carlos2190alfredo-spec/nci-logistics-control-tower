@@ -41,10 +41,11 @@ test("ONB-001 un tenant nuevo llega a su primer viaje asignado sin tocar SQL", a
 
   // 1. El Resumen de un tenant vacio guia con "Primeros pasos".
   await page.goto(base, { waitUntil: "domcontentloaded" });
-  const checklist = page.getByTestId("startup-checklist");
+  // Durante el streaming Next deja una copia oculta del contenido: se acota a <main> visible.
+  const checklist = page.getByRole("main").getByTestId("startup-checklist");
   await expect(checklist).toBeVisible({ timeout: 60_000 });
   for (const key of ["customers", "vehicles", "equipment", "drivers", "first-trip"]) {
-    await expect(page.getByTestId(`startup-step-${key}`)).toBeVisible();
+    await expect(page.getByRole("main").getByTestId(`startup-step-${key}`)).toBeVisible();
   }
 
   // 2. Cliente.

@@ -1,6 +1,7 @@
 import { UserPlus } from "lucide-react";
 import { AppShell } from "@/components/shell/app-shell";
 import {
+  Alert,
   Card,
   CardHeader,
   Field,
@@ -15,12 +16,21 @@ import { createDriverAction } from "@/lib/server/tenant-user-actions";
 export const dynamic = "force-dynamic";
 export const metadata = { robots: { index: false } };
 
+const DRIVER_ERRORS: Record<string, string> = {
+  datos: "Revise los datos: el nombre, el código (2 a 20 caracteres) y la licencia son obligatorios.",
+  codigo: "Ya existe un conductor con ese código. Use otro.",
+};
+
 export default async function NewDriverPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ tenantSlug: string }>;
+  searchParams: Promise<{ error?: string | string[] }>;
 }) {
   const { tenantSlug } = await params;
+  const { error } = await searchParams;
+  const errorMessage = typeof error === "string" ? DRIVER_ERRORS[error] : undefined;
   const { user, tenant } = await requireTenantRole(tenantSlug, [
     "TENANT_OWNER", "TENANT_ADMIN", "OPERATIONS_MANAGER",
   ]);
@@ -44,6 +54,10 @@ export default async function NewDriverPage({
           description="Registrar un nuevo conductor en el tenant."
           title="Crear conductor"
         />
+
+        {errorMessage ? (
+          <Alert tone="danger">{errorMessage}</Alert>
+        ) : null}
 
         <Card className="max-w-lg">
           <CardHeader

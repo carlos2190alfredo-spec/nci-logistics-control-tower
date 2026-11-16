@@ -4,7 +4,7 @@ Fecha: 2026-11-16
 
 ## Fase 1 de simplificación (ADR-038)
 
-Un tenant nuevo ya puede llegar solo a su primer viaje asignado: catálogos en autoservicio (clientes, flota, lugares, tipos de servicio con plantillas), "Nuevo viaje" creado por operaciones, equipo opcional según el tipo de servicio y la lista "Primeros pasos" en el Resumen. Migración aditiva `20261115181215_…` (aplicada solo a la BD local). Pendiente: acceso al portal de clientes, importación CSV (panel/acción), alta de conductor usable. Detalle y riesgos en ADR-038 y `HANDOFF_LATEST.md`.
+Un tenant nuevo ya puede llegar solo a su primer viaje asignado: catálogos en autoservicio (clientes, flota, lugares, tipos de servicio con plantillas), "Nuevo viaje" creado por operaciones, equipo opcional según el tipo de servicio y la lista "Primeros pasos" en el Resumen. Migración aditiva `20261115181215_…` (aplicada solo a la BD local). Incluye importación CSV, acceso de clientes al portal y vínculo conductor↔cuenta. Pendiente: pruebas con BD real, E2E de roles/aislamiento/límites. Detalle y riesgos en ADR-038 y `HANDOFF_LATEST.md`.
 
 Anterior: 2026-11-13
 

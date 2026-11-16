@@ -1,10 +1,12 @@
 # HANDOFF LATEST
 
-## 2026-11-16 — Fase 1 de simplificación (ADR-038): implementada en lo esencial
+## 2026-11-16 — Fase 1 de simplificación (ADR-038): implementada
 
 - Leer `docs/decisions/ADR-038-phase1-self-service-catalogs.md` (decisiones, implementado, pendiente y hallazgos de la revisión). **Sin commit**; la migración solo está aplicada a la BD local.
-- Hecho: catálogos (clientes, flota, lugares, tipos de servicio), Nuevo viaje, equipo opcional, Primeros pasos, menú "Mi negocio". Verificado con tsc, eslint, 1806 tests, security:check, build y E2E completa (101 + 3 flaky, 0 fallos).
-- Pendiente prioritario: acceso al portal de clientes, importación CSV (panel/acción), alta de conductor usable, pruebas de seguridad/roles/límites y con BD real.
+- Hecho: catálogos (clientes, flota, lugares, tipos de servicio), Nuevo viaje, equipo opcional, Primeros pasos, menú "Mi negocio", importación CSV, acceso de clientes al portal y vínculo conductor↔cuenta. Verificado con tsc, eslint, 1822 tests, security:check, build y E2E completa (106 + 4 flaky por copias ocultas del streaming, 0 fallos).
+- Código en la rama `feat/fase1-catalogos-nuevo-viaje` (commits locales, sin push).
+- Pendiente prioritario: pruebas con BD real (concurrencia de límites/referencias), E2E de roles/aislamiento/límites, y confirmar las cifras de plan con el dueño.
+- Si Mailpit local no responde el saludo SMTP (`ETIMEDOUT`/"Greeting never received"): `docker restart nci-lct-mailpit`.
 - Antes de desplegar: backup + `pnpm db:deploy` en staging + `harden.sql`; recién después push. Las E2E nuevas crean un tenant `zz-e2e-*` descartable y lo borran al final.
 
 ## 2026-11-13 (noche) — Endurecimiento de producción (ADR-037)
