@@ -1,5 +1,6 @@
 "use server";
 
+import { ensureServiceTypeTemplates } from "@/lib/server/service-type-seed";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
@@ -88,6 +89,9 @@ export async function createTenantFullAction(formData: FormData) {
         },
       },
     });
+
+    // Todo tenant nuevo nace con los tipos de servicio sugeridos (ADR-038): el catalogo no queda vacio.
+    await ensureServiceTypeTemplates(tx, t.id);
 
     let ou = await tx.user.findUnique({ where: { email: ownerEmailNorm } });
     const isNew = !ou;

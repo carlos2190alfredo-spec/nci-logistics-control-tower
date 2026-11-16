@@ -6,12 +6,17 @@ import {
   History,
   Inbox,
   LayoutDashboard,
+  ListChecks,
+  MapPin,
+  PlusCircle,
+  Users,
   Monitor,
   Route,
   Settings,
   ShieldCheck,
   Smartphone,
   TriangleAlert,
+  Truck,
   Wrench,
 } from "lucide-react";
 import type { TenantRole } from "@/generated/prisma";
@@ -34,7 +39,10 @@ export function getTenantNavGroups(tenantSlug: string, role: TenantRole) {
             items: [
               { label: "Resumen", href: base, icon: <LayoutDashboard />, exact: true },
               { label: "Solicitudes", href: `${base}/requests`, icon: <Inbox /> },
-              { label: "Viajes activos", href: `${base}/trips`, icon: <Route /> },
+              { label: "Viajes activos", href: `${base}/trips`, icon: <Route />, exact: true },
+              ...(can("tenant.trips.create")
+                ? [{ label: "Nuevo viaje", href: `${base}/trips/new`, icon: <PlusCircle /> }]
+                : []),
               ...(can("tenant.containers.view")
                 ? [{ label: "Contenedores", href: `${base}/containers`, icon: <Boxes /> }]
                 : []),
@@ -50,6 +58,22 @@ export function getTenantNavGroups(tenantSlug: string, role: TenantRole) {
                 : []),
               { label: "Actividad", href: `${base}/activity`, icon: <Activity /> },
               { label: "Historial", href: `${base}/history`, icon: <History /> },
+            ],
+          },
+        ]
+      : []),
+    ...(can("tenant.catalogs.view")
+      ? [
+          {
+            title: "Mi negocio",
+            items: [
+              { label: "Clientes", href: `${base}/customers`, icon: <Users /> },
+              { label: "Flota", href: `${base}/fleet`, icon: <Truck /> },
+              { label: "Lugares", href: `${base}/locations`, icon: <MapPin /> },
+              { label: "Tipos de servicio", href: `${base}/services`, icon: <ListChecks /> },
+              ...(can("tenant.drivers.manage")
+                ? [{ label: "Conductores", href: `${base}/admin/drivers`, icon: <Truck /> }]
+                : []),
             ],
           },
         ]

@@ -165,3 +165,9 @@
 - Verificación: typecheck, lint, 596 unitarios, build, E2E 102 + 1 intermitente de 103.
 - Las conexiones de Vercel, Supabase y Resend se desconectaron de la sesión; las claves de terceros
   quedaron pendientes del dueño.
+
+## 2026-11-16 — Fase 1 de simplificación (ADR-038)
+
+- Análisis de producto, diseño y revisión adversarial (5 lentes) previos; cimientos (esquema/migración, permisos, librerías, kit de UI) y luego pantallas y acciones: clientes, flota, lugares, tipos de servicio, Nuevo viaje, equipo opcional, Primeros pasos.
+- Correcciones a lo existente: `DRIVER` sin ficha, portal (viewer y solicitudes de operaciones), `TableRow`, desborde móvil.
+- Verificado: tsc, eslint, 1806 tests, security:check, build, E2E completa 101 + 3 flaky. Pendiente: acceso al portal, importación CSV, conductor usable, pruebas con BD real.

@@ -1,4 +1,4 @@
-import type { ReactNode, TdHTMLAttributes, ThHTMLAttributes } from "react";
+import type { ComponentPropsWithoutRef, ReactNode, TdHTMLAttributes, ThHTMLAttributes } from "react";
 import { cn } from "@/lib/utils";
 
 /**
@@ -7,7 +7,7 @@ import { cn } from "@/lib/utils";
  */
 export function DataTable({ children, className, caption }: { children: ReactNode; className?: string; caption?: string }) {
   return (
-    <div className={cn("overflow-x-auto rounded-lg border border-border", className)}>
+    <div className={cn("relative overflow-x-auto rounded-lg border border-border", className)}>
       <table className="w-full min-w-[560px] text-left text-sm">
         {caption ? <caption className="sr-only">{caption}</caption> : null}
         {children}
@@ -24,8 +24,12 @@ export function TableBody({ children }: { children: ReactNode }) {
   return <tbody className="divide-y divide-border bg-surface">{children}</tbody>;
 }
 
-export function TableRow({ children, className }: { children: ReactNode; className?: string }) {
-  return <tr className={cn("transition-colors duration-100 hover:bg-muted/60", className)}>{children}</tr>;
+export function TableRow({ children, className, ...props }: ComponentPropsWithoutRef<"tr"> & { children: ReactNode }) {
+  return (
+    <tr className={cn("transition-colors duration-100 hover:bg-muted/60", className)} {...props}>
+      {children}
+    </tr>
+  );
 }
 
 export function TableHeaderCell({ children, className, ...props }: ThHTMLAttributes<HTMLTableCellElement> & { children: ReactNode }) {

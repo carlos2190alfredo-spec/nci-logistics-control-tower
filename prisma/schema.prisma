@@ -339,6 +339,13 @@ model CustomerAccount {
   code        String
   name        String
   active      Boolean              @default(true)
+  /// RUC u otro identificador fiscal. No es unico: una empresa puede tener varias sucursales.
+  taxId         String?            @map("tax_id")
+  contactName   String?            @map("contact_name")
+  contactEmail  String?            @map("contact_email")
+  contactPhone  String?            @map("contact_phone")
+  address       String?
+  internalNotes String?            @map("internal_notes")
   createdAt   DateTime             @default(now()) @map("created_at")
   updatedAt   DateTime             @updatedAt @map("updated_at")
   tenant      Tenant               @relation(fields: [tenantId], references: [id], onDelete: Cascade)
@@ -388,8 +395,10 @@ model Location {
   tenantId  String @map("tenant_id") @db.Uuid
   name      String
   address   String
-  latitude  Float
-  longitude Float
+  /// Opcionales: un lugar frecuente se puede registrar sin coordenadas.
+  latitude  Float?
+  longitude Float?
+  active    Boolean @default(true)
   tenant    Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
   @@unique([tenantId, name])
@@ -457,6 +466,8 @@ model ServiceType {
   code           String
   name           String
   active         Boolean          @default(true)
+  /// false: el servicio no usa chasis/remolque y la asignacion no exige equipo (ADR-038).
+  requiresEquipment Boolean        @default(true) @map("requires_equipment")
   optionalFields Json             @default("{}") @map("optional_fields")
   requiredDocs   Json             @default("[]") @map("required_docs")
   tenant         Tenant           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
@@ -482,6 +493,8 @@ model ServiceRequest {
   cargoDetails      Json                 @default("{}") @map("cargo_details")
   customerNotes     String?              @map("customer_notes")
   internalNotes     String?              @map("internal_notes")
+  /// Canal de origen: PORTAL (cliente) u operaciones: OPERATIONS | PHONE | WHATSAPP | EMAIL | WALK_IN (ADR-038).
+  source            String               @default("PORTAL")
   /// Motivo del ultimo cambio de estado (rechazo, pedido de informacion, cancelacion). Visible al cliente.
   statusReason      String?              @map("status_reason")
   createdById       String?              @map("created_by_id") @db.Uuid
@@ -553,7 +566,7 @@ model TripAssignment {
   tenantId     String    @map("tenant_id") @db.Uuid
   tripId       String    @map("trip_id") @db.Uuid
   vehicleId    String    @map("vehicle_id") @db.Uuid
-  equipmentId  String    @map("equipment_id") @db.Uuid
+  equipmentId  String?   @map("equipment_id") @db.Uuid
   driverId     String    @map("driver_id") @db.Uuid
   assignedById String?   @map("assigned_by_id") @db.Uuid
   scheduledAt  DateTime  @map("scheduled_at")
@@ -563,7 +576,7 @@ model TripAssignment {
   tenant       Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   trip         Trip      @relation(fields: [tripId], references: [id], onDelete: Cascade)
   vehicle      Vehicle   @relation(fields: [vehicleId], references: [id])
-  equipment    Equipment @relation(fields: [equipmentId], references: [id])
+  equipment    Equipment? @relation(fields: [equipmentId], references: [id], onDelete: Restrict)
   driver       Driver    @relation(fields: [driverId], references: [id])
 
   @@index([tenantId, tripId])

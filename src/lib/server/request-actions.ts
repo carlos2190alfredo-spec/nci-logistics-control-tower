@@ -2,13 +2,16 @@
 
 import { revalidatePath } from "next/cache";
 import type { ServiceRequestStatus } from "@/generated/prisma";
-import { customerVisibleStatus, MIN_REASON_LENGTH } from "@/lib/domain/state-machine";
+import { MIN_REASON_LENGTH } from "@/lib/domain/state-machine";
 import { canApplyRequestAction, requestTransitions, type RequestAction } from "@/lib/domain/request-state-machine";
+import { REQUEST_OPERATIONS_ROLES } from "@/lib/domain/request-roles";
 import { requestStatusLabel } from "@/lib/ui/status";
 import { actionError, actionOk, StaleStateError, type ActionResult } from "@/lib/server/action-result";
 import { audit } from "@/lib/server/audit";
 import { requireCustomerMembership, requireTenantRole } from "@/lib/server/auth";
 import { getDb } from "@/lib/server/db";
+import { isUniqueViolation } from "@/lib/server/db-errors";
+import { createTripFromRequest, lockTenantForCreate } from "@/lib/server/trip-creation";
 import { sendLocalNotification } from "@/lib/providers/notifications";
 
 /**
@@ -18,7 +21,11 @@ import { sendLocalNotification } from "@/lib/providers/notifications";
  * lectura y la escritura, el update afecta 0 filas y se informa el conflicto.
  */
 
-const REQUEST_OPERATIONS_ROLES = ["OPERATIONS_MANAGER", "DISPATCHER", "TENANT_OWNER"] as const;
+/**
+ * El bloqueo del tenant puede esperar a otra alta en curso (p. ej. una importacion): el margen evita que
+ * el limite de 5 s de Prisma aborte una conversion que solo estaba en cola.
+ */
+const TRIP_CREATION_TX_OPTIONS = { timeout: 10_000, maxWait: 5_000 };
 
 function readReason(formData: FormData, field = "reason") {
   return String(formData.get(field) ?? "").trim().slice(0, 1000);
@@ -65,37 +72,11 @@ export async function confirmRequestAsTripAction(
       });
       if (claimed.count === 0) throw new StaleStateError();
 
-      const count = await tx.trip.count({ where: { tenantId: tenant.id } });
-      return tx.trip.create({
-        data: {
-          tenantId: tenant.id,
-          customerAccountId: request.customerAccountId,
-          serviceRequestId: request.id,
-          serviceTypeId: request.serviceTypeId,
-          reference: `${tenant.slug.toUpperCase()}-TR-${String(count + 1).padStart(4, "0")}`,
-          status: "CONFIRMED",
-          origin: request.origin,
-          destination: request.destination,
-          scheduledAt: request.requestedDate,
-          eta: new Date(request.requestedDate.getTime() + 4 * 60 * 60 * 1000),
-          routePoints: [
-            { label: request.origin, lat: 9.36, lng: -79.88 },
-            { label: "Las Cumbres", lat: 9.09, lng: -79.54 },
-            { label: request.destination, lat: 8.95, lng: -79.56 },
-          ],
-          customerVisibleStatus: customerVisibleStatus.CONFIRMED,
-          events: {
-            create: {
-              tenantId: tenant.id,
-              actorId: user.id,
-              toStatus: "CONFIRMED",
-              note: "Solicitud confirmada y convertida en viaje.",
-              visibleToCustomer: true,
-            },
-          },
-        },
-      });
-    });
+      // Referencia por MAXIMO del sufijo bajo el bloqueo del tenant (ADR-038): sin carreras ni
+      // dependencia del numero de filas. Todo con `tx`; nada de `getDb()` dentro de la transaccion.
+      await lockTenantForCreate(tx, tenant.id);
+      return createTripFromRequest(tx, { tenant, actorId: user.id, request });
+    }, TRIP_CREATION_TX_OPTIONS);
   } catch (error) {
     if (error instanceof StaleStateError) {
       const current = await db.serviceRequest.findFirst({ where: { id: request.id, tenantId: tenant.id }, select: { status: true } });
@@ -284,8 +265,4 @@ async function applyRequestTransition(input: {
     return actionError(staleMessage(current?.status)) as Extract<ActionResult, { status: "error" }>;
   }
   return { status: "success" as const, request };
-}
-
-function isUniqueViolation(error: unknown) {
-  return typeof error === "object" && error !== null && "code" in error && (error as { code?: string }).code === "P2002";
 }

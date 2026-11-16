@@ -1,5 +1,12 @@
 # HANDOFF LATEST
 
+## 2026-11-16 — Fase 1 de simplificación (ADR-038): implementada en lo esencial
+
+- Leer `docs/decisions/ADR-038-phase1-self-service-catalogs.md` (decisiones, implementado, pendiente y hallazgos de la revisión). **Sin commit**; la migración solo está aplicada a la BD local.
+- Hecho: catálogos (clientes, flota, lugares, tipos de servicio), Nuevo viaje, equipo opcional, Primeros pasos, menú "Mi negocio". Verificado con tsc, eslint, 1806 tests, security:check, build y E2E completa (101 + 3 flaky, 0 fallos).
+- Pendiente prioritario: acceso al portal de clientes, importación CSV (panel/acción), alta de conductor usable, pruebas de seguridad/roles/límites y con BD real.
+- Antes de desplegar: backup + `pnpm db:deploy` en staging + `harden.sql`; recién después push. Las E2E nuevas crean un tenant `zz-e2e-*` descartable y lo borran al final.
+
 ## 2026-11-13 (noche) — Endurecimiento de producción (ADR-037)
 
 - Leer `docs/decisions/ADR-037-production-readiness-audit.md` y `docs/STAGING_DEPLOYMENT.md`.

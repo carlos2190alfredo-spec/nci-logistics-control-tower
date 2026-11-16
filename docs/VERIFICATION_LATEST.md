@@ -1,5 +1,25 @@
 # VERIFICATION LATEST
 
+Fecha: 2026-11-16 (Fase 1 de simplificación — ADR-038)
+
+| Verificación | Resultado |
+| --- | --- |
+| `pnpm exec tsc --noEmit`, `eslint .` | Pasan |
+| `pnpm exec vitest run` | 1806 tests pasan (línea base previa: 596) |
+| `pnpm security:check` | Pasa |
+| `pnpm build` | Pasa (rutas nuevas: customers, fleet, locations, services, trips/new) |
+| `prisma migrate deploy` + `migrate diff` (BD local) | Migración aplicada, sin deriva |
+| **E2E completa (local, ClamAV activo)** | **101 pasan + 3 flaky (pasan al reintentar), 0 fallos (10,0 min)**. Flaky: ONB-001 (copia oculta del streaming; selectores corregidos), `route-driver-recommendation` y E2E-FLOW-001 (mismo tipo de duplicado preexistente) |
+| ONB-001 (nuevo) | Tenant descartable → cliente, vehículo, equipo, lugar → Nuevo viaje → asignación sin equipo → servicio con equipo → desaparece "Primeros pasos"; `scheduledAt` = 19:00 UTC para 14:00 de Panamá verificado en la BD |
+| Revisión visual (Playwright, 1440 y 375 px) | Páginas nuevas sin desborde horizontal tras corregir `min-w-0` y el contenedor de tablas |
+| Revisión adversarial del diseño | 5 lentes, 56 verificaciones independientes, 67 hallazgos no refutados (ver ADR-038) |
+
+## No ejecutado
+- Migración y código en Supabase staging/Vercel; correo real; pruebas con BD real de concurrencia (límites de plan, referencias); E2E de roles, aislamiento entre tenants y límites; importación CSV y acceso al portal (no implementados).
+
+---
+
+
 Fecha: 2026-11-13 (Auditoría de producción y endurecimiento — ADR-037)
 
 ## Auditoría y correcciones

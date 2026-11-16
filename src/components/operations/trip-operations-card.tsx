@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { summarizeCargo } from "@/lib/domain/cargo-summary";
 import { ArrowRight, Ban, Brain, CircleAlert, ClipboardCheck, FileCheck2, MapPin, Route, TriangleAlert, Truck, User } from "lucide-react";
 import type { Prisma, TenantRole, TripStatus } from "@/generated/prisma";
 import { ASSIGNABLE_TRIP_STATUSES, exceptionStatuses, nextStatuses } from "@/lib/domain/state-machine";
@@ -32,6 +33,8 @@ export type OperationsTrip = Prisma.TripGetPayload<{
     driver: true;
     vehicle: true;
     equipment: true;
+    serviceType: { select: { name: true; code: true; requiresEquipment: true } };
+    serviceRequest: { select: { cargoDetails: true; priority: true; source: true; internalNotes: true } };
     proof: true;
     documents: true;
     events: true;
@@ -64,6 +67,7 @@ export function TripOperationsCard({
   index = 0,
   eligibilityLight,
   blockedAssets,
+  highlighted = false,
 }: {
   trip: OperationsTrip;
   tenantSlug: string;
@@ -79,16 +83,23 @@ export function TripOperationsCard({
   blockedAssets?: Set<string>;
   index?: number;
   eligibilityLight?: ComplianceLight;
+  /** Resalta la tarjeta (p. ej. el viaje recien creado desde "Nuevo viaje"); se calcula en el servidor. */
+  highlighted?: boolean;
 }) {
   const next = nextStatuses(trip.status, role);
   const exceptions = exceptionStatuses(trip.status, role);
   const canAssign = ASSIGNABLE_TRIP_STATUSES.includes(trip.status);
   const proofDocuments = trip.documents.filter((document) => document.proofId === trip.proof?.id);
+  const requiresEquipment = trip.serviceType?.requiresEquipment ?? true;
+  const cargo = summarizeCargo(trip.serviceRequest?.cargoDetails);
 
   return (
     <article
-      className="anim-item grid gap-5 rounded-xl border border-border bg-surface p-5 shadow-xs lg:grid-cols-[minmax(0,1.05fr)_minmax(0,0.95fr)]"
+      className={`anim-item grid scroll-mt-24 gap-5 rounded-xl border bg-surface p-5 shadow-xs lg:grid-cols-[minmax(0,1.05fr)_minmax(0,0.95fr)] ${
+        highlighted ? "border-primary ring-2 ring-primary" : "border-border"
+      }`}
       data-testid={`trip-card-${trip.id}`}
+      id={`trip-${trip.id}`}
       style={{ "--stagger": index } as React.CSSProperties}
     >
       {/* Resumen del servicio */}
@@ -134,9 +145,18 @@ export function TripOperationsCard({
           </div>
           <div className="flex justify-between gap-2 sm:block">
             <dt className="text-muted-foreground">Equipo</dt>
-            <dd className="font-medium text-foreground">{trip.equipment?.code ?? "Sin equipo"}</dd>
+            <dd className="font-medium text-foreground">
+              {trip.equipment?.code ?? (requiresEquipment ? "Sin asignar" : "No necesario")}
+            </dd>
           </div>
         </dl>
+        {cargo ? (
+          <ul aria-label="Datos de la carga" className="mt-3 grid gap-1 text-sm text-muted-foreground">
+            {cargo.container ? <li>Contenedor: {cargo.container}</li> : null}
+            {cargo.booking ? <li>Booking: {cargo.booking}</li> : null}
+            {cargo.contact ? <li>Contacto en sitio: {cargo.contact}</li> : null}
+          </ul>
+        ) : null}
         {trip.events.length ? (
           <div className="mt-4 border-t border-border pt-3.5">
             <p className="mb-2.5 text-xs font-semibold uppercase tracking-wide text-faint-foreground">Ultimos hitos</p>
@@ -167,7 +187,6 @@ export function TripOperationsCard({
               Asignacion de recursos
             </p>
             <input name="tripId" type="hidden" value={trip.id} />
-            <input name="scheduledAt" type="hidden" value={trip.scheduledAt.toISOString().slice(0, 16)} />
             <div className="grid gap-2.5 sm:grid-cols-3">
               <SelectField defaultValue={trip.vehicleId ?? ""} label="Vehiculo" name="vehicleId">
                 {vehicles.map((vehicle) => {
@@ -181,6 +200,7 @@ export function TripOperationsCard({
                 })}
               </SelectField>
               <SelectField defaultValue={trip.equipmentId ?? ""} label="Equipo" name="equipmentId">
+                {requiresEquipment ? null : <option value="">Sin equipo</option>}
                 {equipment.map((item) => {
                   const isBlocked = blockedAssets?.has(`EQUIPO:${item.code}`) ?? false;
                   return (

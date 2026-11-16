@@ -161,7 +161,13 @@ export default async function CustomerPortalPage({
       orderBy: { name: "asc" },
     }),
     db.serviceRequest.findMany({
-      where: { tenantId: tenant.id, customerAccountId: customerAccount.id },
+      // Las solicitudes que registra operaciones (ya convertidas en viaje) salen en "Servicios": no deben
+      // desplazar de esta lista las que el cliente tiene que atender (p. ej. "informacion requerida").
+      where: {
+        tenantId: tenant.id,
+        customerAccountId: customerAccount.id,
+        NOT: { status: "CONVERTED", source: { not: "PORTAL" } },
+      },
       orderBy: { createdAt: "desc" },
       take: 10,
     }),
@@ -308,6 +314,7 @@ export default async function CustomerPortalPage({
           </div>
 
           <div className="grid items-start gap-6 xl:grid-cols-[minmax(0,0.95fr)_minmax(0,1.05fr)]">
+            {membership.role === "CUSTOMER_ADMIN" ? (
             <Card className="scroll-mt-20" id="solicitar">
               <CardHeader
                 description="Complete los datos y su transportista confirmará el servicio."
@@ -451,6 +458,7 @@ export default async function CustomerPortalPage({
                 <SubmitButton size="lg">Crear solicitud</SubmitButton>
               </form>
             </Card>
+            ) : null}
 
             <div className="grid min-w-0 content-start gap-6">
               <Card>

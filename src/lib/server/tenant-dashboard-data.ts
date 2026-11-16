@@ -39,6 +39,8 @@ export async function getTenantActiveTrips(viewer: TenantViewer) {
       driver: true,
       vehicle: true,
       equipment: true,
+      serviceType: { select: { name: true, code: true, requiresEquipment: true } },
+      serviceRequest: { select: { cargoDetails: true, priority: true, source: true, internalNotes: true } },
       proof: true,
       documents: true,
       events: true,
@@ -66,12 +68,18 @@ export async function getTenantClosedTrips(viewer: TenantViewer, take = 20) {
 
 export async function getTenantVehicles(viewer: TenantViewer) {
   assertCanViewOperations(viewer);
-  return getDb().vehicle.findMany({ where: { tenantId: viewer.tenantId }, orderBy: { plate: "asc" } });
+  return getDb().vehicle.findMany({
+    where: { tenantId: viewer.tenantId, status: { not: "INACTIVE" } },
+    orderBy: { plate: "asc" },
+  });
 }
 
 export async function getTenantEquipment(viewer: TenantViewer) {
   assertCanViewOperations(viewer);
-  return getDb().equipment.findMany({ where: { tenantId: viewer.tenantId }, orderBy: { code: "asc" } });
+  return getDb().equipment.findMany({
+    where: { tenantId: viewer.tenantId, status: { not: "INACTIVE" } },
+    orderBy: { code: "asc" },
+  });
 }
 
 export async function getTenantDrivers(viewer: TenantViewer) {
