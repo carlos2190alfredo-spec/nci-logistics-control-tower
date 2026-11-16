@@ -58,8 +58,17 @@ El correo de invitación (`createInvitation`, ya existente) enviaba `/invitacion
 ## Comprobación de seguridad que pasaba en vacío (2026-11-16)
 `scripts/security-check.ts::grepMissing` armaba el `grep` con `execSync` y los argumentos unidos por espacios: patrones como `fetch(` o `got(` rompían la sintaxis del shell, `grep` salía con código 2 y se interpretaba como "sin coincidencias". Las comprobaciones que dependen de ella ("los proveedores desactivados no hacen llamadas HTTP", sin `queryRawUnsafe`, sin `dangerouslySetInnerHTML`, claves `sk-`/`Bearer`, `reasoning_content`) pasaban sin haber mirado nada. Ahora usa `execFileSync` (sin shell) y cualquier fallo distinto de "sin coincidencias" hace FALLAR la comprobación. Comprobado: sin cambios todas pasan; con un `fetch(` plantado en `disabled/gps.ts` la comprobación falla (revertido).
 
+## E2E de roles, aislamiento y límites de plan (2026-11-16)
+`tests/e2e/catalog-access.spec.ts` (4 pruebas, dos tenants descartables: A con plan DEMO y B con datos propios; `createThrowawayMember` crea miembros con un rol concreto):
+- **ACCESS-001:** el despachador y seguridad consultan clientes y flota pero no ven formularios de alta; el despachador SÍ abre "Nuevo viaje" y seguridad no; ninguno ve el acceso al portal ni "Desactivar cliente". El conductor es devuelto a su app desde clientes, flota, lugares, servicios y Nuevo viaje.
+- **ACCESS-002:** operaciones gestiona catálogos pero no el acceso al portal; el propietario sí.
+- **ACCESS-003 (aislamiento):** las pantallas de otra empresa no se abren y nada de ella aparece; un id de B dentro de la ruta de A (cliente, vehículo, lugar, tipo de servicio) muestra "Página no encontrada" y no confirma que exista; la búsqueda de A no encuentra datos de B. Nota: con streaming Next responde 200 y pinta el 404, por eso se comprueba el contenido y no el código HTTP.
+- **ACCESS-004 (plan):** con plan DEMO (3 clientes) el cuarto se rechaza explicando "permite hasta 3 clientes y ya tiene 3", sin perder lo escrito; desactivar uno libera cupo; y reactivar el primero ya no cabe (sigue inactivo y el aviso lo explica).
+- **Mutaciones:** 4 de 4 detectadas (ficha de cliente sin filtro de tenant, despachador con permiso de gestión, reactivar sin límite de plan, operaciones con acceso al portal).
+
 ## Pendiente (no implementado)
-- E2E de roles, aislamiento entre tenants y límites de plan (las pruebas con BD real ya cubren la lógica; falta recorrerla por la interfaz), y `e2e:cleanup` ampliado.
+- `e2e:cleanup` ampliado a los tenants `zz-e2e-*` y `zz-db-*` huérfanos (hoy se limpian al terminar cada spec y `sweepStaleTestTenants` barre los de `test:db`).
+- Revocar y reenviar invitaciones desde la pantalla (`revokeInvitation` existe pero no está enlazado).
 - Motor de recomendación de conductores en hora de Panamá (BIZ-08), reglas de identidad de placa/código más estrictas (SEC-04), y el portal sigue exigiendo datos de contenedor para cualquier tipo de servicio.
 - Despliegue: backup + `pnpm db:deploy` en Supabase staging y `harden.sql` ANTES de cualquier push (Production y Preview comparten BD). Las cifras de plan (`tenant_plans`) no tienen validación comercial y ahora bloquean altas de vehículos/clientes: confirmarlas antes del primer tenant real.
 

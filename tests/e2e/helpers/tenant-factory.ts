@@ -1,7 +1,7 @@
 import argon2 from "argon2";
 import { encryptSecret } from "../../../src/lib/server/mfa-crypto";
 import { SEED_TOTP_SECRET } from "./auth";
-import type { PrismaClient } from "../../../src/generated/prisma";
+import type { PrismaClient, TenantRole } from "../../../src/generated/prisma";
 import { SERVICE_TYPE_TEMPLATES, templateToCreateData } from "../../../src/lib/catalog/service-type-templates";
 
 /**
@@ -82,6 +82,29 @@ export async function createThrowawayTenant(
     ops: { id: ops.id, email: ops.email, password: OPS_PASSWORD },
     owner: { id: owner.id, email: owner.email, password: OPS_PASSWORD },
   };
+}
+
+/**
+ * Miembro extra del tenant descartable con un rol concreto (despachador, conductor, seguridad…), sin MFA. Los roles que
+ * exigen MFA (propietario y administrador) ya existen en `ThrowawayTenant.owner`. El correo termina en `@e2e.local` y
+ * lleva el sello del tenant, así que `destroyThrowawayTenant` lo limpia.
+ */
+export async function createThrowawayMember(
+  db: PrismaClient,
+  tenant: ThrowawayTenant,
+  role: Exclude<TenantRole, "TENANT_OWNER" | "TENANT_ADMIN">,
+  label: string,
+): Promise<{ id: string; email: string; password: string }> {
+  const user = await db.user.create({
+    data: {
+      name: `${label} E2E`,
+      email: `${label}-${tenant.stamp}@e2e.local`,
+      passwordHash: await argon2.hash(OPS_PASSWORD, { type: argon2.argon2id }),
+      emailVerified: true,
+    },
+  });
+  await db.tenantMembership.create({ data: { tenantId: tenant.id, userId: user.id, role } });
+  return { id: user.id, email: user.email, password: OPS_PASSWORD };
 }
 
 /** Borra el tenant descartable y todo lo que cuelga de el, respetando las FK RESTRICT. */
