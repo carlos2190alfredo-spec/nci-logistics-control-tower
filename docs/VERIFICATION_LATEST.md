@@ -5,7 +5,10 @@ Fecha: 2026-11-16 (Fase 1 de simplificación — ADR-038)
 | Verificación | Resultado |
 | --- | --- |
 | `pnpm exec tsc --noEmit`, `eslint .` | Pasan |
-| `pnpm exec vitest run` | 1822 tests pasan (línea base previa: 596) |
+| `pnpm test` (Vitest, suite normal) | 1841 tests pasan en 93 archivos (1822 + 17 de la guarda de destino + 2 de la importación); línea base previa: 596 |
+| **`pnpm test:db` (BD real, local)** | **47 pruebas pasan en 5 archivos (referencias, concurrencia, límites de plan, importación CSV, consultas, esquema)**; repetible, sin residuos (0 tenants `zz-db-*`, 0 usuarios `@zz-db.local` después) |
+| Mutaciones sobre código de producción | 7 de 7 detectadas por `test:db` (sin bloqueo del plan, `FOR UPDATE`, referencia sin +1, bloqueo sin efecto, importación sin límite, importación sin `tenantId`, conteo con inactivos); archivos restaurados (`git diff` solo `package.json`) |
+| E2E `csv-import.spec.ts` tras el arreglo de `import-apply.ts` | 2 de 2 pasan (`.env.local` exportado: `global-setup` no lo carga solo). La E2E completa NO se repitió tras este cambio |
 | `pnpm security:check` | Pasa |
 | `pnpm build` | Pasa (rutas nuevas: customers, fleet, locations, services, trips/new) |
 | `prisma migrate deploy` + `migrate diff` (BD local) | Migración aplicada, sin deriva |
@@ -15,7 +18,7 @@ Fecha: 2026-11-16 (Fase 1 de simplificación — ADR-038)
 | Revisión adversarial del diseño | 5 lentes, 56 verificaciones independientes, 67 hallazgos no refutados (ver ADR-038) |
 
 ## No ejecutado
-- Migración y código en Supabase staging/Vercel; correo real; pruebas con BD real de concurrencia (límites de plan, referencias); E2E de roles, aislamiento entre tenants y límites; importación CSV y acceso al portal (no implementados).
+- Migración y código en Supabase staging/Vercel; correo real; E2E de roles, aislamiento entre tenants y límites de plan por la interfaz; `test:db` contra staging (bloqueado a propósito).
 
 ---
 

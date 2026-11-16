@@ -5,7 +5,8 @@
 - Leer `docs/decisions/ADR-038-phase1-self-service-catalogs.md` (decisiones, implementado, pendiente y hallazgos de la revisión). **Sin commit**; la migración solo está aplicada a la BD local.
 - Hecho: catálogos (clientes, flota, lugares, tipos de servicio), Nuevo viaje, equipo opcional, Primeros pasos, menú "Mi negocio", importación CSV, acceso de clientes al portal y vínculo conductor↔cuenta. Verificado con tsc, eslint, 1822 tests, security:check, build y E2E completa (106 + 4 flaky por copias ocultas del streaming, 0 fallos).
 - Código en la rama `feat/fase1-catalogos-nuevo-viaje` (commits locales, sin push).
-- Pendiente prioritario: pruebas con BD real (concurrencia de límites/referencias), E2E de roles/aislamiento/límites, y confirmar las cifras de plan con el dueño.
+- **Pruebas con BD real (hecho):** `pnpm test:db` (47 pruebas, `tests/db/`, solo contra la BD local: la guarda bloquea cualquier otro destino). Encontró y se corrigió un error de la importación de clientes (pérdida silenciosa de una fila con código explícito repetido). Detalle en ADR-038.
+- Pendiente prioritario: E2E de roles/aislamiento/límites por la interfaz y confirmar las cifras de plan con el dueño. Sin commit de esta tanda todavía.
 - Si Mailpit local no responde el saludo SMTP (`ETIMEDOUT`/"Greeting never received"): `docker restart nci-lct-mailpit`.
 - Antes de desplegar: backup + `pnpm db:deploy` en staging + `harden.sql`; recién después push. Las E2E nuevas crean un tenant `zz-e2e-*` descartable y lo borran al final.
 

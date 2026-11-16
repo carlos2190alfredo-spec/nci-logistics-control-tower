@@ -34,20 +34,32 @@ function fakeTx(opts: {
     customerAccount: {
       findMany: vi.fn(async () => customers),
       count: vi.fn(async () => customers.length),
-      createMany: vi.fn(async ({ data }: { data: Row[] }) => void created.customers.push(...data)),
+      createMany: vi.fn(async ({ data }: { data: Row[] }) => {
+        created.customers.push(...data);
+        return { count: data.length };
+      }),
     },
     vehicle: {
       findMany: vi.fn(async () => vehicles),
       count: vi.fn(async () => vehicles.length),
-      createMany: vi.fn(async ({ data }: { data: Row[] }) => void created.vehicles.push(...data)),
+      createMany: vi.fn(async ({ data }: { data: Row[] }) => {
+        created.vehicles.push(...data);
+        return { count: data.length };
+      }),
     },
     equipment: {
       findMany: vi.fn(async () => opts.equipment ?? []),
-      createMany: vi.fn(async ({ data }: { data: Row[] }) => void created.equipment.push(...data)),
+      createMany: vi.fn(async ({ data }: { data: Row[] }) => {
+        created.equipment.push(...data);
+        return { count: data.length };
+      }),
     },
     location: {
       findMany: vi.fn(async () => opts.locations ?? []),
-      createMany: vi.fn(async ({ data }: { data: Row[] }) => void created.locations.push(...data)),
+      createMany: vi.fn(async ({ data }: { data: Row[] }) => {
+        created.locations.push(...data);
+        return { count: data.length };
+      }),
     },
   };
   return { tx: tx as unknown as Tx, created, raw: tx, order };
@@ -80,6 +92,36 @@ describe("applyCatalogImport", () => {
     });
     expect(created.customers.map((row) => row.code)).toEqual(["CLI-0008", "CLI-0009", "EXT-9"]);
     expect(outcome).toEqual({ created: 3, skippedExisting: 0 });
+  });
+
+  it("un código explícito del archivo se respeta y el generador lo salta (no asigna el mismo a otra fila)", async () => {
+    const { tx, created } = fakeTx({});
+    const outcome = await applyCatalogImport(tx, {
+      tenantId: TENANT,
+      kind: "customers",
+      rows: [customerRow(2, "A"), customerRow(3, "B", "CLI-0001"), customerRow(4, "C")],
+    });
+    expect(created.customers.map((row) => [row.name, row.code])).toEqual([
+      ["A", "CLI-0002"],
+      ["B", "CLI-0001"],
+      ["C", "CLI-0003"],
+    ]);
+    expect(new Set(created.customers.map((row) => row.code)).size).toBe(3);
+    expect(outcome).toEqual({ created: 3, skippedExisting: 0 });
+  });
+
+  it("si la base guarda menos filas de las esperadas, lanza (revierte) en vez de informar filas que no existen", async () => {
+    const customers = fakeTx({});
+    customers.raw.customerAccount.createMany.mockResolvedValueOnce({ count: 1 });
+    await expect(
+      applyCatalogImport(customers.tx, { tenantId: TENANT, kind: "customers", rows: [customerRow(2, "A"), customerRow(3, "B")] }),
+    ).rejects.toThrow("No se importó nada");
+
+    const vehicles = fakeTx({});
+    vehicles.raw.vehicle.createMany.mockResolvedValueOnce({ count: 0 });
+    await expect(
+      applyCatalogImport(vehicles.tx, { tenantId: TENANT, kind: "vehicles", rows: [vehicleRow(2, "AB1234")] }),
+    ).rejects.toBeInstanceOf(RangeError);
   });
 
   it("omite lo que ya existe sin distinguir mayúsculas ni tildes y no lo pisa", async () => {

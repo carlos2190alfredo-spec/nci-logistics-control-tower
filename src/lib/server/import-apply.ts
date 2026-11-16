@@ -17,8 +17,27 @@ export type ImportOutcome = { created: number; skippedExisting: number };
 
 const BATCH = 500;
 
-async function chunked<T>(items: T[], write: (batch: T[]) => Promise<unknown>) {
-  for (let i = 0; i < items.length; i += BATCH) await write(items.slice(i, i + BATCH));
+/**
+ * Escribe en lotes y devuelve cuántas filas guardó de verdad la base de datos. `skipDuplicates` evita que una fila
+ * repetida tumbe el lote, pero también la descarta SIN avisar: por eso se compara lo guardado con lo esperado.
+ */
+async function chunked<T>(items: T[], write: (batch: T[]) => Promise<{ count: number }>): Promise<number> {
+  let written = 0;
+  for (let i = 0; i < items.length; i += BATCH) written += (await write(items.slice(i, i + BATCH))).count;
+  return written;
+}
+
+/**
+ * Con el bloqueo del tenant tomado y los duplicados ya descartados en memoria, la base de datos debe guardar TODAS
+ * las filas. Si no, algo chocó (p. ej. un código repetido que la comparación no vio): se lanza para revertir la
+ * transacción entera en lugar de informar filas "creadas" que no existen.
+ */
+function assertAllWritten(written: number, expected: number): void {
+  if (written !== expected) {
+    throw new RangeError(
+      `Se esperaba guardar ${expected} filas pero solo se guardaron ${written}: hay códigos o nombres repetidos que no se detectaron. No se importó nada.`,
+    );
+  }
 }
 
 export async function applyCatalogImport<K extends ImportKind>(
@@ -43,8 +62,13 @@ export async function applyCatalogImport<K extends ImportKind>(
         names.add(comparableKey(data.name));
       }
       if (toCreate.length > 0) await assertWithinPlanLimit(tx, { tenantId, resource: "customers", adding: toCreate.length });
-      const nextCode = createCodeAllocator(existing.map((row) => row.code), CUSTOMER_CODE_PREFIX);
-      await chunked(toCreate, (batch) =>
+      // Los códigos explícitos del propio archivo también cuentan como usados: si no, el generador podría asignar a una
+      // fila el mismo código que otra pidió (p. ej. CLI-0001) y una de las dos se perdería.
+      const nextCode = createCodeAllocator(
+        [...existing.map((row) => row.code), ...toCreate.flatMap((data) => (data.code ? [data.code] : []))],
+        CUSTOMER_CODE_PREFIX,
+      );
+      const written = await chunked(toCreate, (batch) =>
         tx.customerAccount.createMany({
           skipDuplicates: true,
           data: batch.map((data) => ({
@@ -60,7 +84,8 @@ export async function applyCatalogImport<K extends ImportKind>(
           })),
         }),
       );
-      return { created: toCreate.length, skippedExisting: rows.length - toCreate.length };
+      assertAllWritten(written, toCreate.length);
+      return { created: written, skippedExisting: rows.length - toCreate.length };
     }
     case "vehicles": {
       const rows = input.rows as ImportValidRow<"vehicles">[];
@@ -75,13 +100,14 @@ export async function applyCatalogImport<K extends ImportKind>(
         taken.add(comparableKey(data.code));
       }
       if (toCreate.length > 0) await assertWithinPlanLimit(tx, { tenantId, resource: "vehicles", adding: toCreate.length });
-      await chunked(toCreate, (batch) =>
+      const written = await chunked(toCreate, (batch) =>
         tx.vehicle.createMany({
           skipDuplicates: true,
           data: batch.map((data) => ({ tenantId, plate: data.plate, code: data.code, type: data.type })),
         }),
       );
-      return { created: toCreate.length, skippedExisting: rows.length - toCreate.length };
+      assertAllWritten(written, toCreate.length);
+      return { created: written, skippedExisting: rows.length - toCreate.length };
     }
     case "equipment": {
       const rows = input.rows as ImportValidRow<"equipment">[];
@@ -98,13 +124,14 @@ export async function applyCatalogImport<K extends ImportKind>(
           `La importación agregaría ${toCreate.length} equipos y superaría el máximo de ${MAX_EQUIPMENT_PER_TENANT}. No se importó nada.`,
         );
       }
-      await chunked(toCreate, (batch) =>
+      const written = await chunked(toCreate, (batch) =>
         tx.equipment.createMany({
           skipDuplicates: true,
           data: batch.map((data) => ({ tenantId, code: data.code, type: data.type })),
         }),
       );
-      return { created: toCreate.length, skippedExisting: rows.length - toCreate.length };
+      assertAllWritten(written, toCreate.length);
+      return { created: written, skippedExisting: rows.length - toCreate.length };
     }
     case "locations": {
       const rows = input.rows as ImportValidRow<"locations">[];
@@ -121,7 +148,7 @@ export async function applyCatalogImport<K extends ImportKind>(
           `La importación agregaría ${toCreate.length} lugares y superaría el máximo de ${MAX_LOCATIONS_PER_TENANT}. No se importó nada.`,
         );
       }
-      await chunked(toCreate, (batch) =>
+      const written = await chunked(toCreate, (batch) =>
         tx.location.createMany({
           skipDuplicates: true,
           data: batch.map((data) => ({
@@ -133,7 +160,8 @@ export async function applyCatalogImport<K extends ImportKind>(
           })),
         }),
       );
-      return { created: toCreate.length, skippedExisting: rows.length - toCreate.length };
+      assertAllWritten(written, toCreate.length);
+      return { created: written, skippedExisting: rows.length - toCreate.length };
     }
     default:
       throw new RangeError("Tipo de importación no válido.");

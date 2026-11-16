@@ -172,3 +172,10 @@
 - Correcciones a lo existente: `DRIVER` sin ficha, portal (viewer y solicitudes de operaciones), `TableRow`, desborde móvil.
 - Verificado: tsc, eslint, 1806 tests, security:check, build, E2E completa 101 + 3 flaky. Pendiente: acceso al portal, importación CSV, conductor usable, pruebas con BD real.
 - Segunda parte: importación CSV (panel/acción), acceso de clientes al portal con correo de un solo uso, alta de conductor sin pantalla de error y vínculo conductor↔cuenta; E2E nuevos (CSV, portal, conductor) y 1822 tests. Código en la rama `feat/fase1-catalogos-nuevo-viaje`.
+
+## 2026-11-16 — Pruebas con base de datos real (ADR-038)
+
+- Nueva suite `pnpm test:db` (`vitest.db.config.ts`, `tests/db/`): 47 pruebas contra PostgreSQL local con tenants descartables `zz-db-*`, y guarda de destino (`scripts/lib/db-test-guard.ts`) que bloquea hosts remotos, pooler, perfiles distintos de `local` y nombres de base de staging/producción.
+- Cubre referencias y bloqueo del tenant (incluida la forma real del `P2002`), carreras en los límites de plan, importación CSV, consultas de lectura y la migración de la Fase 1. Se verificó que las pruebas fallan cuando se rompe el código (7 mutaciones, 7 detectadas).
+- Error real encontrado y corregido en `import-apply.ts`: una fila de clientes podía perderse en silencio por un código explícito repetido; ahora se evita y, si ocurre, se revierte con un mensaje claro.
+- Verificado: tsc y eslint limpios, 1841 tests, `security:check`, `test:db` 47/47, E2E `csv-import` 2/2. Sin commit de esta tanda.
