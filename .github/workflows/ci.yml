@@ -89,6 +89,10 @@ jobs:
     name: Dependency audit
     runs-on: ubuntu-latest
     timeout-minutes: 5
+    env:
+      # `pnpm install` ejecuta `prisma generate` (postinstall), y prisma.config.ts exige DATABASE_URL.
+      # Solo se genera el cliente: no se abre ninguna conexión.
+      DATABASE_URL: postgresql://nci:nci_local_password@localhost:5433/nci_logistics?schema=public
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
